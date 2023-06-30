@@ -5,54 +5,22 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
-    <Filter Include="Header Files">
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{b85f76f3-fe1c-4329-8013-cdabe12d5fd8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="scripts">
+      <UniqueIdentifier>{23f41b89-5d6f-48b1-8016-ea5107d4976f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="config">
+      <UniqueIdentifier>{71df60be-5005-472b-a6c3-c52100ccae2b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib">
+      <UniqueIdentifier>{aca759ef-33ea-4723-8a6f-84302ce25d77}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include">
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
-    <Filter Include="config">
-      <UniqueIdentifier>{7ee799ba-1694-4f14-9791-b724227461dd}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="include">
-      <UniqueIdentifier>{bcb9e86a-bb53-4591-9f4d-4b4750c97c11}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="scripts">
-      <UniqueIdentifier>{62863df4-8463-4043-82e4-00ee2fa92921}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="shaders">
-      <UniqueIdentifier>{a6225a17-0520-4935-87c2-0655029df274}</UniqueIdentifier>
-    </Filter>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <CopyFileToFolders Include="..\config\config.json">
-      <Filter>config</Filter>
-    </CopyFileToFolders>
-    <CopyFileToFolders Include="shaders\BufferViewer.hlsl">
-      <Filter>shaders</Filter>
-    </CopyFileToFolders>
-    <CopyFileToFolders Include="shaders\GetLodVisualizationColor.h">
-      <Filter>shaders</Filter>
-    </CopyFileToFolders>
-    <CopyFileToFolders Include="..\config\fragmentationWA.json">
-      <Filter>config</Filter>
-    </CopyFileToFolders>
-    <CopyFileToFolders Include="shaders\TextureViewer.hlsl">
-      <Filter>shaders</Filter>
-    </CopyFileToFolders>
-    <CopyFileToFolders Include="..\scripts\demo.bat">
-      <Filter>scripts</Filter>
-    </CopyFileToFolders>
-    <CopyFileToFolders Include="..\scripts\demo-hubble.bat">
-      <Filter>scripts</Filter>
-    </CopyFileToFolders>
-    <CopyFileToFolders Include="..\scripts\profile.bat">
-      <Filter>scripts</Filter>
-    </CopyFileToFolders>
-    <CopyFileToFolders Include="..\scripts\stress.bat">
-      <Filter>scripts</Filter>
-    </CopyFileToFolders>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="BufferViewer.cpp">
@@ -87,94 +55,126 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="TimeTracing.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="TerrainGenerator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="SharedConstants.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="SceneObject.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Scene.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="pch.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Gui.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="FrustumViewer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="FrameEventTracing.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="CreateSphere.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="CommandLineArgs.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="BufferViewer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="TextureViewer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\DirectXTK12\d3dx12.h">
       <Filter>include</Filter>
     </ClInclude>
-    <ClInclude Include="..\DirectXTK12\DDS.h">
+    <ClInclude Include="CommandLineArgs.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="CreateSphere.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="FrameEventTracing.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="FrustumViewer.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="Gui.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="SceneObject.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="SharedConstants.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="TerrainGenerator.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="TextureViewer.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="TimeTracing.h">
       <Filter>include</Filter>
     </ClInclude>
     <ClInclude Include="..\include\ArgParser.h">
-      <Filter>include</Filter>
+      <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="..\include\ConfigurationParser.h">
-      <Filter>include</Filter>
+      <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="..\include\D3D12GpuTimer.h">
-      <Filter>include</Filter>
+      <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="..\include\DebugHelper.h">
-      <Filter>include</Filter>
+      <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="..\include\Timer.h">
-      <Filter>include</Filter>
+      <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="..\include\TimeTracing.h">
-      <Filter>include</Filter>
+      <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="..\include\WindowCapture.h">
-      <Filter>include</Filter>
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXTK12\d3dx12.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DirectXTK12\DDS.h">
+      <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="AssetUploader.h">
-      <Filter>Header Files</Filter>
+      <Filter>include</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="shaders\skyPS.hlsl">
-      <Filter>shaders</Filter>
+      <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="shaders\skyPS-FB.hlsl">
-      <Filter>shaders</Filter>
+      <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="shaders\skyVS.hlsl">
-      <Filter>shaders</Filter>
+      <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="shaders\terrainPS.hlsl">
-      <Filter>shaders</Filter>
+      <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="shaders\terrainPS-FB.hlsl">
-      <Filter>shaders</Filter>
+      <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="shaders\terrainVS.hlsl">
-      <Filter>shaders</Filter>
+      <Filter>Shaders</Filter>
     </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CopyFileToFolders Include="shaders\BufferViewer.hlsl">
+      <Filter>Shaders</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="shaders\TextureViewer.hlsl">
+      <Filter>Shaders</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="shaders\GetLodVisualizationColor.h">
+      <Filter>Shaders</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\config\config.json">
+      <Filter>config</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\config\fragmentationWA.json">
+      <Filter>config</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\scripts\demo.bat">
+      <Filter>scripts</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\scripts\demo-hubble.bat">
+      <Filter>scripts</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\scripts\profile.bat">
+      <Filter>scripts</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\scripts\stress.bat">
+      <Filter>scripts</Filter>
+    </CopyFileToFolders>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>

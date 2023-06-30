@@ -10,7 +10,7 @@
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
     <Filter Include="scripts">
-      <UniqueIdentifier>{e864060a-b20d-4932-b5fe-ebfa3a47eda9}</UniqueIdentifier>
+      <UniqueIdentifier>{6d432c77-37cd-43cf-9691-b7787e8ae3f1}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -20,6 +20,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\TileUpdateManager\XetFileHeader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XeTv2.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

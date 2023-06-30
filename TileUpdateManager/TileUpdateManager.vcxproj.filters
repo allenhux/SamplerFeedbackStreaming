@@ -26,13 +26,13 @@
     <ClInclude Include="InternalResources.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SimpleAllocator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="UpdateList.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="StreamingHeap.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="StreamingResourceBase.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="XeTexture.h">
@@ -50,22 +50,25 @@
     <ClInclude Include="StreamingResourceDU.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="TileUpdateManagerBase.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="SamplerFeedbackStreaming.h" />
     <ClInclude Include="FileStreamerDS.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="StreamingResourceBase.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="TileUpdateManagerBase.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="TileUpdateManagerSR.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SimpleAllocator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BitVector.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="TileUpdateManager.cpp">
+    <ClCompile Include="TileUpdateManagerBase.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">
@@ -78,12 +81,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="InternalResources.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="StreamingResource.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="SimpleAllocator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="UpdateList.cpp">
@@ -104,13 +101,19 @@
     <ClCompile Include="StreamingResourceDU.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="StreamingResource.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TileUpdateManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="FileStreamerDS.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="TileUpdateManagerBase.cpp">
+    <ClCompile Include="StreamingResourceBase.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="StreamingResourceBase.cpp">
+    <ClCompile Include="SimpleAllocator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
