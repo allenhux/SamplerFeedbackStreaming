@@ -32,6 +32,10 @@
 #include "StreamingHeap.h"
 #include "BitVector.h"
 
+// 710 is the agility sdk preview with gpu upload heaps
+extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 711; }
+extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = u8".\\D3D12\\"; }
+
 //=============================================================================
 // constructor for streaming library base class
 //=============================================================================
@@ -323,8 +327,23 @@ void Streaming::TileUpdateManagerBase::AllocateResidencyMap(D3D12_CPU_DESCRIPTOR
 
     if (offset > oldBufferSize)
     {
+        // if available, use GPU Upload Heaps
+        auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+        {
+            D3D12_FEATURE_DATA_D3D12_OPTIONS16 options{};
+            m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS16, &options, sizeof(options));
+
+            if (options.GPUUploadHeapSupported)
+            {
+                uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_GPU_UPLOAD);
+                uploadHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+                uploadHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+            }
+
+        }
+
         UINT bufferSize = std::max(offset, minBufferSize);
-        m_residencyMap.Allocate(m_device.Get(), bufferSize);
+        m_residencyMap.Allocate(m_device.Get(), bufferSize, uploadHeapProperties);
 
         CreateMinMipMapView(in_descriptorHandle);
 

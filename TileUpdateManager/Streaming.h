@@ -48,17 +48,17 @@ namespace Streaming
         ID3D12Resource* GetResource() const { return m_resource.Get(); }
         void* GetData() const { return m_pData; }
 
-        void Allocate(ID3D12Device* in_pDevice, UINT in_numBytes)
+        void Allocate(ID3D12Device* in_pDevice, UINT in_numBytes,
+            D3D12_HEAP_PROPERTIES in_uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD))
         {
             if (m_pData)
             {
                 m_resource->Unmap(0, nullptr);
             }
 
-            const auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
             const auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(in_numBytes);
             in_pDevice->CreateCommittedResource(
-                &uploadHeapProperties,
+                &in_uploadHeapProperties,
                 D3D12_HEAP_FLAG_NONE, &resourceDesc,
                 D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
                 IID_PPV_ARGS(&m_resource));
