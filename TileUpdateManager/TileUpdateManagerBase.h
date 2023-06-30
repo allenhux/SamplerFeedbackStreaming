@@ -54,8 +54,6 @@ Draw loop:
 #include "Streaming.h" // for ComPtr
 #include "DataUploader.h"
 
-#define COPY_RESIDENCY_MAPS 0
-
 //=============================================================================
 // manager for tiled resources
 // contains shared objects, especially the heap

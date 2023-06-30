@@ -346,17 +346,6 @@ void Streaming::TileUpdateManagerBase::AllocateResidencyMap(D3D12_CPU_DESCRIPTOR
         m_residencyMap.Allocate(m_device.Get(), bufferSize, uploadHeapProperties);
 
         CreateMinMipMapView(in_descriptorHandle);
-
-#if COPY_RESIDENCY_MAPS
-        const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-        const auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(bufferSize);
-        m_device->CreateCommittedResource(
-            &heapProperties,
-            D3D12_HEAP_FLAG_NONE, &resourceDesc,
-            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr,
-            IID_PPV_ARGS(&m_residencyMapLocal));
-        m_residencyMapLocal->SetName(L"m_residencyMapLocal");
-#endif
     }
 
     // set offsets AFTER allocating resource. allows StreamingResource to initialize buffer state
@@ -377,10 +366,6 @@ void Streaming::TileUpdateManagerBase::CreateMinMipMapView(D3D12_CPU_DESCRIPTOR_
     // there is only 1 channel
     srvDesc.Shader4ComponentMapping = D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(0, 0, 0, 0);
 
-#if COPY_RESIDENCY_MAPS
-    m_device->CreateShaderResourceView(m_residencyMapLocal.Get(), &srvDesc, in_descriptorHandle);
-#else
     m_device->CreateShaderResourceView(m_residencyMap.GetResource(), &srvDesc, in_descriptorHandle);
-#endif
 }
 

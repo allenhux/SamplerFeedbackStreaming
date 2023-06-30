@@ -275,17 +275,6 @@ TileUpdateManager::CommandLists Streaming::TileUpdateManagerBase::EndFrame()
             m_packedMipTransitionBarriers.clear();
         }
 
-#if COPY_RESIDENCY_MAPS
-        // FIXME: would rather update multiple times per frame, and only affected regions
-        D3D12_RESOURCE_BARRIER residencyBarrier = CD3DX12_RESOURCE_BARRIER::Transition(m_residencyMapLocal.Get(),
-            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-        pCommandList->ResourceBarrier(1, &residencyBarrier);
-
-        pCommandList->CopyResource(m_residencyMapLocal.Get(), m_residencyMap.m_resource.Get());
-
-        std::swap(residencyBarrier.Transition.StateBefore, residencyBarrier.Transition.StateAfter);
-        pCommandList->ResourceBarrier(1, &residencyBarrier);
-#endif
         pCommandList->Close();
     }
 
