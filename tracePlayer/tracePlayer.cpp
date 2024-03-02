@@ -54,7 +54,7 @@
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "dxguid.lib")
 
-#define ErrorMessage(...) { std::wcout << AutoString::Concat(__VA_ARGS__); exit(-1); }
+#define ErrorMessage(...) { std::wcout << AutoString(__VA_ARGS__).str(); exit(-1); }
 
 //-----------------------------------------------------------------------------
 // given a full path or a relative path (e.g. c:\foo or foo)

@@ -28,29 +28,26 @@
 //==================================================
 // auto t = AutoString::Concat("test: ", 3, "*", 2.75f, "\n");
 //==================================================
-class AutoString
+class AutoString : public std::wstringstream
 {
 public:
-    template <typename...Ts> static std::wstring Concat(Ts...ts)
+    template <typename...Ts> AutoString(Ts...ts)
     {
-        std::wstringstream w;
-        Expander(w, ts...);
-        return w.str();
+        Join(ts...);
     }
 private:
-    static void Expander(std::wstringstream&) { }
-
-    template <typename T, typename...Ts> static void Expander(std::wstringstream& in_w, const T& t, Ts...ts)
+    void Join() {}
+    template <typename T, typename...Ts> void Join(const T& t, Ts... ts)
     {
-        in_w << t;
-        Expander(in_w, ts...);
+        *this << t;
+        Join(ts...);
     }
 };
 
 #ifdef _DEBUG
 #include <assert.h>
 #define ASSERT(X) assert(X)
-#define DebugPrint(...) OutputDebugString(AutoString::Concat(__VA_ARGS__).c_str());
+#define DebugPrint(...) OutputDebugString(AutoString(__VA_ARGS__).str().c_str());
 inline void ThrowIfFailed(HRESULT hr) { assert(SUCCEEDED(hr)); }
 #else
 #define ASSERT(X)

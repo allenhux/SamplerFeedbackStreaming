@@ -46,7 +46,6 @@
 
 using namespace DirectX;
 
-// NOTE: the last value must be 0 for TSS. It signifies the pixel has been written to
 const FLOAT Scene::m_clearColor[4] = { 0, 0, 0.05f, 0 };
 
 enum class DescriptorHeapOffsets
@@ -60,7 +59,7 @@ enum class DescriptorHeapOffsets
     NumEntries
 };
 
-#define ErrorMessage(...) { MessageBox(0, AutoString::Concat(__VA_ARGS__).c_str(), L"Error", MB_OK); exit(-1); }
+#define ErrorMessage(...) { MessageBox(0, AutoString(__VA_ARGS__).str().c_str(), L"Error", MB_OK); exit(-1); }
 
 //-----------------------------------------------------------------------------
 // create device, optionally checking adapter description for e.g. "intel"
