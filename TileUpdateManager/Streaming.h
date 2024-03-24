@@ -72,15 +72,34 @@ namespace Streaming
 
     //==================================================
     //==================================================
-    template<typename T> class AlignedAllocator : public std::allocator<T>
+    // default is both UINT32 SIMD8 and D3D12_TEXTURE_DATA_PITCH_ALIGNMENT
+    // allocator must implement allocate, deallocate, and value_type
+    template<typename T, std::size_t ALIGNMENT = 256>
+    class AlignedAllocator
     {
     public:
-        AlignedAllocator(UINT in_alignment = 256) : m_alignment(in_alignment) {} // default is both UINT32 SIMD8 and D3D12_TEXTURE_DATA_PITCH_ALIGNMENT
-        UINT GetAlignment() { return m_alignment; }
-        T* allocate(std::size_t n) { return (T*)_aligned_malloc(n * sizeof(T), m_alignment); }
-        void deallocate(T* p, std::size_t n) { _aligned_free(p); }
+        constexpr AlignedAllocator() noexcept = default;
+        constexpr AlignedAllocator(const AlignedAllocator&) noexcept = default;
+        template<typename U>
+        constexpr AlignedAllocator(AlignedAllocator<U, ALIGNMENT> const&) noexcept
+        {}
+
+        using value_type = T;
+
+        [[nodiscard]] T* allocate(std::size_t n)
+        {
+            return reinterpret_cast<T*>(::operator new[](n * sizeof(T), m_alignment));
+        }
+        void deallocate(T* p, [[maybe_unused]] std::size_t n) { ::operator delete[](p, m_alignment); }
+
+        template<class OtherT>
+        struct rebind
+        {
+            using other = AlignedAllocator<OtherT, ALIGNMENT>;
+        };
     private:
-        const UINT m_alignment;
+        static_assert(ALIGNMENT >= alignof(T), "alignment less than sizeof(type)");
+        static std::align_val_t constexpr m_alignment{ ALIGNMENT };
     };
 
     //==================================================

@@ -34,7 +34,7 @@
 
 // 710 is the agility sdk preview with gpu upload heaps
 extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 711; }
-extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = u8".\\D3D12\\"; }
+extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = ".\\D3D12\\"; }
 
 //=============================================================================
 // constructor for streaming library base class

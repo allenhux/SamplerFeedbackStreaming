@@ -208,10 +208,10 @@ namespace Streaming
             // residency is read by process feedback thread, and set to transient states Evicting or Loading
             enum Residency
             {
-                NotResident = 0, // b00
-                Resident = 1,    // b01
-                Evicting = 2,    // b10
-                Loading = 3,     // b11
+                NotResident = 0b00,
+                Resident    = 0b01,
+                Evicting    = 0b10,
+                Loading     = 0b11,
             };
 
             void SetResidency(UINT x, UINT y, UINT s, Residency in_residency) { m_resident[s][y][x] = (BYTE)in_residency; }
