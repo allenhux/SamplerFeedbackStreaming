@@ -33,7 +33,7 @@ template<typename T> class BitVector
 {
 public:
     BitVector(size_t in_size, UINT in_initialValue = 0) : m_size(in_size), m_bits((in_size + BIT_MASK) >> BIT_SHIFT, in_initialValue ? T(-1) : 0) {}
-    UINT Get(UINT i) { return GetVector(i) & GetBit(i); }
+    UINT Get(UINT i) { return UINT(1) & (GetVector(i) >> (i & BIT_MASK)); }
     void Set(UINT i) { GetVector(i) |= GetBit(i); }
     void Clear(UINT i) { GetVector(i) &= ~GetBit(i); }
     size_t size() { return m_size; }
