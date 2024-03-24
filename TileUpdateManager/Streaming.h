@@ -60,7 +60,8 @@ namespace Streaming
             in_pDevice->CreateCommittedResource(
                 &in_uploadHeapProperties,
                 D3D12_HEAP_FLAG_NONE, &resourceDesc,
-                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                // debug layer says: Buffers are effectively created in state D3D12_RESOURCE_STATE_COMMON
+                D3D12_RESOURCE_STATE_COMMON, nullptr,
                 IID_PPV_ARGS(&m_resource));
             m_resource->Map(0, nullptr, reinterpret_cast<void**>(&m_pData));
         }
