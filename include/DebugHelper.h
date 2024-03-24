@@ -37,7 +37,7 @@ public:
     }
 private:
     void Join() {}
-    template <typename T, typename...Ts> void Join(const T& t, Ts... ts)
+    template <typename T, typename...Ts> void Join(const T& t, const Ts& ... ts)
     {
         *this << t;
         Join(ts...);
@@ -47,7 +47,10 @@ private:
 #ifdef _DEBUG
 #include <assert.h>
 #define ASSERT(X) assert(X)
-#define DebugPrint(...) OutputDebugString(AutoString(__VA_ARGS__).str().c_str());
+template<typename ... Ts> void DebugPrint(const Ts& ... ts)
+{
+    OutputDebugString(AutoString(ts...).str().c_str());
+}
 inline void ThrowIfFailed(HRESULT hr) { assert(SUCCEEDED(hr)); }
 #else
 #define ASSERT(X)

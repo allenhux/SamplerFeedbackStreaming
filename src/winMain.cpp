@@ -419,7 +419,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             }
             else
             {
-                OutputDebugString(L"Normal Exit via ESC\n");
+                DebugPrint("Normal Exit via ESC\n");
                 PostQuitMessage(0);
             }
             break;
@@ -427,7 +427,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
 
     case WM_DESTROY:
-        OutputDebugString(L"Exit via DESTROY\n");
+        DebugPrint("Exit via DESTROY\n");
         PostQuitMessage(0);
         break;
     default:
