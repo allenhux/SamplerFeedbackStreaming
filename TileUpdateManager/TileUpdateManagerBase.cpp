@@ -144,7 +144,7 @@ void Streaming::TileUpdateManagerBase::ProcessFeedbackThread()
     staleResources.reserve(m_streamingResources.size());
 
     // flags to prevent duplicates in the staleResources array
-    BitVector<UINT8> pending(m_streamingResources.size(), 0);
+    BitVector<UINT32> pending(m_streamingResources.size(), 0);
 
     UINT uploadsRequested = 0; // remember if any work was queued so we can signal afterwards
     UINT64 previousFrameFenceValue = m_frameFenceValue;
@@ -186,7 +186,7 @@ void Streaming::TileUpdateManagerBase::ProcessFeedbackThread()
                 for (UINT i = 0; i < m_streamingResources.size(); i++)
                 {
                     m_streamingResources[i]->ProcessFeedback(frameFenceValue);
-                    if (m_streamingResources[i]->IsStale() && !pending[i])
+                    if (m_streamingResources[i]->IsStale() && (0 == pending[i]))
                     {
                         staleResources.push_back(i);
                         pending[i] = 1;
