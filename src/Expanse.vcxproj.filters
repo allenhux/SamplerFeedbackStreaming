@@ -53,6 +53,9 @@
     <ClCompile Include="AssetUploader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Planet.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BufferViewer.h">
@@ -122,6 +125,9 @@
       <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="AssetUploader.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="Subdivision.h">
       <Filter>include</Filter>
     </ClInclude>
   </ItemGroup>

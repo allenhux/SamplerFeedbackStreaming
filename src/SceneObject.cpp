@@ -257,6 +257,7 @@ void SceneObjects::BaseObject::SetModelConstants(ModelConstantData& out_modelCon
 //-------------------------------------------------------------------------
 void SceneObjects::BaseObject::CopyGeometry(const BaseObject* in_pObjectForSharedHeap)
 {
+    m_axis = in_pObjectForSharedHeap->m_axis;
     m_lods.resize(in_pObjectForSharedHeap->m_lods.size());
     for (UINT i = 0; i < m_lods.size(); i++)
     {
@@ -318,6 +319,28 @@ void SceneObjects::BaseObject::SetCommonPipelineState(ID3D12GraphicsCommandList1
 }
 
 //-------------------------------------------------------------------------
+// Pick LoD
+// FIXME: need to know size of object on screen, calc triangles/pixel
+//-------------------------------------------------------------------------
+UINT SceneObjects::BaseObject::ComputeLod(float in_distance)
+{
+    // FIXME? could store bounding sphere diameter in object
+    DirectX::XMVECTOR scale = DirectX::XMVector3LengthEst(m_matrix.r[0]);
+    float objectSize = DirectX::XMVectorGetX(scale);
+
+    // slow lod progression with distance
+    in_distance = std::powf(in_distance, 0.95f);
+
+    float lodBias = 0.1f * (float)SharedConstants::SPHERE_LOD_BIAS;
+    float ratio = in_distance / (objectSize * lodBias);
+
+    // clamp to the number of lods
+    UINT lod = std::min((UINT)m_lods.size() - 1, UINT(ratio));
+
+    return lod;
+}
+
+//-------------------------------------------------------------------------
 //-------------------------------------------------------------------------
 void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList, const SceneObjects::DrawParams& in_drawParams)
 {
@@ -332,30 +355,17 @@ void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList,
         {
             DirectX::XMVECTOR eye = in_drawParams.m_viewInverse.r[3];
             DirectX::XMVECTOR pos = m_matrix.r[3];
-            DirectX::XMVECTOR distance = DirectX::XMVectorSubtract(pos, eye);
-            distance = DirectX::XMVector3LengthEst(distance);
+            DirectX::XMVECTOR direction = DirectX::XMVectorSubtract(pos, eye);
+            float distance = DirectX::XMVectorGetX(DirectX::XMVector3LengthEst(direction));
 
             // spheres behind the view won't be visible
-            if (DirectX::XMVectorGetX(distance) < 0)
+            if (distance < 0)
             {
                 lod = UINT(m_lods.size() - 1);
             }
             else
             {
-
-                // FIXME? could store bounding sphere diameter in object
-                DirectX::XMVECTOR scale = DirectX::XMVector3LengthEst(m_matrix.r[0]);
-                float objectSize = DirectX::XMVectorGetX(scale);
-
-                float distanceToEye = DirectX::XMVectorGetX(distance);
-                // slow lod progression with distance
-                distanceToEye = std::powf(distanceToEye, 0.95f);
-
-                float lodBias = 0.1f * (float)SharedConstants::SPHERE_LOD_BIAS;
-                float ratio = distanceToEye / (objectSize * lodBias);
-
-                // clamp to the number of lods
-                lod = std::min((UINT)m_lods.size() - 1, UINT(ratio));
+                lod = ComputeLod(distance);
             }
         }
         const auto& geometry = m_lods[lod];

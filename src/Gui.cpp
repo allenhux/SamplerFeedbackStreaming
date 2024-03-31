@@ -51,7 +51,7 @@ Gui::Gui(HWND in_hWnd, ID3D12Device* in_pDevice,
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableSetMousePos + ImGuiBackendFlags_HasSetMousePos;  // Enable Keyboard Controls
+    io.ConfigFlags |= UINT(ImGuiConfigFlags_NavEnableSetMousePos) + UINT(ImGuiBackendFlags_HasSetMousePos);  // Enable Keyboard Controls
 
     ImGui::StyleColorsDark();
     ImGui_ImplWin32_Init(in_hWnd);
@@ -370,7 +370,7 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     in_args.m_showFeedbackMaps = ImGui::CollapsingHeader("Terrain Object Feedback Viewer", feedbackNodeFlags);
     if (in_args.m_showFeedbackMaps)
     {
-        in_args.m_cameraUpLock = true;
+        // in_args.m_cameraUpLock = true;
 
         ImGui::Indent(indent);
         ImGui::Checkbox("Mip Window Orientation", &in_args.m_showFeedbackMapVertical);

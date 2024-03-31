@@ -77,6 +77,7 @@ namespace SceneObjects
         void SetCommonPipelineState(ID3D12GraphicsCommandList1* in_pCommandList, const SceneObjects::DrawParams& in_drawParams);
 
         virtual void Draw(ID3D12GraphicsCommandList1* in_pCommandList, const DrawParams& in_drawParams);
+        UINT ComputeLod(float in_distance);
 
         DirectX::XMMATRIX& GetModelMatrix() { return m_matrix; }
         DirectX::XMMATRIX& GetCombinedMatrix() { return m_combinedMatrix; }
@@ -221,6 +222,13 @@ namespace SceneObjects
             StreamingHeap* in_pStreamingHeap,
             D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
             Planet* in_pSharedObject);
+
+        Planet(const std::wstring& in_filename,
+            TileUpdateManager* in_pTileUpdateManager,
+            StreamingHeap* in_pStreamingHeap,
+            ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
+            UINT in_sampleCount,
+            D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU);
     };
 
     // special render state (front face cull)

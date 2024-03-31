@@ -875,7 +875,8 @@ void Scene::LoadSpheres()
                 if (nullptr == m_pFirstSphere)
                 {
                     sphereProperties.m_mirrorU = true;
-                    m_pFirstSphere = new SceneObjects::Planet(textureFilename, m_pTileUpdateManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU, sphereProperties);
+                    // use different sphere generator
+                    m_pFirstSphere = new SceneObjects::Planet(textureFilename, m_pTileUpdateManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU);
                     o = m_pFirstSphere;
                 }
                 else
