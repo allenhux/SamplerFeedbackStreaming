@@ -28,6 +28,7 @@
 
 #include "pch.h"
 
+#include <limits>
 #include "SceneObject.h"
 #include "SharedConstants.h"
 #include "Scene.h"
@@ -86,13 +87,20 @@ static DirectX::XMFLOAT2 PlanetUV(DirectX::XMFLOAT3 pos)
     DirectX::XMFLOAT2 uv = { pos.x, pos.y };
 
     // radius of this latitude in x/y plane
-    // very near the pole, use center uv
-    if (std::fabsf(pos.z) > 0.999f)
+    // 1 = sqrt(r^2 + z^2), or, r^2=sqrt(x^2 + y^2)
+    float r = std::sqrtf(1.f - (pos.z * pos.z));
+
+    float theta = DirectX::XM_PIDIV2;
+
+    // avoid divide by 0 near poles, where x&y are near 0:
+    if (r > std::numeric_limits<float>::min())
     {
-        return { 0.5f, 0.5f };
+        theta = std::acosf(std::clamp(pos.x / r, -1.f, 1.f));
     }
-    float r = std::sqrtf(pos.x * pos.x + pos.y * pos.y);
-    float theta = std::acosf(pos.x / r);
+    else
+    {
+        r = 0;
+    }
 
     // radial scale
     if (theta > DirectX::XM_PI) { theta = DirectX::XM_2PI - theta; }
