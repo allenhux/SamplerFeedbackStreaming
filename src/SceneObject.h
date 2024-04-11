@@ -61,6 +61,9 @@ namespace SceneObjects
         DirectX::XMMATRIX m_projection;
         DirectX::XMMATRIX m_view;
         DirectX::XMMATRIX m_viewInverse;
+        UINT m_windowWidth{ 0 };
+        UINT m_windowHeight{ 0 };
+        float m_fov;
     };
 
     class BaseObject
@@ -77,7 +80,7 @@ namespace SceneObjects
         void SetCommonPipelineState(ID3D12GraphicsCommandList1* in_pCommandList, const SceneObjects::DrawParams& in_drawParams);
 
         virtual void Draw(ID3D12GraphicsCommandList1* in_pCommandList, const DrawParams& in_drawParams);
-        UINT ComputeLod(float in_distance);
+        UINT ComputeLod(const float in_distance, const SceneObjects::DrawParams& in_drawParams);
 
         DirectX::XMMATRIX& GetModelMatrix() { return m_matrix; }
         DirectX::XMMATRIX& GetCombinedMatrix() { return m_combinedMatrix; }

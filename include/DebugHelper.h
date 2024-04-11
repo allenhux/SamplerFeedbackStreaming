@@ -49,7 +49,9 @@ private:
 #define ASSERT(X) assert(X)
 template<typename ... Ts> void DebugPrint(const Ts& ... ts)
 {
-    OutputDebugString(AutoString(ts...).str().c_str());
+    AutoString autoString(ts...);
+    autoString << std::endl;
+    OutputDebugString(autoString.str().c_str());
 }
 inline void ThrowIfFailed(HRESULT hr) { assert(SUCCEEDED(hr)); }
 #else

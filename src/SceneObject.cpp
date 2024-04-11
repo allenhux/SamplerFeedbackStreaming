@@ -322,20 +322,35 @@ void SceneObjects::BaseObject::SetCommonPipelineState(ID3D12GraphicsCommandList1
 // Pick LoD
 // FIXME: need to know size of object on screen, calc triangles/pixel
 //-------------------------------------------------------------------------
-UINT SceneObjects::BaseObject::ComputeLod(float in_distance)
+UINT SceneObjects::BaseObject::ComputeLod(const float in_distance, const SceneObjects::DrawParams& in_drawParams)
 {
     // FIXME? could store bounding sphere diameter in object
     DirectX::XMVECTOR scale = DirectX::XMVector3LengthEst(m_matrix.r[0]);
-    float objectSize = DirectX::XMVectorGetX(scale);
+    float radius = DirectX::XMVectorGetX(scale); // scale equals radius
 
-    // slow lod progression with distance
-    in_distance = std::powf(in_distance, 0.95f);
+    // within sphere?
+    if (in_distance < radius)
+    {
+        return 0;
+    }
 
-    float lodBias = 0.1f * (float)SharedConstants::SPHERE_LOD_BIAS;
-    float ratio = in_distance / (objectSize * lodBias);
+    // rough estimate of the projected radius in pixels:
+    float radiusPixels = (radius / in_distance) *
+        (in_drawParams.m_windowHeight / std::tanf(in_drawParams.m_fov / 2.f));
 
-    // clamp to the number of lods
-    UINT lod = std::min((UINT)m_lods.size() - 1, UINT(ratio));
+    float areaPixels = DirectX::XM_PI * radiusPixels * radiusPixels;
+
+    UINT lod = (UINT)m_lods.size() - 1; // least triangles
+    while (lod > 0)
+    {
+        UINT numTriangles = m_lods[lod - 1].m_numIndices / 3;
+        float pixelsPerTriangle = areaPixels / numTriangles;
+        if (pixelsPerTriangle < 50.f)
+        {
+            break;
+        }
+        lod--;
+    }
 
     return lod;
 }
@@ -358,15 +373,7 @@ void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList,
             DirectX::XMVECTOR direction = DirectX::XMVectorSubtract(pos, eye);
             float distance = DirectX::XMVectorGetX(DirectX::XMVector3LengthEst(direction));
 
-            // spheres behind the view won't be visible
-            if (distance < 0)
-            {
-                lod = UINT(m_lods.size() - 1);
-            }
-            else
-            {
-                lod = ComputeLod(distance);
-            }
+            lod = ComputeLod(distance, in_drawParams);
         }
         const auto& geometry = m_lods[lod];
 

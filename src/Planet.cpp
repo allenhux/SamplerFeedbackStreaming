@@ -191,10 +191,7 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
         },
         edges, tris);
 
-    // bump it up one level to start
-    sub.Next();
-
-    constexpr UINT numLods = 3;
+    constexpr UINT numLods = SharedConstants::NUM_SPHERE_LEVELS_OF_DETAIL;
     for (UINT lod = 0; lod < numLods; lod++)
     {
         sub.Next();
