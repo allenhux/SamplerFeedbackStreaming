@@ -37,46 +37,50 @@
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-static void CreatePlanetResources(
-    const std::vector<SphereGen::Vertex>& in_verts, const std::vector<UINT32>& in_indices,
-    ID3D12Resource** out_ppVertexBuffer, ID3D12Resource** out_ppIndexBuffer,
-    ID3D12Device* in_pDevice, AssetUploader& in_assetUploader)
+static ID3D12Resource* CreatePlanetIndexBuffer(
+    ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
+    const std::vector<UINT32>& in_indices)
 {
-    // build vertex buffer
-    {
-        UINT vertexBufferSize = UINT(in_verts.size()) * sizeof(in_verts[0]);
+    ID3D12Resource* pResource = nullptr;
+    UINT indexBufferSize = UINT(in_indices.size()) * sizeof(in_indices[0]);
 
-        const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-        const auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize);
-        ThrowIfFailed(in_pDevice->CreateCommittedResource(
-            &heapProperties,
-            D3D12_HEAP_FLAG_NONE,
-            &resourceDesc,
-            D3D12_RESOURCE_STATE_COMMON,
-            nullptr,
-            IID_PPV_ARGS(out_ppVertexBuffer)));
+    const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+    const auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(indexBufferSize);
+    ThrowIfFailed(in_pDevice->CreateCommittedResource(
+        &heapProperties,
+        D3D12_HEAP_FLAG_NONE,
+        &resourceDesc,
+        D3D12_RESOURCE_STATE_COMMON,
+        nullptr,
+        IID_PPV_ARGS(&pResource)));
 
-        in_assetUploader.SubmitRequest(*out_ppVertexBuffer, in_verts.data(), vertexBufferSize,
-            D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
-    }
+    in_assetUploader.SubmitRequest(pResource, in_indices.data(), indexBufferSize,
+        D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_INDEX_BUFFER);
 
-    // build index buffer
-    {
-        UINT indexBufferSize = UINT(in_indices.size()) * sizeof(in_indices[0]);
+    return pResource;
+}
 
-        const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-        const auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(indexBufferSize);
-        ThrowIfFailed(in_pDevice->CreateCommittedResource(
-            &heapProperties,
-            D3D12_HEAP_FLAG_NONE,
-            &resourceDesc,
-            D3D12_RESOURCE_STATE_COMMON,
-            nullptr,
-            IID_PPV_ARGS(out_ppIndexBuffer)));
+static ID3D12Resource* CreatePlanetVertexBuffer(
+    ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
+    const std::vector<SphereGen::Vertex>& in_verts)
+{
+    ID3D12Resource* pResource = nullptr;
+    UINT vertexBufferSize = UINT(in_verts.size()) * sizeof(in_verts[0]);
 
-        in_assetUploader.SubmitRequest(*out_ppIndexBuffer, in_indices.data(), indexBufferSize,
-            D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_INDEX_BUFFER);
-    }
+    const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+    const auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize);
+    ThrowIfFailed(in_pDevice->CreateCommittedResource(
+        &heapProperties,
+        D3D12_HEAP_FLAG_NONE,
+        &resourceDesc,
+        D3D12_RESOURCE_STATE_COMMON,
+        nullptr,
+        IID_PPV_ARGS(&pResource)));
+
+    in_assetUploader.SubmitRequest(pResource, in_verts.data(), vertexBufferSize,
+        D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+
+    return pResource;
 }
 
 //-----------------------------------------------------------------------------
@@ -127,6 +131,8 @@ static DirectX::XMFLOAT2 PlanetUV(DirectX::XMFLOAT3 pos)
     return uv;
 }
 
+
+
 //=========================================================================
 // planets have multiple LoDs
 // Texture Coordinates may optionally be mirrored in U
@@ -156,22 +162,22 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
     verts.push_back({ { 0, 1.f, 0 }, {0, 0, 0}, {0, 0} }); // 2
     verts.push_back({ { 0, 0, -1.f }, { 0, 0, 0 }, { 0, 0 } }); // 3 (top)
     std::vector<Subdivision::Edge> edges;
-    edges.push_back({ 0, 1 }); // 0
-    edges.push_back({ 1, 2 }); // 1
-    edges.push_back({ 2, 0 }); // 2
-    edges.push_back({ 0, 3 }); // 3
-    edges.push_back({ 1, 3 }); // 4
-    edges.push_back({ 2, 3 }); // 5
+    edges.push_back({ 0, 1 }); // e0
+    edges.push_back({ 1, 2 }); // e1
+    edges.push_back({ 2, 0 }); // e2
+    edges.push_back({ 0, 3 }); // e3
+    edges.push_back({ 1, 3 }); // e4
+    edges.push_back({ 2, 3 }); // e5
     std::vector<Subdivision::Triangle> tris;
     tris.push_back({ { { 0, 3 }, { 1, 4 }, { 1, 0 } } });
     tris.push_back({ { { 0, 4 }, { 1, 5 }, { 1, 1 } } });
     tris.push_back({ { { 0, 5 }, { 1, 3 }, { 1, 2 } } });
 
     // bottom hemisphere
-    verts.push_back({ { 0, 0, 1 }, {0, 0, 0}, {0, 0} }); // 4
-    edges.push_back({ 4, 0 }); // 6
-    edges.push_back({ 4, 1 }); // 7
-    edges.push_back({ 4, 2 }); // 8
+    verts.push_back({ { 0, 0, 1 }, {0, 0, 0}, {0, 0} }); // 4 (bottom)
+    edges.push_back({ 4, 0 }); // e6
+    edges.push_back({ 4, 1 }); // e7
+    edges.push_back({ 4, 2 }); // e8
     tris.push_back({ { { 0, 6 }, { 0, 0 }, { 1, 7 } } });
     tris.push_back({ { { 0, 7 }, { 0, 1 }, { 1, 8 } } });
     tris.push_back({ { { 0, 8 }, { 0, 2 }, { 1, 6 } } });
@@ -200,15 +206,22 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
         edges, tris);
 
     constexpr UINT numLods = SharedConstants::NUM_SPHERE_LEVELS_OF_DETAIL;
+
+    std::vector<ID3D12Resource*> indexBuffers(numLods);
+
     for (UINT lod = 0; lod < numLods; lod++)
     {
         sub.Next();
         std::vector<uint32_t> indices;
         sub.GetIndices(indices);
+        indexBuffers[lod] = CreatePlanetIndexBuffer(in_pDevice, in_assetUploader, indices);
+    }
+    
+    // only 1 vertex buffer is required for all LoDs because subdivided triangles re-use vertices
+    ID3D12Resource* pVertexBuffer = CreatePlanetVertexBuffer(in_pDevice, in_assetUploader, verts);
 
-        ID3D12Resource* pVertexBuffer{ nullptr };
-        ID3D12Resource* pIndexBuffer{ nullptr };
-        CreatePlanetResources(verts, indices, &pVertexBuffer, &pIndexBuffer, in_pDevice, in_assetUploader);
-        SetGeometry(pVertexBuffer, (UINT)sizeof(verts[0]), pIndexBuffer, numLods - lod - 1);
+    for (UINT lod = 0; lod < numLods; lod++)
+    {
+        SetGeometry(pVertexBuffer, (UINT)sizeof(verts[0]), indexBuffers[lod], numLods - lod - 1);
     }
 }
