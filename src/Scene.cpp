@@ -732,15 +732,16 @@ XMMATRIX Scene::SetSphereMatrix()
         // position sphere far from terrain
         x += (MAX_SPHERE_SIZE + 2) * SharedConstants::SPHERE_SCALE;
 
-        float rx = (2 * XM_PI) * dis(gen);
-        float ry = (2 * XM_PI) * dis(gen);
-        float rz = (2 * XM_PI) * dis(gen);
+        float rx = (XM_2PI) * dis(gen);
+        float ry = (XM_2PI) * dis(gen);
+        float rz = (XM_2PI) * dis(gen);
 
-        XMMATRIX xlate = XMMatrixTranslation(x, 0, 0);
+        XMMATRIX rtate0 = XMMatrixRotationRollPitchYaw((XM_2PI)*dis(gen), (XM_2PI)*dis(gen), (XM_2PI)*dis(gen));
+        XMMATRIX xlate = XMMatrixTranslation(0, 0, x);
         XMMATRIX rtate = XMMatrixRotationRollPitchYaw(rx, ry, rz);
         XMMATRIX scale = XMMatrixScaling(sphereScale, sphereScale, sphereScale);
 
-        matrix = scale * xlate * rtate;
+        matrix = rtate0 * scale * xlate * rtate;
 
         tryAgain = false;
 
