@@ -44,7 +44,6 @@ Streaming::DataUploader::DataUploader(
     m_updateLists(in_maxCopyBatches)
     , m_updateListAllocator(in_maxCopyBatches)
     , m_stagingBufferSizeMB(in_stagingBufferSizeMB)
-    , m_gpuTimer(in_pDevice, in_maxCopyBatches, D3D12GpuTimer::TimerType::Copy)
     , m_mappingUpdater(in_maxTileMappingUpdatesPerApiCall)
     , m_threadPriority(in_threadPriority)
     , m_submitTaskAlloc(in_maxCopyBatches), m_submitTasks(in_maxCopyBatches)

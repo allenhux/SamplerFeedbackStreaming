@@ -219,7 +219,6 @@ struct TileUpdateManager
     //--------------------------------------------
     virtual void SetVisualizationMode(UINT in_mode) = 0;
     virtual void CaptureTraceFile(bool in_captureTrace) = 0; // capture a trace file of tile uploads
-    virtual float GetGpuStreamingTime() const = 0;
     virtual float GetCpuProcessFeedbackTime() = 0; // approx. cpu time spent processing feedback last frame. expected usage is to average over many frames
     virtual UINT GetTotalNumUploads() const = 0;   // number of tiles uploaded so far
     virtual UINT GetTotalNumEvictions() const = 0; // number of tiles evicted so far

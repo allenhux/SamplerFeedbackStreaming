@@ -142,7 +142,6 @@ float Streaming::TileUpdateManagerBase::GetCpuProcessFeedbackTime()
 //-----------------------------------------------------------------------------
 // performance and visualization
 //-----------------------------------------------------------------------------
-float Streaming::TileUpdateManagerBase::GetGpuStreamingTime() const { return m_dataUploader.GetGpuStreamingTime(); }
 float Streaming::TileUpdateManagerBase::GetTotalTileCopyLatency() const { return m_dataUploader.GetApproximateTileCopyLatency(); }
 
 // the total time the GPU spent resolving feedback during the previous frame
@@ -305,7 +304,6 @@ TileUpdateManager::CommandLists Streaming::TileUpdateManagerBase::EndFrame()
             pCommandList->ResourceBarrier((UINT)m_barrierResolveSrcToUav.size(), m_barrierResolveSrcToUav.data());
             m_barrierResolveSrcToUav.clear();
 
-            m_gpuTimerResolve.EndTimer(pCommandList, m_renderFrameIndex);
 #if RESOLVE_TO_TEXTURE
             // copy readable feedback buffers to cpu
             for (auto& t : m_feedbackReadbacks)
@@ -313,6 +311,7 @@ TileUpdateManager::CommandLists Streaming::TileUpdateManagerBase::EndFrame()
                 t.m_pStreamingResource->ReadbackFeedback(pCommandList);
             }
 #endif
+            m_gpuTimerResolve.EndTimer(pCommandList, m_renderFrameIndex);
             m_feedbackReadbacks.clear();
 
             m_gpuTimerResolve.ResolveTimer(pCommandList, m_renderFrameIndex);

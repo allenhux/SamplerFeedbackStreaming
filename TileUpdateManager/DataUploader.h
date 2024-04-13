@@ -31,7 +31,6 @@
 #include "UpdateList.h"
 #include "MappingUpdater.h"
 #include "FileStreamer.h"
-#include "D3D12GpuTimer.h"
 #include "Timer.h"
 
 #include "SimpleAllocator.h"
@@ -86,8 +85,6 @@ namespace Streaming
         //----------------------------------
         // statistics and visualization
         //----------------------------------
-        float GetGpuStreamingTime() const { return m_gpuTimer.GetTimes()[0].first; }
-
         UINT GetTotalNumUploads() const { return m_numTotalUploads; }
         void AddEvictions(UINT in_numEvictions) { m_numTotalEvictions += in_numEvictions; }
         UINT GetTotalNumEvictions() const { return m_numTotalEvictions; }
@@ -99,7 +96,6 @@ namespace Streaming
         // upload buffer size
         const UINT m_stagingBufferSizeMB{ 0 };
 
-        D3D12GpuTimer m_gpuTimer;
         RawCpuTimer m_cpuTimer;
 
         // fence to monitor forward progress of the mapping queue. independent of the frame queue

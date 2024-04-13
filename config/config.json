@@ -10,9 +10,11 @@
   "directStorage": true, // use directstorage vs. dedicated thread with ReadFile() and CopyTiles()
   "stagingSizeMB": 128, // size of the staging buffer for DirectStorage or reference streaming code
 
-  // maximum number of in-flight batches of uploads
-  "numStreamingBatches": 1280,
-  "minNumUploadRequests": 2000, // # tiles. heuristic to reduce frequency of Submit() calls
+  // maximum number of in-flight batches of uploads, each batch corresponds to 1 texture
+  // starvation is prevented via a stale queue
+  "numStreamingBatches": 64,
+  // sum of #tiles of pending batches. heuristic to reduce frequency of DS Submit() calls
+  "minNumUploadRequests": 1024,
 
   "addAliasingBarriers": false, //// adds a barrier for each streaming resource: alias(nullptr, pResource)
 
@@ -31,7 +33,7 @@
   "numSpheres": 0, // number of objects besides the terrain
   "lightFromView": false, // light direction is look direction
 
-  "maxFeedbackTime": 5.0, // maximum milliseconds for GPU to resolve feedback
+  "maxFeedbackTime": 0.75, // maximum milliseconds for GPU to resolve feedback
 
   "visualizeMinMip": false, // color overlayed onto texture by PS corresponding to mip level
   "hideFeedback": false, // hide the terrain feedback windows

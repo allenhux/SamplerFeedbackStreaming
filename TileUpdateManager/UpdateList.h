@@ -57,7 +57,6 @@ namespace Streaming
 
             STATE_PACKED_MAPPING,        // wait for packed mips to be mapped before uploading
             STATE_PACKED_COPY_PENDING    // wait for upload of packed mips to complete
-
         };
 
         // initialize to ready
