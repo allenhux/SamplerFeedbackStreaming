@@ -32,7 +32,7 @@
 #include <d3d12.h>
 #include <assert.h>
 #include <filesystem>
-
+#include <ppl.h>
 #include <dstorage.h>
 
 #include "ArgParser.h"
@@ -44,6 +44,8 @@
 using Microsoft::WRL::ComPtr;
 
 #pragma comment(lib, "d3d12.lib")
+
+constexpr UINT TILE_ALIGNMENT = 4096;
 
 //=============================================================================
 // offsets & sizes for each mip of a texture
@@ -116,7 +118,7 @@ static DXGI_FORMAT GetFormatFromHeader(const DirectX::DDS_HEADER& in_ddsHeader)
 //-----------------------------------------------------------------------------
 UINT GetAlignedSize(UINT in_numBytes)
 {
-    UINT alignment = 4096 - 1;
+    UINT alignment = TILE_ALIGNMENT - 1;
     UINT aligned = (in_numBytes + alignment) & (~alignment);
     return aligned;
 }
@@ -228,7 +230,7 @@ void FillSubresourceData(std::vector<SourceSubResourceData>& out_subresourceData
 //-----------------------------------------------------------------------------
 // convert standard dds into tiled layout
 //-----------------------------------------------------------------------------
-UINT WriteTile(BYTE* out_pDst,
+UINT ReadTile(BYTE* out_pDst,
     const D3D12_TILED_RESOURCE_COORDINATE& in_coord,
     const SourceSubResourceData& in_subresourceData,
     const BYTE* in_pSrc)
@@ -289,47 +291,56 @@ void WriteTiles(const XetFileHeader& in_header, const BYTE* in_pSrc)
     UINT mipCount = in_header.m_ddsHeader.mipMapCount;
 
     // texture data starts after the header, and after the table of offsets
-    UINT offset = 0;
+    std::atomic<uint32_t> offset = 0;
 
-    std::vector<BYTE> tile; // scratch space for writing tiled texture data
-
-    // find the base address of each /tiled/ mip level
-    for (UINT s = 0; s < in_header.m_mipInfo.m_numStandardMips; s++)
-    {
-        for (UINT y = 0; y < m_subresourceInfo[s].m_standardMipInfo.m_heightTiles; y++)
+    UINT numTiles = (UINT)m_offsets.size() - 1;
+    concurrency::parallel_for(UINT(0), numTiles, [&](UINT tileIndex)
         {
-            for (UINT x = 0; x < m_subresourceInfo[s].m_standardMipInfo.m_widthTiles; x++)
+            std::vector<BYTE> tile; // scratch space for writing tiled texture data
+            tile.resize(D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES); // reset to standard tile size
+
+            if (m_convertFromXet2)
             {
-                tile.resize(D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES); // reset to standard tile size
-
-                if (m_convertFromXet2)
-                {
-                    memcpy(tile.data(), in_pSrc, D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES);
-                    in_pSrc += D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES;
-                }
-                else
-                {
-                    WriteTile(tile.data(), D3D12_TILED_RESOURCE_COORDINATE{ x, y, 0, s }, m_subresourceData[s], in_pSrc);
-                }
-
-                if (m_compressionFormat)
-                {
-                    CompressTile(tile);
-                }
-
-                m_textureData.resize(m_textureData.size() + tile.size()); // grow the texture space to hold the new tile
-                memcpy(&m_textureData[offset], tile.data(), tile.size()); // copy bytes
-
-                // add tileData to array
-                XetFileHeader::TileData outData{ 0 };
-                outData.m_offset = offset;
-                outData.m_numBytes = (UINT)tile.size();
-                m_offsets.push_back(outData);
-
-                offset = (UINT)m_textureData.size();
+                const BYTE* pSrc = &in_pSrc[D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES * tileIndex];
+                memcpy(tile.data(), pSrc, D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES);
             }
-        }
-    }
+            else
+            {
+                // convert linear tile index to coordinate
+                // search for the mip corresponding to this tile index
+                // starts at mip 0, which contains most tiles
+                // FIXME? optimize search?
+                UINT s = 0;
+                while ((s < (in_header.m_mipInfo.m_numStandardMips - 1)) &&
+                    (tileIndex >= m_subresourceInfo[s + 1].m_standardMipInfo.m_subresourceTileIndex))
+                {
+                    s++;
+                }
+                UINT i = tileIndex - m_subresourceInfo[s].m_standardMipInfo.m_subresourceTileIndex;
+                UINT y = i / m_subresourceInfo[s].m_standardMipInfo.m_widthTiles;
+                UINT x = i - (y * m_subresourceInfo[s].m_standardMipInfo.m_widthTiles);
+
+                ReadTile(tile.data(), D3D12_TILED_RESOURCE_COORDINATE{ x, y, 0, s }, m_subresourceData[s], in_pSrc);
+            }
+
+            if (m_compressionFormat)
+            {
+                CompressTile(tile);
+            }
+
+            UINT uniqueOffset = offset.fetch_add((UINT)tile.size(), std::memory_order_relaxed);
+            memcpy(&m_textureData[uniqueOffset], tile.data(), tile.size()); // copy bytes
+
+            // add tileData to array
+            m_offsets[tileIndex] =
+            {
+                .m_offset = uniqueOffset,
+                .m_numBytes = (UINT)tile.size()
+            };
+
+            assert(uniqueOffset + tile.size() < m_textureData.size());
+        });
+    m_textureData.resize(offset);
 }
 
 //-----------------------------------------------------------------------------
@@ -404,11 +415,10 @@ UINT WritePackedMips(const XetFileHeader& in_header, BYTE* in_pBytes, size_t in_
     }
 
     // last offset structure points at the packed mips
-    XetFileHeader::TileData outData{ 0 };
-    outData.m_offset = m_offsets.back().m_offset + m_offsets.back().m_numBytes;
-    outData.m_numBytes = (UINT32)numBytesCompressed;
-    m_offsets.push_back(outData);
-
+    m_offsets.back() = {
+        .m_offset = (UINT32)m_textureData.size(),
+        .m_numBytes = (UINT32)numBytesCompressed
+    };
     return numBytesPadded;
 }
 
@@ -508,8 +518,9 @@ int main()
     std::filesystem::path inFilePath(inFileName);
     auto fileSize = std::filesystem::file_size(inFilePath);
 
-    m_textureData.reserve(fileSize); // reserve enough space to hold the whole uncompressed source
-    m_offsets.reserve(header.m_mipInfo.m_numTilesForStandardMips + 1);
+    m_offsets.resize(header.m_mipInfo.m_numTilesForStandardMips + 1);
+    // reserve enough space to hold all tiles, worst case
+    m_textureData.resize(m_offsets.size() * (TILE_ALIGNMENT + D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES));
 
     //--------------------------
     // write tiles
@@ -555,7 +566,7 @@ int main()
         outFile.write((char*)alignedTextureDataGap.data(), alignedTextureDataGap.size());
     }
 
-    outFile.write((char*)m_textureData.data(), (UINT)m_textureData.size());
+    outFile.write((char*)m_textureData.data(), m_textureData.size());
     outFile.write((char*)m_packedMipData.data(), (UINT)m_packedMipData.size());
 
     UnmapViewOfFile(pInFileBytes);
