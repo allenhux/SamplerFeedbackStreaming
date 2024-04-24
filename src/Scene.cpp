@@ -142,6 +142,7 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
     , m_renderThreadTimes(in_args.m_statisticsNumFrames)
     , m_updateFeedbackTimes(in_args.m_statisticsNumFrames)
 {
+    m_gen.seed(42);
     m_windowInfo.cbSize = sizeof(WINDOWINFO);
 
     UINT factoryFlags = 0;
@@ -699,12 +700,11 @@ void Scene::StartStreamingLibrary()
 //-----------------------------------------------------------------------------
 XMMATRIX Scene::SetSphereMatrix()
 {
-    static std::default_random_engine gen(42);
     static std::uniform_real_distribution<float> dis(-1, 1);
 
-    const float MIN_SPHERE_SIZE = 1.f;
-    const float MAX_SPHERE_SIZE = float(SharedConstants::MAX_SPHERE_SCALE);
-    const float SPHERE_SPACING = float(100 + SharedConstants::MAX_SPHERE_SCALE) / 100.f;
+    constexpr float MIN_SPHERE_SIZE = SharedConstants::SPHERE_SCALE;
+    constexpr float MAX_SPHERE_SIZE = SharedConstants::MAX_SPHERE_SCALE * MIN_SPHERE_SIZE;
+    constexpr float SPHERE_SPACING = float(MIN_SPHERE_SIZE) * .75f;
     static std::uniform_real_distribution<float> scaleDis(MIN_SPHERE_SIZE, MAX_SPHERE_SIZE);
 
     bool tryAgain = true;
@@ -723,25 +723,26 @@ XMMATRIX Scene::SetSphereMatrix()
             ErrorMessage("Failed to fit planet in universe. Universe too small?");
         }
 
-        float sphereScale = scaleDis(gen) * SharedConstants::SPHERE_SCALE;
+        float sphereScale = scaleDis(m_gen);
 
-        float worldScale = SharedConstants::UNIVERSE_SIZE;
-
-        float x = worldScale * std::abs(dis(gen));
+        float x = SharedConstants::UNIVERSE_SIZE * std::abs(dis(m_gen));
 
         // position sphere far from terrain
-        x += (MAX_SPHERE_SIZE + 2) * SharedConstants::SPHERE_SCALE;
+        constexpr float hollowCenter = 4 * 128; // 128 is texture dim
+        if (x < -hollowCenter) { x -= hollowCenter; }
+        else if (x < hollowCenter) { x += hollowCenter; }
+         
+        float rx = (XM_2PI) * dis(m_gen);
+        float ry = (XM_2PI) * dis(m_gen);
+        float rz = (XM_2PI) * dis(m_gen);
 
-        float rx = (XM_2PI) * dis(gen);
-        float ry = (XM_2PI) * dis(gen);
-        float rz = (XM_2PI) * dis(gen);
-
-        XMMATRIX rtate0 = XMMatrixRotationRollPitchYaw((XM_2PI)*dis(gen), (XM_2PI)*dis(gen), (XM_2PI)*dis(gen));
+        XMMATRIX rtate0 = XMMatrixRotationRollPitchYaw((XM_2PI)*dis(m_gen), (XM_2PI)*dis(m_gen), (XM_2PI)*dis(m_gen));
         XMMATRIX xlate = XMMatrixTranslation(0, 0, x);
         XMMATRIX rtate = XMMatrixRotationRollPitchYaw(rx, ry, rz);
         XMMATRIX scale = XMMatrixScaling(sphereScale, sphereScale, sphereScale);
 
         matrix = rtate0 * scale * xlate * rtate;
+        matrix = scale * xlate * rtate;
 
         tryAgain = false;
 
@@ -760,8 +761,8 @@ XMMATRIX Scene::SetSphereMatrix()
                 float dist = XMVectorGetX(XMVector3LengthEst(p1 - p0));
                 float s1 = XMVectorGetX(XMVector3LengthEst(o->GetModelMatrix().r[0]));
 
-                // bigger planets are further apart
-                if (dist < SPHERE_SPACING * (s0 + s1))
+                // leave a minimum spacing between planets
+                if (dist - (s0 + s1) < SPHERE_SPACING)
                 {
                     tryAgain = true;
                     break;
@@ -771,9 +772,9 @@ XMMATRIX Scene::SetSphereMatrix()
     }
 
     // pre-rotate to randomize axes
-    float rx = (1.5f * XM_PI) * dis(gen);
-    float ry = (2.5f * XM_PI) * dis(gen);
-    float rz = (2.0f * XM_PI) * dis(gen); // rotation around polar axis of sphere model
+    float rx = (1.5f * XM_PI) * dis(m_gen);
+    float ry = (2.5f * XM_PI) * dis(m_gen);
+    float rz = (2.0f * XM_PI) * dis(m_gen); // rotation around polar axis of sphere model
     XMMATRIX rtate = XMMatrixRotationRollPitchYaw(rx, ry, rz);
     matrix = rtate * matrix;
 
@@ -884,6 +885,8 @@ void Scene::LoadSpheres()
                 {
                     o = new SceneObjects::Planet(textureFilename, pHeap, descCPU, m_pFirstSphere);
                 }
+                static std::uniform_real_distribution<float> dis(-1.f, 1.f);
+                o->SetAxis(DirectX::XMVector3NormalizeEst(DirectX::XMVectorSet(dis(m_gen), dis(m_gen), dis(m_gen), 0)));
                 o->GetModelMatrix() = SetSphereMatrix();
             }
             m_objects.push_back(o);

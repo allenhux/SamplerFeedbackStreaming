@@ -43,7 +43,7 @@ float3 evaluateLight(in float3 normal, in float3 pos, in float3 tex)
     // directional light. from the point toward the light is the opposite direction.
     float3 pointToLight = -g_lightDir.xyz;
     float diffuse = saturate(dot(pointToLight, normal));
-    float3 color = max(ambient, diffuse) * g_lightColor.xyz * tex;
+    float3 color = (ambient + (diffuse * g_lightColor.xyz)) * tex;
 
     // specular
     float3 eyeToPoint = normalize(pos - g_eyePos.xyz);

@@ -345,7 +345,7 @@ UINT SceneObjects::BaseObject::ComputeLod(const float in_distance, const SceneOb
     {
         UINT numTriangles = m_lods[lod - 1].m_numIndices / 3;
         float pixelsPerTriangle = areaPixels / numTriangles;
-        if (pixelsPerTriangle < 50.f)
+        if (pixelsPerTriangle < SharedConstants::SPHERE_LOD_BIAS)
         {
             break;
         }

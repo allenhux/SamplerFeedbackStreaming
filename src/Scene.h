@@ -26,6 +26,8 @@
 
 #pragma once
 
+#include <random>
+
 #include "CommandLineArgs.h"
 #include "SharedConstants.h"
 #include "SceneObject.h"
@@ -123,6 +125,8 @@ private:
     // frameNumber can optionally be stalled while waiting for initial resource load
     UINT m_frameNumber{ 0 };
     bool m_allLoaded{ true }; // set to false when new objects added. set to true when packed mips have loaded.
+
+    std::default_random_engine m_gen;
 
     ComPtr<ID3D12CommandAllocator> m_commandAllocators[m_swapBufferCount];
     ComPtr<ID3D12GraphicsCommandList1> m_commandList;

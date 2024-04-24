@@ -131,8 +131,6 @@ static DirectX::XMFLOAT2 PlanetUV(DirectX::XMFLOAT3 pos)
     return uv;
 }
 
-
-
 //=========================================================================
 // planets have multiple LoDs
 // Texture Coordinates may optionally be mirrored in U
