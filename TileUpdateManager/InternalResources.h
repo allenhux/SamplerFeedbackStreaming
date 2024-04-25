@@ -43,7 +43,9 @@ namespace Streaming
 
         ID3D12Resource* GetTiledResource() const { return m_tiledResource.Get(); }
 
-        ID3D12Resource* GetResolvedReadback(UINT in_index) const { return m_resolvedReadback[in_index].Get(); }
+        void* MapResolvedReadback(UINT in_index) const;
+        void UnmapResolvedReadback(UINT in_index) const;
+
 #if RESOLVE_TO_TEXTURE
         // for visualization
         ID3D12Resource* GetResolvedFeedback() const { return m_resolvedResource.Get(); }
@@ -81,6 +83,7 @@ namespace Streaming
 #endif
         // per-swap-buffer cpu readable resolved feedback
         std::vector<ComPtr<ID3D12Resource>> m_resolvedReadback;
+        std::vector<void*> m_resolvedReadbackCpuAddress;
 
         D3D12_PACKED_MIP_INFO m_packedMipInfo; // last n mips may be packed into a single tile
         D3D12_TILE_SHAPE m_tileShape;          // e.g. a 64K tile may contain 128x128 texels @ 4B/pixel

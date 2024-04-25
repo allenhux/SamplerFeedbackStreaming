@@ -411,9 +411,7 @@ void Streaming::StreamingResourceBase::ProcessFeedback(UINT64 in_frameFenceCompl
         //------------------------------------------------------------------
         {
             // mapped host feedback buffer
-            UINT8* pResolvedData = nullptr;
-            ID3D12Resource* pResolvedResource = m_resources->GetResolvedReadback(feedbackIndex);
-            pResolvedResource->Map(0, nullptr, (void**)&pResolvedData);
+            UINT8* pResolvedData = (UINT8*)m_resources->MapResolvedReadback(feedbackIndex);
 
             TileReference* pTileRow = m_tileReferences.data();
             for (UINT y = 0; y < height; y++)
@@ -436,9 +434,7 @@ void Streaming::StreamingResourceBase::ProcessFeedback(UINT64 in_frameFenceCompl
 #endif
 
             } // end loop over y
-
-            D3D12_RANGE emptyRange{ 0,0 };
-            pResolvedResource->Unmap(0, &emptyRange);
+            m_resources->UnmapResolvedReadback(feedbackIndex);
         }
 
         // if there was a change, then it's no longer "zeroed"

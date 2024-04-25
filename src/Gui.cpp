@@ -401,9 +401,9 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
         //---------------------------------------------------------------------
         // performance/quality controls
         //---------------------------------------------------------------------
-        ImGui::PushItemWidth(100);
-        ImGui::SliderFloat("Sampler Bias", &in_args.m_lodBias, -2.0f, 4.0f);
-        ImGui::SliderFloat("Feedback Timeout", &in_args.m_maxGpuFeedbackTimeMs, 0, 30);
+        ImGui::PushItemWidth(125);
+        ImGui::SliderFloat("Sampler Bias", &in_args.m_lodBias, -3.0f, 3.0f);
+        ImGui::SliderFloat("Feedback Timeout", &in_args.m_maxGpuFeedbackTimeMs, 0, 10);
         ImGui::PopItemWidth();
 
         ImGui::Unindent(indent);

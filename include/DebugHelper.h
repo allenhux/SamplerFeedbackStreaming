@@ -26,7 +26,7 @@
 #pragma once
 
 //==================================================
-// auto t = AutoString::Concat("test: ", 3, "*", 2.75f, "\n");
+// auto t = AutoString("test: ", 3, "*", 2.75f, "\n");
 //==================================================
 class AutoString : public std::wstringstream
 {

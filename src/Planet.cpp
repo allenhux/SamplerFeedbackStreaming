@@ -150,35 +150,37 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
     CreatePipelineState(L"terrainPS.cso", L"terrainPS-FB.cso", L"terrainVS.cso", in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc);
 
-    const float theta = DirectX::XM_PI / 6; // 30 degrees
-    const float x = std::cos(theta);
-    const float y = std::sin(theta);
-
     std::vector<TerrainGenerator::Vertex> verts;
-    verts.push_back({ { -x, -y, 0 }, {0, 0, 0}, {0, 0} }); // 0
-    verts.push_back({ { x, -y, 0 }, { 0, 0, 0 }, { 0, 0 } }); // 1
-    verts.push_back({ { 0, 1.f, 0 }, {0, 0, 0}, {0, 0} }); // 2
-    verts.push_back({ { 0, 0, -1.f }, { 0, 0, 0 }, { 0, 0 } }); // 3 (top)
+    verts.push_back({ { 1, 0, 0 }, {0, 0, 0}, {0, 0} }); // 0
+    verts.push_back({ { 0, 1, 0 }, { 0, 0, 0 }, { 0, 0 } }); // 1
+    verts.push_back({ { -1, 0, 0 }, {0, 0, 0}, {0, 0} }); // 2
+    verts.push_back({ { 0, -1, 0 }, { 0, 0, 0 }, { 0, 0 } }); // 3
+    verts.push_back({ { 0, 0, 1 }, { 0, 0, 0 }, { 0, 0 } }); // 4 (top)
     std::vector<Subdivision::Edge> edges;
     edges.push_back({ 0, 1 }); // e0
     edges.push_back({ 1, 2 }); // e1
-    edges.push_back({ 2, 0 }); // e2
-    edges.push_back({ 0, 3 }); // e3
-    edges.push_back({ 1, 3 }); // e4
-    edges.push_back({ 2, 3 }); // e5
+    edges.push_back({ 2, 3 }); // e2
+    edges.push_back({ 3, 0 }); // e3
+    edges.push_back({ 0, 4 }); // e4 (to top)
+    edges.push_back({ 1, 4 }); // e5 (to top)
+    edges.push_back({ 2, 4 }); // e6 (to top)
+    edges.push_back({ 3, 4 }); // e7 (to top)
     std::vector<Subdivision::Triangle> tris;
-    tris.push_back({ { { 0, 3 }, { 1, 4 }, { 1, 0 } } });
-    tris.push_back({ { { 0, 4 }, { 1, 5 }, { 1, 1 } } });
-    tris.push_back({ { { 0, 5 }, { 1, 3 }, { 1, 2 } } });
+    for (UINT i = 0; i < 4; i++)
+    {
+        tris.push_back({ { { 0, i }, { 0, 4 + (i + 1) % 4 }, { 1, i + 4 } } });
+    }
 
     // bottom hemisphere
-    verts.push_back({ { 0, 0, 1 }, {0, 0, 0}, {0, 0} }); // 4 (bottom)
-    edges.push_back({ 4, 0 }); // e6
-    edges.push_back({ 4, 1 }); // e7
-    edges.push_back({ 4, 2 }); // e8
-    tris.push_back({ { { 0, 6 }, { 0, 0 }, { 1, 7 } } });
-    tris.push_back({ { { 0, 7 }, { 0, 1 }, { 1, 8 } } });
-    tris.push_back({ { { 0, 8 }, { 0, 2 }, { 1, 6 } } });
+    verts.push_back({ { 0, 0, -1 }, {0, 0, 0}, {0, 0} }); // 5 (bottom)
+    edges.push_back({ 0, 5 }); // e8 (to bottom)
+    edges.push_back({ 1, 5 }); // e9 (to bottom)
+    edges.push_back({ 2, 5 }); // e10 (to bottom)
+    edges.push_back({ 3, 5 }); // e11 (to bottom)
+    for (UINT i = 0; i < 4; i++)
+    {
+        tris.push_back({ { { 1, i }, { 0, i + 8 }, {1, 8 + (i + 1) % 4 } } });
+    }
 
     for (auto& v : verts)
     {

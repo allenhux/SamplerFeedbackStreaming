@@ -252,8 +252,8 @@ TileUpdateManager::CommandLists Streaming::TileUpdateManagerBase::EndFrame()
 
         /*
         * Aliasing barriers are unnecessary, as draw commands only access modified resources after a fence has signaled on the copy queue
-        * Note it is also theoretically possible for tiles to be re-assigned while a draw command is executing
         * However, performance analysis tools like to know about changes to resources
+        * Note it is also theoretically possible for tiles to be re-assigned while a draw command is executing
         */
         if ((m_addAliasingBarriers) && (m_streamingResources.size()))
         {

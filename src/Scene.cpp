@@ -546,10 +546,7 @@ void Scene::CreateCommandQueue()
     for (UINT i = 0; i < m_swapBufferCount; i++)
     {
         ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocators[i])));
-
-        std::wstringstream cmdAllocName;
-        cmdAllocName << "m_commandAllocators #" << i;
-        m_commandAllocators[i]->SetName(cmdAllocName.str().c_str());
+        m_commandAllocators[i]->SetName(AutoString("m_commandAllocators #", i).str().c_str());
     }
 
     m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocators[0].Get(), nullptr, IID_PPV_ARGS(&m_commandList));

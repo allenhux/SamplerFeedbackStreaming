@@ -61,9 +61,8 @@ Streaming::FileStreamerReference::FileStreamerReference(ID3D12Device* in_pDevice
     {
         copyBatch.Init(in_pDevice);
 
-        std::wstringstream name;
-        name << "CopyBatch[" << copyBatchIndex << "]::m_commandAllocator";
-        copyBatch.GetCommandAllocator()->SetName(name.str().c_str());
+        copyBatch.GetCommandAllocator()->SetName(
+            AutoString("CopyBatch[", copyBatchIndex, "]::m_commandAllocator").str().c_str());
 
         copyBatchIndex++;
     }

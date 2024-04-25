@@ -40,8 +40,8 @@ cbuffer FrameConstantData : register(b0)
 {
     float4 g_eyePos;
     float4 g_lightDir;
-    float4 g_lightColor;    // RGB + specular intensity
-    float4 g_specularColor;
+    float4 g_lightColor;    // RGB
+    float4 g_specularColor; // RGB + specular intensity
     bool g_visualizeFeedback;
 };
 

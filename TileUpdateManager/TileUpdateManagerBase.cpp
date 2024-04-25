@@ -65,16 +65,15 @@ m_numSwapBuffers(in_desc.m_swapChainBufferCount)
         for (UINT i = 0; i < numAllocators; i++)
         {
             ThrowIfFailed(in_pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&cl.m_allocators[i])));
+            cl.m_allocators[i]->SetName(
+                AutoString("Streaming::TileUpdateManagerBase::m_commandLists.m_allocators[",
+                    c, "][", i, "]").str().c_str());
 
-            std::wstringstream name;
-            name << "Streaming::TileUpdateManagerBase::m_commandLists.m_allocators[" << c << "][" << i << "]";
-            cl.m_allocators[i]->SetName(name.str().c_str());
         }
         ThrowIfFailed(in_pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cl.m_allocators[m_renderFrameIndex].Get(), nullptr, IID_PPV_ARGS(&cl.m_commandList)));
+        cl.m_commandList->SetName(
+            AutoString("Streaming::TileUpdateManagerBase::m_commandLists.m_commandList[", c, "]").str().c_str());
 
-        std::wstringstream name;
-        name << "Streaming::TileUpdateManagerBase::m_commandLists.m_commandList[" << c << "]";
-        cl.m_commandList->SetName(name.str().c_str());
         cl.m_commandList->Close();
     }
 

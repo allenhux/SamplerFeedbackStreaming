@@ -142,6 +142,7 @@ Streaming::InternalResources::InternalResources(
 #endif
 
         m_resolvedReadback.resize(in_swapChainBufferCount);
+        m_resolvedReadbackCpuAddress.reserve(in_swapChainBufferCount);
 
         for (auto& b : m_resolvedReadback)
         {
@@ -150,13 +151,17 @@ Streaming::InternalResources::InternalResources(
                 D3D12_HEAP_FLAG_NONE,
                 &rd,
 #if RESOLVE_TO_TEXTURE
-                // start in the copy_source state to align with transition barrier logic in TileUpdateManager
                 D3D12_RESOURCE_STATE_COPY_DEST,
 #else
                 D3D12_RESOURCE_STATE_RESOLVE_DEST,
 #endif
                 nullptr,
                 IID_PPV_ARGS(&b)));
+            static UINT resolveCount = 0;
+            b->SetName(AutoString("ResolveDest_", resolveCount++).str().c_str());
+            void* pData = nullptr;
+            b->Map(0, nullptr, (void**)&pData);
+            m_resolvedReadbackCpuAddress.push_back(pData);
         }
     }
 }
@@ -235,8 +240,20 @@ void Streaming::InternalResources::ReadbackFeedback(ID3D12GraphicsCommandList* o
 void Streaming::InternalResources::NameStreamingTexture()
 {
     static UINT m_streamingResourceID = 0;
+    m_tiledResource->SetName(
+        AutoString("m_streamingTexture", m_streamingResourceID).str().c_str());
+    m_streamingResourceID++;
+}
 
-    std::wstringstream name;
-    name << "m_streamingTexture" << m_streamingResourceID++;
-    m_tiledResource->SetName(name.str().c_str());
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void* Streaming::InternalResources::MapResolvedReadback(UINT in_index) const
+{
+    return m_resolvedReadbackCpuAddress[in_index];
+}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void Streaming::InternalResources::UnmapResolvedReadback(UINT) const
+{
 }
