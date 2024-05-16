@@ -88,41 +88,43 @@ static ID3D12Resource* CreatePlanetVertexBuffer(
 //-----------------------------------------------------------------------------
 static DirectX::XMFLOAT2 PlanetUV(DirectX::XMFLOAT3 pos)
 {
-    DirectX::XMFLOAT2 uv = { pos.x, pos.y };
-
+    // z scale: stretch it somewhat uniformly in the 3rd dimension
+    // magic number slightly shrinks the center, making texel area more consistent
+    float s = std::lerp(1.f, 0.6f, std::fabsf(pos.z));
+ 
     // radius of this latitude in x/y plane
-    // 1 = sqrt(r^2 + z^2), or, r^2=sqrt(x^2 + y^2)
+    // r^2=sqrt(x^2 + y^2), so 1 = sqrt(r^2 + z^2)
     float r = std::sqrtf(1.f - (pos.z * pos.z));
 
-    float theta = DirectX::XM_PIDIV2;
-
-    // avoid divide by 0 near poles, where x&y are near 0:
+    // radial scale: squeeze texture coords into circle
+    // conceptually, cast a ray from the origin through the current position to the edge of a unit square
+    // the length of that ray is the scale factor to project "here" to the edge of the square
+    // use simple trig to get length: sin = opposite/hypotenuse or cos = adjacent/hypotenuse
+    //      e.g. s * cos(theta) = 1, hence s = 1/cos. cos = pos.x / r, hence s = r/pos.x
+    // scale the scale factor by radius: the closer to the circle edge, the greater the scale factor
     if (r > std::numeric_limits<float>::min())
     {
-        theta = std::acosf(std::clamp(pos.x / r, -1.f, 1.f));
-    }
-    else
-    {
-        r = 0;
+        float rs = 1;
+
+        float rcostheta = std::fabsf(pos.x);
+        float rsintheta = std::fabsf(pos.y);
+
+        // find length of ray that hits edge of unit square (0,0)->(1,1)
+        // if x > y, then theta < 45 degrees, stretch will be in x
+        if (rcostheta > rsintheta)
+        {
+            rs = r / rcostheta;
+        }
+        else // theta > 45 degrees, stretch in y
+        {
+            rs = r / rsintheta;
+        }
+        // scale the scale factor so we approach 1.0 more quickly as radius increases
+        // looks nice effectively scaled quadratically in r and z
+        s *= std::lerp(1.f, rs, r * r * (1-std::fabsf(pos.z)));
     }
 
-    // radial scale
-    if (theta > DirectX::XM_PI) { theta = DirectX::XM_2PI - theta; }
-    if (theta > DirectX::XM_PIDIV2) { theta = DirectX::XM_PI - theta; }
-    if (theta > DirectX::XM_PIDIV4)
-    {
-        float s = std::cosf(DirectX::XM_PIDIV4) / std::cosf(DirectX::XM_PIDIV2 - theta);
-        uv.y *= (1 - r) + r * s;
-    }
-    else
-    {
-        float s = std::cosf(DirectX::XM_PIDIV4) / std::cosf(theta);
-        uv.x *= (1 - r) + r * s;
-    }
-
-    // z scale
-    float s = std::powf(0.5f, std::fabsf(pos.z)) * std::sqrtf(2.f);
-    uv = { uv.x * s, uv.y * s };
+    DirectX::XMFLOAT2 uv = { pos.x * s, pos.y * s };
 
     // -1 .. 1 -> 0 .. 1
     uv.x = (1 + uv.x) * .5f;
@@ -208,6 +210,8 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
     constexpr UINT numLods = SharedConstants::NUM_SPHERE_LEVELS_OF_DETAIL;
 
     std::vector<ID3D12Resource*> indexBuffers(numLods);
+    sub.Next();
+    sub.Next();
 
     for (UINT lod = 0; lod < numLods; lod++)
     {
