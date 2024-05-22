@@ -88,45 +88,36 @@ static ID3D12Resource* CreatePlanetVertexBuffer(
 //-----------------------------------------------------------------------------
 static DirectX::XMFLOAT2 PlanetUV(DirectX::XMFLOAT3 pos)
 {
-    // z scale: stretch it somewhat uniformly in the 3rd dimension
-    // magic number slightly shrinks the center, making texel area more consistent
-    float s = std::lerp(1.f, 0.6f, std::fabsf(pos.z));
- 
+    DirectX::XMFLOAT2 uv = { pos.x, pos.y };
+
     // radius of this latitude in x/y plane
-    // r^2=sqrt(x^2 + y^2), so 1 = sqrt(r^2 + z^2)
+    // for a sphere, 1 = sqrt(x^2 + y^2 + z^2)
+    // since r^2 = x^2 + y^2, 1 = sqrt(r^2 + z^2) and 1^2 - z^2 = r^2, so...
     float r = std::sqrtf(1.f - (pos.z * pos.z));
 
     // radial scale: squeeze texture coords into circle
-    // conceptually, cast a ray from the origin through the current position to the edge of a unit square
-    // the length of that ray is the scale factor to project "here" to the edge of the square
-    // use simple trig to get length: sin = opposite/hypotenuse or cos = adjacent/hypotenuse
-    //      e.g. s * cos(theta) = 1, hence s = 1/cos. cos = pos.x / r, hence s = r/pos.x
-    // scale the scale factor by radius: the closer to the circle edge, the greater the scale factor
     if (r > std::numeric_limits<float>::min())
     {
-        float rs = 1;
-
         float rcostheta = std::fabsf(pos.x);
         float rsintheta = std::fabsf(pos.y);
 
-        // find length of ray that hits edge of unit square (0,0)->(1,1)
-        // if x > y, then theta < 45 degrees, stretch will be in x
-        if (rcostheta > rsintheta)
-        {
-            rs = r / rcostheta;
-        }
-        else // theta > 45 degrees, stretch in y
-        {
-            rs = r / rsintheta;
-        }
-        // scale the scale factor so we approach 1.0 more quickly as radius increases
-        // looks nice effectively scaled quadratically in r and z
-        s *= std::lerp(1.f, rs, r * r * (1-std::fabsf(pos.z)));
+        // conceptually, cast a ray from the origin through the current position to the edge of a unit square
+        // the length of that ray is the scale factor to project "here" to the edge of the square
+        // use simple trig to get length: sin = opposite/hypotenuse or cos = adjacent/hypotenuse
+        //      e.g. s * cos(theta) = 1, hence s = 1/cos. cos = pos.x / r, hence s = r/pos.x
+        //      for theta 45..90 degrees, s = r/pos.y
+        // note numerator (r) has been included in the lerp
+        float rs = 1.f / std::max(rcostheta, rsintheta);
+
+        // counteract scale so center appears undistorted:
+        const float distortion = std::sqrtf(2.0f) / 2.f;
+        // quadratic interpolation of scale factor:
+        float s = std::lerp(distortion, rs, r * r  * (1 - std::fabsf(pos.z)) * (1 - std::fabsf(pos.z)));
+        uv.x *= s;
+        uv.y *= s;
     }
 
-    DirectX::XMFLOAT2 uv = { pos.x * s, pos.y * s };
-
-    // -1 .. 1 -> 0 .. 1
+    // [-1 .. 1] -> [0 .. 1]
     uv.x = (1 + uv.x) * .5f;
     uv.y = (1 + uv.y) * .5f;
 
@@ -210,8 +201,6 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
     constexpr UINT numLods = SharedConstants::NUM_SPHERE_LEVELS_OF_DETAIL;
 
     std::vector<ID3D12Resource*> indexBuffers(numLods);
-    sub.Next();
-    sub.Next();
 
     for (UINT lod = 0; lod < numLods; lod++)
     {
