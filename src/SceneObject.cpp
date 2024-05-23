@@ -177,10 +177,11 @@ void SceneObjects::BaseObject::CreatePipelineState(
     const wchar_t* in_ps, const wchar_t* in_psFB, const wchar_t* in_vs,
     ID3D12Device* in_pDevice, UINT in_sampleCount,
     const D3D12_RASTERIZER_DESC& in_rasterizerDesc,
-    const D3D12_DEPTH_STENCIL_DESC& in_depthStencilDesc)
+    const D3D12_DEPTH_STENCIL_DESC& in_depthStencilDesc,
+    const std::vector<D3D12_INPUT_ELEMENT_DESC>& in_elementDescs)
 {
     // Define the vertex input layout
-    D3D12_INPUT_ELEMENT_DESC inputElementDescs[] = {
+    std::vector< D3D12_INPUT_ELEMENT_DESC> inputElementDescs = {
         { "POS",    0, DXGI_FORMAT_R32G32B32_FLOAT, 0,  0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         { "TEX",    0, DXGI_FORMAT_R32G32_FLOAT,    0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
@@ -205,7 +206,11 @@ void SceneObjects::BaseObject::CreatePipelineState(
     psoDesc.SampleMask = UINT_MAX;
     psoDesc.RasterizerState = in_rasterizerDesc;
     psoDesc.DepthStencilState = in_depthStencilDesc;
-    psoDesc.InputLayout = { inputElementDescs, _countof(inputElementDescs) };
+    psoDesc.InputLayout = { inputElementDescs.data(), (UINT)inputElementDescs.size()};
+    if (in_elementDescs.size())
+    {
+        psoDesc.InputLayout = { in_elementDescs.data(), (UINT)in_elementDescs.size() };
+    }
     psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     psoDesc.NumRenderTargets = 1;
     psoDesc.RTVFormats[0] = SharedConstants::SWAP_CHAIN_FORMAT;
@@ -293,19 +298,8 @@ void SceneObjects::BaseObject::SetGeometry(ID3D12Resource* in_pVertexBuffer, UIN
 // state common to multiple objects
 // basic scene consists of a sky (1 or none), objects using feedback, and objects not using feedback
 //-------------------------------------------------------------------------
-void SceneObjects::BaseObject::SetCommonPipelineState(ID3D12GraphicsCommandList1* in_pCommandList, const SceneObjects::DrawParams& in_drawParams)
+void SceneObjects::BaseObject::SetCommonGraphicsState(ID3D12GraphicsCommandList1* in_pCommandList, const SceneObjects::DrawParams& in_drawParams)
 {
-    // if feedback is enabled, 2 things:
-    // 1. tell the tile update manager to queue a readback of the resolved feedback
-    // 2. draw the object with a shader that calls WriteSamplerFeedback()
-    if (m_feedbackEnabled)
-    {
-        SetRootSigPsoFB(in_pCommandList);
-    }
-    else
-    {
-        SetRootSigPso(in_pCommandList);
-    }
     in_pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     // shared min mip map resource

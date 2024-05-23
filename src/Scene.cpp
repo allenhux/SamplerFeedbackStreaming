@@ -836,14 +836,12 @@ void Scene::LoadSpheres()
                 float scale = SharedConstants::UNIVERSE_SIZE * 2;
                 o->GetModelMatrix() = DirectX::XMMatrixScaling(scale, scale, scale);
             }
-
             else if (nullptr == m_pTerrainSceneObject)
             {
                 m_pTerrainSceneObject = new SceneObjects::Terrain(m_args.m_terrainTexture, m_pTileUpdateManager, pHeap, m_device.Get(), m_args.m_sampleCount, descCPU, m_args, m_assetUploader);
                 m_terrainObjectIndex = objectIndex;
                 o = m_pTerrainSceneObject;
             }
-
             // earth
             else if (m_args.m_earthTexture.size() && (std::wstring::npos != textureFilename.find(m_args.m_earthTexture)))
             {
@@ -1119,26 +1117,35 @@ UINT Scene::DetermineMaxNumFeedbackResolves()
     return maxNumFeedbackResolves;
 }
 
-//-----------------------------------------------------------------------------
-// crude system to minimize state transitions: group objects by PSO
-//-----------------------------------------------------------------------------
-typedef std::pair<SceneObjects::BaseObject*, UINT> ObjectIndexPair;
-typedef std::vector<ObjectIndexPair> ObjectSet;
-
-void DrawObjectSets(const std::vector<ObjectSet>& in_objectSets, SceneObjects::DrawParams& in_params,
+//----------------------------------------------------------
+// draw objects grouped by same pipeline state
+//----------------------------------------------------------
+void Scene::DrawObjectSets(SceneObjects::DrawParams& in_params,
     const D3D12_GPU_DESCRIPTOR_HANDLE in_descriptorBase, UINT in_descriptorSize,
     ID3D12GraphicsCommandList1* out_pCommandList)
 {
-    for (auto& t : in_objectSets)
+    for (auto& set : m_frameObjectSets)
     {
-        if (t.size())
+        auto pipelineState = set.first;
+        auto& objects = set.second;
+        if (objects.size())
         {
-            t[0].first->SetCommonPipelineState(out_pCommandList, in_params); // these objects all share pipeline state
-            for (auto& o : t)
-            {
-                in_params.m_srvBaseGPU = CD3DX12_GPU_DESCRIPTOR_HANDLE(in_descriptorBase, (INT)(o.second * (INT)SceneObjects::Descriptors::NumEntries), in_descriptorSize);
+            auto pObject = objects[0].pObject;
 
-                o.first->Draw(out_pCommandList, in_params);
+            // these objects all share pipeline state
+            // if feedback is enabled, 2 things:
+            // 1. tell the tile update manager to queue a readback of the resolved feedback
+            // 2. draw the object with a shader that calls WriteSamplerFeedback()
+            out_pCommandList->SetGraphicsRootSignature(pObject->GetRootSignature());
+            out_pCommandList->SetPipelineState(pipelineState);
+
+            pObject->SetCommonGraphicsState(out_pCommandList, in_params);
+
+            for (auto& o : objects)
+            {
+                in_params.m_srvBaseGPU = CD3DX12_GPU_DESCRIPTOR_HANDLE(in_descriptorBase, (INT)(o.index * (INT)SceneObjects::Descriptors::NumEntries), in_descriptorSize);
+
+                o.pObject->Draw(out_pCommandList, in_params);
             }
         }
     }
@@ -1172,15 +1179,7 @@ void Scene::DrawObjects()
 
     const D3D12_GPU_DESCRIPTOR_HANDLE srvBaseGPU = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::NumEntries, m_srvUavCbvDescriptorSize);
 
-    enum class MaterialType : UINT
-    {
-        Sky, // always draw the sky first, if there is one
-        PlanetWithFeedback,
-        Planet,
-        NumMaterials
-    };
-
-    std::vector<ObjectSet> objectSets((UINT)MaterialType::NumMaterials);
+    m_frameObjectSets.clear();
 
     //------------------------------------------------------------------------------------
     // set feedback state on each object
@@ -1218,26 +1217,16 @@ void Scene::DrawObjects()
                     numFeedbackObjects++;
                 }
 
+                o->SetFeedbackEnabled(queueFeedback);
+
                 // only draw visible objects
                 // group objects by material (PSO)
-                MaterialType materialType = MaterialType::Sky;
-                if (o != m_pSky)
-                {
-                    materialType = MaterialType::Planet;
-                    if (queueFeedback)
-                    {
-                        materialType = MaterialType::PlanetWithFeedback;
-                    }
-                }
-                objectSets[(UINT)materialType].emplace_back(ObjectIndexPair(o, objectIndex));
+                m_frameObjectSets[o->GetPipelineState()].push_back({ o, objectIndex });
             }
             else // evict tiles of objects that are not visible
             {
                 o->GetStreamingResource()->QueueEviction();
             }
-
-            // always tell the scene object whether or not to use feedback
-            o->SetFeedbackEnabled(queueFeedback);
         }
 
         // next time, start feedback where we left off this time.
@@ -1248,7 +1237,7 @@ void Scene::DrawObjects()
         m_prevNumFeedbackObjects[m_frameIndex] = numFeedbackObjects;
     }
 
-    DrawObjectSets(objectSets, drawParams, srvBaseGPU, m_srvUavCbvDescriptorSize, m_commandList.Get());
+    DrawObjectSets(drawParams, srvBaseGPU, m_srvUavCbvDescriptorSize, m_commandList.Get());
 }
 
 //-------------------------------------------------------------------------

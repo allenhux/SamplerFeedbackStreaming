@@ -175,6 +175,18 @@ private:
     class BufferViewer* m_pFeedbackViewer{ nullptr };
     class FrustumViewer* m_pFrustumViewer{ nullptr };
 
+    // minimize state transitions by grouping objects by material each frame
+    struct ObjectIndexPair
+    {
+        SceneObjects::BaseObject* pObject;
+        UINT index;
+    };
+    typedef std::vector<ObjectIndexPair> ObjectSet;
+    std::unordered_map<ID3D12PipelineState*, ObjectSet> m_frameObjectSets;
+    void DrawObjectSets(SceneObjects::DrawParams& in_params,
+        const D3D12_GPU_DESCRIPTOR_HANDLE in_descriptorBase, UINT in_descriptorSize,
+        ID3D12GraphicsCommandList1* out_pCommandList);
+
     void MsaaResolve();
 
     void WaitForGpu();

@@ -77,7 +77,17 @@ namespace SceneObjects
         bool GetPackedMipsPresent() const { return m_pStreamingResource->GetPackedMipsResident(); }
 
         // state re-used by a number of objects
-        void SetCommonPipelineState(ID3D12GraphicsCommandList1* in_pCommandList, const SceneObjects::DrawParams& in_drawParams);
+        void SetCommonGraphicsState(ID3D12GraphicsCommandList1* in_pCommandList, const SceneObjects::DrawParams& in_drawParams);
+
+        ID3D12RootSignature* GetRootSignature() const
+        {
+            return m_feedbackEnabled ? m_rootSignatureFB.Get() : m_rootSignature.Get();
+        }
+
+        ID3D12PipelineState* GetPipelineState() const
+        {
+            return m_feedbackEnabled ? m_pipelineStateFB.Get() : m_pipelineState.Get();
+        }
 
         virtual void Draw(ID3D12GraphicsCommandList1* in_pCommandList, const DrawParams& in_drawParams);
         UINT ComputeLod(const float in_distance, const SceneObjects::DrawParams& in_drawParams);
@@ -143,7 +153,8 @@ namespace SceneObjects
             const wchar_t* in_ps, const wchar_t* in_psFB, const wchar_t* in_vs,
             ID3D12Device* in_pDevice, UINT in_sampleCount,
             const D3D12_RASTERIZER_DESC& in_rasterizerDesc,
-            const D3D12_DEPTH_STENCIL_DESC& in_depthStencilDesc);
+            const D3D12_DEPTH_STENCIL_DESC& in_depthStencilDesc,
+            const std::vector<D3D12_INPUT_ELEMENT_DESC>& in_elementDescs = {});
 
         // pipeline state that does not capture sampler feedback
         void SetRootSigPso(ID3D12GraphicsCommandList1* in_pCommandList)
