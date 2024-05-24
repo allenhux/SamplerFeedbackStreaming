@@ -51,7 +51,9 @@ Gui::Gui(HWND in_hWnd, ID3D12Device* in_pDevice,
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= UINT(ImGuiConfigFlags_NavEnableSetMousePos) + UINT(ImGuiBackendFlags_HasSetMousePos);  // Enable Keyboard Controls
+    // Enable Keyboard Controls
+    io.ConfigFlags |= UINT(ImGuiConfigFlags_NavEnableSetMousePos);
+    io.BackendFlags |= UINT(ImGuiBackendFlags_HasSetMousePos);
 
     ImGui::StyleColorsDark();
     ImGui_ImplWin32_Init(in_hWnd);
