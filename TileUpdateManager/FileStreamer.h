@@ -93,7 +93,7 @@ namespace Streaming
         void TraceSubmit();
     private:
         bool m_firstSubmit{ true };
-        ConfigurationParser m_trace; // array of submits, each submit is an array of requests
+        JsonParser m_trace; // array of submits, each submit is an array of requests
         UINT m_traceSubmitIndex{ 0 };
         UINT m_traceRequestIndex{ 0 };
         std::unordered_map<ID3D12Resource*, D3D12_RESOURCE_DESC> m_tracingResources;

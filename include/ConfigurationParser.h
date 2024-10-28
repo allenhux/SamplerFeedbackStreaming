@@ -25,7 +25,7 @@
 //*********************************************************
 
 /*=============================================================================
-Parses a file of the form:
+Reads & Writes files of the form:
 
 {
     // c++ style comments
@@ -34,26 +34,32 @@ Parses a file of the form:
         "name1" : value1,
         "name2" : value2
     },
-    "array": [ a, b, c], // the "value" can be an array of values
+    "array": [ a, b, c ], // the "value" can be an array of values
+
+    // any value can also be an array or a block
     "a2" : [
                 {
                     "x" : false,
                     "y" : 4
                 },
                 3
-            ] // blocks can be within arrays
+           ]
 }
 
-C++ Reading a file:
+Read a file:
 
-    ConfigurationParser configurationParser;
-    configurationParser.Read("filename");
+    JsonParser parser;
+    parser.Read("filename");
 
-    auto& root = configurationParser.GetRoot();
+Use [] to access a value by name or index, convert type with appropriate "asFoo()"
+
+    auto& root = parser.GetRoot();
 
     std::string s = root["name"].asString();
     bool x = root["a2"][0]["x"].asBool();
     int z = root["a2"][1].asInt();
+
+Iterator support:
 
     // parse an array of arrays of floats
     for (const auto& pose : root["Poses"])
@@ -66,19 +72,19 @@ C++ Reading a file:
         // now do something with f...
     }
 
-C++ Writing a file:
+Output:
 
-    ConfigurationParser configurationParser;
+    // to stdout
+    parser.Write(std::cout);
 
-    auto& settings = configurationParser["Settings"];
-    settings["radius"] = 1.0f;
-    settings["enabled"] = true;
-
-    ConfigurationParser.Write("filename");
+    // to file
+    std::ofstream ofs(in_filePath, std::ios::out);
+    m_value.Write(ofs);
 
 Known issues:
 
     reading/writing values that contain quotes, e.g. "v" : "\"value\"";
+    only supports one root object { ... }
 
 =============================================================================*/
 #pragma once
@@ -94,7 +100,7 @@ Known issues:
 
 //=============================================================================
 //=============================================================================
-class ConfigurationParser
+class JsonParser
 {
 public:
     //-------------------------------------------------------------------------
@@ -140,7 +146,7 @@ public:
 
         KVP() {}
         template<typename T> KVP(T in_t) { *this = in_t; }
- 
+
         // root["x"] = root["y"] has a race: root["y"] may become invalid if root["x"] must be created
         // this solution (copy source before copy assignment) is more expensive, but more robust
         KVP& operator= (const KVP o)
@@ -150,6 +156,7 @@ public:
             m_data = o.m_data;
             return *this;
         }
+        void Write(std::ostream& out_s, uint32_t in_tab = 0) const;
 
     private:
         // KVP has an optional name + either a string value or an array of KVPs
@@ -158,17 +165,16 @@ public:
         std::vector<KVP> m_values;
         bool m_isString{ false }; // only used when writing a file: remember if data was initally assigned as a string, will add quotes to output
 
-        // used by ConfigurationParser::Write()
+        // used by JsonParser::Write()
         static constexpr uint32_t m_tabSize{ 2 };
-        void Write(std::ofstream& in_ofs, uint32_t in_tab = 0) const;
 
-        friend ConfigurationParser;
+        friend JsonParser;
     };
 
     //-------------------------------------------------------------------------
     //-------------------------------------------------------------------------
-    ConfigurationParser() {};
-    ConfigurationParser(const std::wstring& in_filePath) { m_readSuccess = Read(in_filePath); };
+    JsonParser() {};
+    JsonParser(const std::wstring& in_filePath) { m_readSuccess = Read(in_filePath); };
     bool GetReadSuccess() const { return m_readSuccess; }
 
     //-------------------------------------------------------------------------
@@ -177,9 +183,9 @@ public:
     bool Read(const std::wstring& in_filePath);
 
     //-------------------------------------------------------------------------
-    // write file
+    // write to stream
     //-------------------------------------------------------------------------
-    void Write(const std::wstring& in_filePath) const;
+    void Write(std::ostream& out_s) const { if (!out_s.bad()) { m_value.Write(out_s); } }
 
     KVP& GetRoot() { return m_value; }
     const KVP& GetRoot() const { return m_value; }
@@ -193,7 +199,7 @@ private:
     {
         std::string message = "Error in comment: unexpected character at position " + std::to_string(in_pos);
 #ifdef _WINDOWS_
-        ::MessageBoxA(0, message.c_str(), "Config File Error", MB_OK);
+        ::MessageBoxA(0, message.c_str(), "Syntax Error", MB_OK);
 #else
         std::cerr << message << std::endl;
 #endif
@@ -211,7 +217,7 @@ private:
             message += tokens[i] + " ";
         }
 #ifdef _WINDOWS_
-        ::MessageBoxA(0, message.c_str(), "Config File Error", MB_OK);
+        ::MessageBoxA(0, message.c_str(), "Syntax Error", MB_OK);
 #else
         std::cerr << message << std::endl;
 #endif
@@ -313,19 +319,20 @@ private:
 
     //-------------------------------------------------------------------------
     // An "Array" is of the form NAME COLON [ comma-separated un-named VALUES within square brackets ]
-    //     "array" : [ value, value, { "block" : value }]
+    //     "nameOfArray" : [ value, value, { "block" : value }]
     //-------------------------------------------------------------------------
     uint32_t ReadArray(KVP& out_value, const Tokens& in_tokens, uint32_t in_tokenIndex)
     {
         while (1)
         {
-            if (in_tokenIndex + 3 >= in_tokens.size()) ParseError(in_tokens, in_tokenIndex);
+            // FIXME? support 0 size array
+            if (size_t(in_tokenIndex + 2) >= in_tokens.size()) { ParseError(in_tokens, in_tokenIndex); }
 
             out_value.m_values.resize(out_value.m_values.size() + 1);
             KVP& v = out_value.m_values.back();
 
             auto t = in_tokens[in_tokenIndex];
-            if (('"' == t[0]) || (':' == t[0]))
+            if (':' == t[0])
             {
                 ParseError(in_tokens, in_tokenIndex);
             }
@@ -354,7 +361,7 @@ private:
     {
         while (1)
         {
-            if (in_tokenIndex + 3 >= in_tokens.size()) ParseError(in_tokens, in_tokenIndex);
+            if (size_t(in_tokenIndex + 3) >= in_tokens.size()) { ParseError(in_tokens, in_tokenIndex); }
 
             out_value.m_values.resize(out_value.m_values.size() + 1);
             KVP& v = out_value.m_values.back();
@@ -384,7 +391,7 @@ private:
 //-------------------------------------------------------------------------
 // read file
 //-------------------------------------------------------------------------
-inline bool ConfigurationParser::Read(const std::wstring& in_filePath)
+inline bool JsonParser::Read(const std::wstring& in_filePath)
 {
     std::ifstream ifs(in_filePath, std::ios::in | std::ifstream::binary);
     bool success = ifs.good();
@@ -404,26 +411,13 @@ inline bool ConfigurationParser::Read(const std::wstring& in_filePath)
 }
 
 //-------------------------------------------------------------------------
-// write file
-//-------------------------------------------------------------------------
-inline void ConfigurationParser::Write(const std::wstring& in_filePath) const
-{
-    std::ofstream ofs(in_filePath, std::ios::out);
-    bool success = !ofs.bad();
-    if (success)
-    {
-        m_value.Write(ofs);
-    }
-}
-
-//-------------------------------------------------------------------------
 // in a name/value pair, the KVP can be:
 // Data (a string that can be interpreted as an int, float, etc.)
 // Array (of Values)
 // Struct (map of name/value pairs)
 //-------------------------------------------------------------------------
 // treat this as a map of name/value pairs
-inline ConfigurationParser::KVP& ConfigurationParser::KVP::operator [](const std::string& in_blockName)
+inline JsonParser::KVP& JsonParser::KVP::operator [](const std::string& in_blockName)
 {
     for (auto& v : m_values)
     {
@@ -441,7 +435,7 @@ inline ConfigurationParser::KVP& ConfigurationParser::KVP::operator [](const std
 }
 
 // constant version will not create new values
-inline const ConfigurationParser::KVP& ConfigurationParser::KVP::operator [](const std::string& in_blockName) const
+inline const JsonParser::KVP& JsonParser::KVP::operator [](const std::string& in_blockName) const
 {
     for (auto& v : m_values)
     {
@@ -456,7 +450,7 @@ inline const ConfigurationParser::KVP& ConfigurationParser::KVP::operator [](con
 //-------------------------------------------------------------------------
 // treat this as an array of values
 //-------------------------------------------------------------------------
-inline ConfigurationParser::KVP& ConfigurationParser::KVP::operator [](const int in_index)
+inline JsonParser::KVP& JsonParser::KVP::operator [](const int in_index)
 {
     uint32_t index = (uint32_t)std::max(in_index, 0);
     if (index >= m_values.size()) // appending?
@@ -467,7 +461,7 @@ inline ConfigurationParser::KVP& ConfigurationParser::KVP::operator [](const int
     return m_values[in_index];
 }
 
-inline const ConfigurationParser::KVP& ConfigurationParser::KVP::operator [](const int in_index) const
+inline const JsonParser::KVP& JsonParser::KVP::operator [](const int in_index) const
 {
     return m_values[in_index];
 }
@@ -475,7 +469,7 @@ inline const ConfigurationParser::KVP& ConfigurationParser::KVP::operator [](con
 //-------------------------------------------------------------------------
 // assignment creates or overwrites a value
 //-------------------------------------------------------------------------
-template<> inline ConfigurationParser::KVP& ConfigurationParser::KVP::operator=<std::string>(std::string in_v)
+template<> inline JsonParser::KVP& JsonParser::KVP::operator=<std::string>(std::string in_v)
 {
     m_isString = true;
     m_data = in_v;
@@ -483,13 +477,13 @@ template<> inline ConfigurationParser::KVP& ConfigurationParser::KVP::operator=<
     return *this;
 }
 
-template<> inline ConfigurationParser::KVP& ConfigurationParser::KVP::operator=<const char*>(const char* in_v)
+template<> inline JsonParser::KVP& JsonParser::KVP::operator=<const char*>(const char* in_v)
 {
     *this = std::string(in_v); // use std::string assignment
     return *this;
 }
 
-template<> inline ConfigurationParser::KVP& ConfigurationParser::KVP::operator=(float in_v)
+template<> inline JsonParser::KVP& JsonParser::KVP::operator=(float in_v)
 {
     m_isString = false;
     std::stringstream o;
@@ -499,7 +493,7 @@ template<> inline ConfigurationParser::KVP& ConfigurationParser::KVP::operator=(
     return *this;
 }
 
-template<> inline ConfigurationParser::KVP& ConfigurationParser::KVP::operator=(double in_v)
+template<> inline JsonParser::KVP& JsonParser::KVP::operator=(double in_v)
 {
     m_isString = false;
     std::stringstream o;
@@ -509,7 +503,7 @@ template<> inline ConfigurationParser::KVP& ConfigurationParser::KVP::operator=(
     return *this;
 }
 
-template<typename T> inline ConfigurationParser::KVP& ConfigurationParser::KVP::operator=(T in_v)
+template<typename T> inline JsonParser::KVP& JsonParser::KVP::operator=(T in_v)
 {
     m_isString = false;
     m_data = std::to_string(in_v);
@@ -520,7 +514,7 @@ template<typename T> inline ConfigurationParser::KVP& ConfigurationParser::KVP::
 //-------------------------------------------------------------------------
 // non-destructive queries
 //-------------------------------------------------------------------------
-inline bool ConfigurationParser::KVP::isMember(const std::string& in_blockName) const noexcept
+inline bool JsonParser::KVP::isMember(const std::string& in_blockName) const noexcept
 {
     for (auto& v : m_values)
     {
@@ -532,7 +526,7 @@ inline bool ConfigurationParser::KVP::isMember(const std::string& in_blockName) 
     return false;
 }
 
-template<typename T> inline ConfigurationParser::KVP ConfigurationParser::KVP::get(const std::string in_name, T in_default) const noexcept
+template<typename T> inline JsonParser::KVP JsonParser::KVP::get(const std::string in_name, T in_default) const noexcept
 {
     auto& k = (*this)[in_name]; // const [] will not create kvp
     if (in_name == k.m_name)
@@ -545,7 +539,7 @@ template<typename T> inline ConfigurationParser::KVP ConfigurationParser::KVP::g
 //-------------------------------------------------------------------------
 // conversions
 //-------------------------------------------------------------------------
-inline int32_t ConfigurationParser::KVP::asInt() const
+inline int32_t JsonParser::KVP::asInt() const
 {
     if (m_data.length())
     {
@@ -554,7 +548,7 @@ inline int32_t ConfigurationParser::KVP::asInt() const
     return 0;
 }
 
-inline uint32_t ConfigurationParser::KVP::asUInt() const
+inline uint32_t JsonParser::KVP::asUInt() const
 {
     if (m_data.length())
     {
@@ -563,7 +557,7 @@ inline uint32_t ConfigurationParser::KVP::asUInt() const
     return 0;
 }
 
-inline float ConfigurationParser::KVP::asFloat() const
+inline float JsonParser::KVP::asFloat() const
 {
     if (m_data.length())
     {
@@ -572,7 +566,7 @@ inline float ConfigurationParser::KVP::asFloat() const
     return 0;
 }
 
-inline double ConfigurationParser::KVP::asDouble() const
+inline double JsonParser::KVP::asDouble() const
 {
     if (m_data.length())
     {
@@ -581,7 +575,7 @@ inline double ConfigurationParser::KVP::asDouble() const
     return 0;
 }
 
-inline int64_t ConfigurationParser::KVP::asInt64() const
+inline int64_t JsonParser::KVP::asInt64() const
 {
     if (m_data.length())
     {
@@ -590,7 +584,7 @@ inline int64_t ConfigurationParser::KVP::asInt64() const
     return 0;
 }
 
-inline uint64_t ConfigurationParser::KVP::asUInt64() const
+inline uint64_t JsonParser::KVP::asUInt64() const
 {
     if (m_data.length())
     {
@@ -599,12 +593,12 @@ inline uint64_t ConfigurationParser::KVP::asUInt64() const
     return 0;
 }
 
-inline const std::string& ConfigurationParser::KVP::asString() const
+inline const std::string& JsonParser::KVP::asString() const
 {
     return m_data;
 }
 
-inline bool ConfigurationParser::KVP::asBool() const
+inline bool JsonParser::KVP::asBool() const
 {
     bool value = true;
     if (std::string::npos != m_data.find("false"))
@@ -629,16 +623,16 @@ inline bool ConfigurationParser::KVP::asBool() const
 //-------------------------------------------------------------------------
 // write a KVP which may be a name:value, a block {} of named values, or an array [] of unnamed values
 //-------------------------------------------------------------------------
-inline void ConfigurationParser::KVP::Write(std::ofstream& in_ofs, uint32_t in_tab) const
+inline void JsonParser::KVP::Write(std::ostream& out_s, uint32_t in_tab) const
 {
     // start a new line for a named value or a unnamed block/array
     if (m_name.length() || (0 == m_data.length()))
     {
-        in_ofs << std::endl << std::string(in_tab, ' ');
+        out_s << std::endl << std::string(in_tab, ' ');
     }
     if (m_name.length())
     {
-        in_ofs << "\"" << m_name << "\": ";
+        out_s << "\"" << m_name << "\": ";
     }
 
     // if this has a value, print it and return
@@ -646,11 +640,11 @@ inline void ConfigurationParser::KVP::Write(std::ofstream& in_ofs, uint32_t in_t
     {
         if (m_isString)
         {
-            in_ofs << '\"' << m_data.c_str() << '\"';
+            out_s << '\"' << m_data.c_str() << '\"';
         }
         else
         {
-            in_ofs << m_data;
+            out_s << m_data;
         }
     }
 
@@ -666,20 +660,20 @@ inline void ConfigurationParser::KVP::Write(std::ofstream& in_ofs, uint32_t in_t
             endChar = ']';
         }
 
-        in_ofs << startChar;
+        out_s << startChar;
         for (uint32_t i = 0; i < m_values.size(); i++)
         {
             if (0 != i)
             {
-                in_ofs << ", ";
+                out_s << ", ";
             }
-            m_values[i].Write(in_ofs, in_tab + m_tabSize);
+            m_values[i].Write(out_s, in_tab + m_tabSize);
         }
         // if the last value was an array or block, add a newline to prevent ]], ]}, etc.
         if (m_values.size() && m_values[m_values.size() - 1].size())
         {
-            in_ofs << std::endl << std::string(in_tab, ' ');
+            out_s << std::endl << std::string(in_tab, ' ');
         }
-        in_ofs << endChar;
+        out_s << endChar;
     }
 }

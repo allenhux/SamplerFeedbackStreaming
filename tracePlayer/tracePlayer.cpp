@@ -277,7 +277,7 @@ void TracePlayer::UpdateTileMappings(ID3D12Resource* in_pResource, UINT in_tileO
 //-----------------------------------------------------------------------------
 void TracePlayer::LoadTraceFile()
 {
-    const ConfigurationParser traceFile(m_params.m_filename);
+    const JsonParser traceFile(m_params.m_filename);
 
     std::map<UINT64, ID3D12Resource*> dstResources;
     std::map<std::string, IDStorageFile*> srcFiles;
@@ -447,7 +447,7 @@ std::wstring AddCommaSeparators(UINT64 in_value)
 //-----------------------------------------------------------------------------
 void TracePlayer::Inspect()
 {
-    const ConfigurationParser traceFile(m_params.m_filename);
+    const JsonParser traceFile(m_params.m_filename);
 
     const auto& submits = traceFile.GetRoot()["submits"];
     size_t numSubmits = submits.size();
@@ -508,12 +508,12 @@ int main()
         ArgParser argParser;
         argParser.AddArg(L"-file", [&]
             {
-                tracePlayerParams.m_filename = ArgParser::GetNextArg();
+                tracePlayerParams.m_filename = argParser.GetNextArg();
                 FindPath(tracePlayerParams.m_filename);
             }, tracePlayerParams.m_filename, L"<Required> trace file of DS requests and submits");
         argParser.AddArg(L"-mediaDir", [&]
             {
-                tracePlayerParams.m_mediaDir = ArgParser::GetNextArg();
+                tracePlayerParams.m_mediaDir = argParser.GetNextArg();
                 FindPath(tracePlayerParams.m_mediaDir);
             }, tracePlayerParams.m_mediaDir, L"directory containing texture files");
 

@@ -78,69 +78,82 @@ public:
     // custom function to perform for a command line arg
     // use GetNextArg() to read the subsequent command line argument(s) as needed
     typedef std::function<void()> ArgFunction;
-    static std::wstring GetNextArg();
+    const std::wstring& GetNextArg();
 
-    // AddArg(L"vsync", [&]() { EnableVsync(); }, L"Enable Vsync" );
+    // arg calls a custom function, optional help text
     void AddArg(std::wstring token, ArgFunction f, std::wstring description = L"");
 
-    // bool m_vsync{false};
-    // AddArg(L"vsync", m_vsync, L"Enable Vsync" );
+    // prototype using supported types (see below), optional help text
     template<typename T> void AddArg(std::wstring token, T& out_value, std::wstring description = L"") = delete;
 
-    // AddArg(L"vsync", [&]() { m_vsync = true }, false, L"Enable Vsync" );
+    // prototype calls a custom function, optional help text, help text includes default value
     template<typename T> void AddArg(std::wstring token, ArgFunction f, T default_value, std::wstring description = L"");
 
     void Parse();
 
+    ArgParser();
 private:
     class ArgPair
     {
     public:
-        ArgPair(std::wstring s, ArgFunction f) : m_arg(s), m_func(f)
+        ArgPair(std::wstring s, ArgFunction f) : m_arg(ToLower(s)), m_func(f) {}
+        bool TestEqual(const std::wstring& in_arg)
         {
-            for (auto& c : m_arg) { c = ::towlower(c); }
-        }
-        bool TestEqual(std::wstring in_arg)
-        {
-            for (auto& c : in_arg) { c = ::towlower(c); }
-            bool found = false;
-            if (m_arg == in_arg)
-            {
-                m_func();
-                found = true; // this argument has been consumed
-            }
+            bool found = (m_arg == in_arg);
+            if (found) { m_func(); }
             return found;
         }
     private:
-        std::wstring m_arg;
-        ArgFunction m_func;
+        const std::wstring m_arg;
+        const ArgFunction m_func;
     };
 
     std::vector<ArgPair> m_args;
     std::wstringstream m_help;
 
-    // function to hold the static command line arguments array
-    static std::vector<std::wstring>& GetCmdLine()
+    std::vector<std::wstring> m_cmdLineArgs;
+    int m_argIndex{ 0 };
+
+    // MSDN: In order for _tolower to give the expected results, __isascii and isupper must both return nonzero.
+    static std::wstring ToLower(std::wstring s)
     {
-        static std::vector<std::wstring> m_commandLineArgs;
-        return m_commandLineArgs;
+        for (auto& c : s)
+        {
+            if (::iswascii(c) && ::iswupper(c))
+            {
+                c = ::towlower(c);
+            }
+        }
+        return s;
     }
 };
 
 //-----------------------------------------------------------------------------
-// from GetCommandLine(), reversed to make iteration easy
 //-----------------------------------------------------------------------------
-inline std::wstring ArgParser::GetNextArg()
+inline ArgParser::ArgParser()
 {
-    auto& args = GetCmdLine();
-    if (0 == args.size())
+    int numArgs = 0;
+    const LPWSTR* cmdLine = CommandLineToArgvW(GetCommandLineW(), &numArgs);
+    m_cmdLineArgs = std::vector<std::wstring>(&cmdLine[1], &cmdLine[numArgs]);
+    for (auto& arg : m_cmdLineArgs)
+    {
+        arg = ToLower(arg);
+    }
+}
+
+//-----------------------------------------------------------------------------
+// from GetCommandLine()
+//-----------------------------------------------------------------------------
+inline const std::wstring& ArgParser::GetNextArg()
+{
+    if (m_argIndex == m_cmdLineArgs.size())
     {
         std::wcerr << "Not enough command line arguments\n";
         exit(0);
     }
-    std::wstring t = args.back();
-    args.resize(args.size() - 1);
-    return t;
+    const std::wstring& s = m_cmdLineArgs[m_argIndex];
+    m_argIndex++;
+    return s;
 }
 
 //-----------------------------------------------------------------------------
@@ -155,17 +168,7 @@ inline void ArgParser::AddArg(std::wstring s, ArgParser::ArgFunction f, std::wst
 //-----------------------------------------------------------------------------
 inline void ArgParser::Parse()
 {
-    int numArgs = 0;
-    LPWSTR* cmdLine = CommandLineToArgvW(GetCommandLineW(), &numArgs);
-
-    auto& args = GetCmdLine();
-    args.resize(numArgs - 1); // don't need arg 0, that's just the exe path
-    for (int i = 1; i < numArgs; i++)
-    {
-        args[numArgs - i - 1] = cmdLine[i];
-    }
-
-    if ((2 == numArgs) && (std::wstring(L"?") == cmdLine[1]))
+    if ((1 == m_cmdLineArgs.size()) && (std::wstring(L"?") == m_cmdLineArgs[0]))
     {
         BOOL allocConsole = AllocConsole(); // returns false for console applications
         if (allocConsole)
@@ -185,9 +188,9 @@ inline void ArgParser::Parse()
         exit(0);
     }
 
-    while (args.size())
+    while (m_argIndex < m_cmdLineArgs.size())
     {
-        std::wstring s = GetNextArg();
+        const std::wstring& s = GetNextArg();
         for (auto& arg : m_args)
         {
             if (arg.TestEqual(s)) { break; }
@@ -195,6 +198,8 @@ inline void ArgParser::Parse()
     }
 }
 
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 template<typename T> inline void ArgParser::AddArg(std::wstring s, ArgFunction f, T default_value, std::wstring d)
 {
     std::wstringstream w;

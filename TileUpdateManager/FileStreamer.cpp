@@ -119,7 +119,8 @@ Streaming::FileStreamer::~FileStreamer()
             std::wstring unique = L"uploadTraceFile_" + std::to_wstring(++index) + L".json";
             if (!std::filesystem::exists(unique))
             {
-                m_trace.Write(unique);
+                std::ofstream ofs(unique, std::ios::out);
+                m_trace.Write(ofs);
                 break;
             }
         }

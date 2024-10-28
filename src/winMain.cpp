@@ -165,7 +165,7 @@ void ParseCommandLine(CommandLineArgs& out_args)
 {
     ArgParser argParser;
 
-    argParser.AddArg(L"-config", [&]() { auto f = ArgParser::GetNextArg(); LoadConfigFile(f, out_args); }, L"Config File");
+    argParser.AddArg(L"-config", [&]() { auto f = argParser.GetNextArg(); LoadConfigFile(f, out_args); }, L"Config File");
 
     argParser.AddArg(L"-fullScreen", out_args.m_startFullScreen);
     argParser.AddArg(L"-WindowWidth", out_args.m_windowWidth);
@@ -179,7 +179,7 @@ void ParseCommandLine(CommandLineArgs& out_args)
             out_args.m_mediaDir.clear();
             out_args.m_skyTexture.clear();
             out_args.m_textures.clear();
-            std::wstring textureFileName = ArgParser::GetNextArg();
+            std::wstring textureFileName = argParser.GetNextArg();
             CorrectPath(textureFileName);
             out_args.m_terrainTexture = textureFileName;
             out_args.m_textures.push_back(textureFileName);
@@ -458,7 +458,7 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
 
     if (std::filesystem::exists(in_configFileName))
     {
-        const ConfigurationParser parser(in_configFileName);
+        const JsonParser parser(in_configFileName);
 
         success = parser.GetReadSuccess();
 
