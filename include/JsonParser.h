@@ -1,29 +1,3 @@
-//*********************************************************
-//
-// Copyright 2020 Intel Corporation 
-//
-// Permission is hereby granted, free of charge, to any 
-// person obtaining a copy of this software and associated 
-// documentation files(the "Software"), to deal in the Software 
-// without restriction, including without limitation the rights 
-// to use, copy, modify, merge, publish, distribute, sublicense, 
-// and/or sell copies of the Software, and to permit persons to 
-// whom the Software is furnished to do so, subject to the 
-// following conditions :
-// The above copyright notice and this permission notice shall 
-// be included in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT.IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT 
-// HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, 
-// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
-// DEALINGS IN THE SOFTWARE.
-//
-//*********************************************************
-
 /*=============================================================================
 Reads & Writes files of the form:
 
@@ -145,17 +119,20 @@ public:
         template<typename T> KVP get(const std::string in_name, T in_default) const noexcept;
 
         KVP() {}
-        template<typename T> KVP(T in_t) { *this = in_t; }
+        template<typename T> KVP(const T& in_t) { *this = in_t; }
 
-        // root["x"] = root["y"] has a race: root["y"] may become invalid if root["x"] must be created
-        // this solution (copy source before copy assignment) is more expensive, but more robust
-        KVP& operator= (const KVP o)
+        // the default assignment operator is by reference, but...
+        // root["x"] = root["y"] has a race: root["y"] becomes invalid if root["x"] must be created
+        //    because root is resized for "x" before reading the (by-reference) value of root["y"]
+        // solution: pass param by value instead of reference to copy the source before assignment
+        KVP& operator= (KVP o)
         {
             m_isString = o.m_isString;
-            m_values = o.m_values;
-            m_data = o.m_data;
+            m_values = std::move(o.m_values);
+            m_data = std::move(o.m_data);
             return *this;
         }
+
         void Write(std::ostream& out_s, uint32_t in_tab = 0) const;
 
     private:
@@ -194,6 +171,7 @@ private:
 
     using Tokens = std::vector<std::string>;
     bool m_readSuccess{ true }; // only false if Read() failed
+    const std::string m_symbols = "{}[],:";
 
     inline void ParseError(uint32_t in_pos)
     {
@@ -231,8 +209,6 @@ private:
     {
         const uint32_t numChars = (uint32_t)in_stream.size();
 
-        const std::string symbols = "{}[],:";
-
         for (uint32_t i = 0; i < numChars; i++)
         {
             char c = in_stream[i];
@@ -243,6 +219,7 @@ private:
             if ('/' == c)
             {
                 i++;
+                if (i >= numChars) break;
                 switch (in_stream[i])
                 {
                 case '/':
@@ -261,42 +238,37 @@ private:
                     ParseError(i - 1);
                 }
             }
-
             // symbols
-            else if (symbols.find(c) != std::string::npos)
+            else if (m_symbols.find(c) != std::string::npos)
             {
-                out_tokens.push_back(std::string(1, c));
+                out_tokens.emplace_back(1, c);
             }
-
             // quoted strings (ignore spaces within)
-            // fixme: handle escaped characters
             else if ('"' == c)
             {
                 std::string s(1, c);
-                while (i < numChars - 1)
+                while (++i < numChars)
                 {
-                    i++;
                     s.push_back(in_stream[i]);
                     if ('"' == in_stream[i]) break;
                 }
                 out_tokens.push_back(s);
             }
-
             // values
             else
             {
                 std::string s;
-                while ((i < numChars) && (!std::isspace(in_stream[i])))
+                while ((i < numChars) && (!std::isspace(in_stream[i])) &&
+                    (m_symbols.find(in_stream[i]) == std::string::npos))
                 {
-                    if (symbols.find(in_stream[i]) != std::string::npos)
-                    {
-                        i--;
-                        break;
-                    }
                     s.push_back(in_stream[i]);
                     i++;
                 }
                 out_tokens.push_back(s);
+                if ((i < numChars) && (m_symbols.find(in_stream[i]) != std::string::npos))
+                {
+                    i--;  // Decrement i to process the symbol in the next iteration
+                }
             }
         }
     }
@@ -306,13 +278,19 @@ private:
     //-------------------------------------------------------------------------
     uint32_t ReadValue(KVP& out_value, const Tokens& in_tokens, uint32_t in_tokenIndex)
     {
-        auto t = in_tokens[in_tokenIndex++];
+        auto& t = in_tokens[in_tokenIndex++];
+
+        // there must be at least one more token
+        if (in_tokenIndex >= in_tokens.size()) { ParseError(in_tokens, in_tokenIndex); }
+
         switch (t[0])
         {
         case '{': in_tokenIndex = ReadBlock(out_value, in_tokens, in_tokenIndex); break;
         case '[': in_tokenIndex = ReadArray(out_value, in_tokens, in_tokenIndex); break;
         case '"': out_value.m_data = t.substr(1, t.size() - 2);  out_value.m_isString = true; break;
-        default: out_value.m_data = t;
+        default:
+            if (m_symbols.find(t[0]) != std::string::npos) { ParseError(in_tokens, in_tokenIndex); }
+            out_value.m_data = t; // WARNING: does not validate the string is valid json
         }
         return in_tokenIndex;
     }
@@ -323,28 +301,20 @@ private:
     //-------------------------------------------------------------------------
     uint32_t ReadArray(KVP& out_value, const Tokens& in_tokens, uint32_t in_tokenIndex)
     {
+        if (']' == in_tokens[in_tokenIndex][0]) { return ++in_tokenIndex; } // 0-sized array
+
         while (1)
         {
-            // FIXME? support 0 size array
-            if (size_t(in_tokenIndex + 2) >= in_tokens.size()) { ParseError(in_tokens, in_tokenIndex); }
-
             out_value.m_values.resize(out_value.m_values.size() + 1);
-            KVP& v = out_value.m_values.back();
+            in_tokenIndex = ReadValue(out_value.m_values.back(), in_tokens, in_tokenIndex);
 
-            auto t = in_tokens[in_tokenIndex];
-            if (':' == t[0])
-            {
-                ParseError(in_tokens, in_tokenIndex);
-            }
+            // must be at least one more token after the current token
+            if (size_t(in_tokenIndex + 1) >= in_tokens.size()) { ParseError(in_tokens, in_tokenIndex); }
 
-            in_tokenIndex = ReadValue(v, in_tokens, in_tokenIndex);
-
-            t = in_tokens[in_tokenIndex++];
-            if (',' != t[0])
-            {
-                if (']' != t[0]) ParseError(in_tokens, in_tokenIndex);
-                break;
-            }
+            // consume current token which must be end-bracket or comma
+            auto& t = in_tokens[in_tokenIndex++];
+            if (']' == t[0]) { break; }
+            else if (',' != t[0]) { ParseError(in_tokens, in_tokenIndex); }
         }
 
         return in_tokenIndex;
@@ -363,23 +333,21 @@ private:
         {
             if (size_t(in_tokenIndex + 3) >= in_tokens.size()) { ParseError(in_tokens, in_tokenIndex); }
 
-            out_value.m_values.resize(out_value.m_values.size() + 1);
-            KVP& v = out_value.m_values.back();
-
-            auto t = in_tokens[in_tokenIndex++];
-            if (t[0] != '"') ParseError(in_tokens, in_tokenIndex); // name must be quoted
-            v.m_name = t.substr(1, t.size() - 2); // remove quotes from names
-
-            t = in_tokens[in_tokenIndex++];
-            if (':' != t[0]) ParseError(in_tokens, in_tokenIndex);
-
-            in_tokenIndex = ReadValue(v, in_tokens, in_tokenIndex);
-
-            t = in_tokens[in_tokenIndex++];
-            if (',' != t[0])
+            KVP v;
             {
-                if ('}' != t[0]) ParseError(in_tokens, in_tokenIndex);
-                break;
+                auto& t = in_tokens[in_tokenIndex++];
+                if (t[0] != '"') ParseError(in_tokens, in_tokenIndex); // name must be quoted
+                v.m_name = t.substr(1, t.size() - 2); // remove quotes from name
+            }
+
+            if (":" != in_tokens[in_tokenIndex++]) { ParseError(in_tokens, in_tokenIndex); }
+            in_tokenIndex = ReadValue(v, in_tokens, in_tokenIndex);
+            out_value.m_values.push_back(std::move(v));
+
+            {
+                auto& t = in_tokens[in_tokenIndex++];
+                if ('}' == t[0]) { break; }
+                else if (',' != t[0]) { ParseError(in_tokens, in_tokenIndex); }
             }
         }
         return in_tokenIndex;
@@ -649,12 +617,12 @@ inline void JsonParser::KVP::Write(std::ostream& out_s, uint32_t in_tab) const
     }
 
     // if there are multiple values, this is a block or an array
-    else if (m_values.size())
+    else
     {
         char startChar = '{';
         char endChar = '}';
         // if first value is unnamed, assume array
-        if (0 == m_values[0].m_name.length())
+        if ((0 == m_values.size()) || (0 == m_values[0].m_name.length()))
         {
             startChar = '[';
             endChar = ']';

@@ -45,7 +45,7 @@ END: toggle all UI
 #include "Scene.h"
 #include "CommandLineArgs.h"
 #include "ArgParser.h"
-#include "ConfigurationParser.h"
+#include "JsonParser.h"
 #include "Mouse.h"
 
 Scene* g_pScene = nullptr;

@@ -81,8 +81,8 @@
   <ItemGroup>
     <ClInclude Include="..\DirectXTK12\d3dx12.h" />
     <ClInclude Include="..\include\ArgParser.h" />
-    <ClInclude Include="..\include\ConfigurationParser.h" />
     <ClInclude Include="..\include\DebugHelper.h" />
+    <ClInclude Include="..\include\JsonParser.h" />
     <ClInclude Include="..\include\Timer.h" />
     <ClInclude Include="tracePlayer.h" />
   </ItemGroup>

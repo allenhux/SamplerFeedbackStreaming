@@ -45,7 +45,7 @@
 
 #include "DebugHelper.h"
 #include "ArgParser.h"
-#include "ConfigurationParser.h"
+#include "JsonParser.h"
 #include "d3dx12.h"
 #include "Timer.h"
 #include "tracePlayer.h"

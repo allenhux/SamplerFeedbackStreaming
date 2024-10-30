@@ -127,7 +127,7 @@
     <ClInclude Include="..\DirectXTK12\d3dx12.h" />
     <ClInclude Include="..\DirectXTK12\DDS.h" />
     <ClInclude Include="..\include\ArgParser.h" />
-    <ClInclude Include="..\include\ConfigurationParser.h" />
+    <ClInclude Include="..\include\JsonParser.h" />
     <ClInclude Include="..\include\D3D12GpuTimer.h" />
     <ClInclude Include="..\include\DebugHelper.h" />
     <ClInclude Include="..\include\Timer.h" />

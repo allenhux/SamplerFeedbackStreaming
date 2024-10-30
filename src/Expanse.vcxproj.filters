@@ -103,7 +103,7 @@
     <ClInclude Include="..\include\ArgParser.h">
       <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\ConfigurationParser.h">
+    <ClInclude Include="..\include\JsonParser.h">
       <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="..\include\D3D12GpuTimer.h">

@@ -27,7 +27,7 @@
 #pragma once
 
 #include "Streaming.h"
-#include "ConfigurationParser.h"
+#include "JsonParser.h"
 #include <unordered_map>
 
 namespace Streaming
