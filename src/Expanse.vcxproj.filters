@@ -56,6 +56,9 @@
     <ClCompile Include="Planet.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Mouse.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BufferViewer.h">
@@ -128,6 +131,9 @@
       <Filter>include</Filter>
     </ClInclude>
     <ClInclude Include="Subdivision.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="Mouse.h">
       <Filter>include</Filter>
     </ClInclude>
   </ItemGroup>

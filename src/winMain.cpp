@@ -46,10 +46,12 @@ END: toggle all UI
 #include "CommandLineArgs.h"
 #include "ArgParser.h"
 #include "ConfigurationParser.h"
+#include "Mouse.h"
 
 Scene* g_pScene = nullptr;
 
 bool g_hasFocus = false;
+Mouse g_mouse;
 
 std::wstring g_configFileName = L"config.json";
 
@@ -76,13 +78,6 @@ struct KeyState
     };
     KeyState() { m_anyKeyDown = 0; }
 } g_keyState;
-
-struct MouseState
-{
-    POINT pos{};
-    POINT move{};
-    bool m_dragging{ false };
-} g_mouseState;
 
 // load arguments from a config file
 void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args);
@@ -266,12 +261,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
     case WM_KILLFOCUS:
         g_keyState.m_anyKeyDown = 0;
-        g_mouseState.m_dragging = false;
         g_hasFocus = false;
         break;
 
     case WM_SETFOCUS:
         g_hasFocus = true;
+        break;
+
+    case WM_MOUSEMOVE:
+        g_mouse.Update(wParam, lParam);
         break;
 
     case WM_KEYUP:
@@ -604,37 +602,20 @@ int WINAPI WinMain(
         }
         else
         {
-            // handle mouse press ansynchronously
-            UINT mouseButton = (GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON);
-            if (g_hasFocus && (0x8000 & GetAsyncKeyState(mouseButton)))
+            // handle mouse movement
             {
-                POINT mousePos;
-                if (GetCursorPos(&mousePos))
+                int dx{ 0 };
+                int dy{ 0 };
+                g_mouse.GetDelta(dx, dy); // clears the delta
+                if (dx || dy)
                 {
-                    if (g_mouseState.m_dragging)
+                    // only rotate if mouse outside of gui
+                    RECT guiRect = g_pScene->GetGuiRect();
+                    if (((guiRect.right) < g_mouse.GetPosX()) || (guiRect.bottom < g_mouse.GetPosY()))
                     {
-                        g_mouseState.move.x = mousePos.x - g_mouseState.pos.x;
-                        g_mouseState.move.y = mousePos.y - g_mouseState.pos.y;
-                        g_mouseState.pos = mousePos;
+                        g_pScene->RotateViewPixels(dy, dx);
                     }
-                    else
-                    {
-                        RECT guiRect = g_pScene->GetGuiRect();
-                        POINT screenPos = mousePos;
-                        ScreenToClient(hWnd, &screenPos);
-                        if (((guiRect.right) < screenPos.x) || (guiRect.bottom < screenPos.y))
-                        {
-                            g_mouseState.pos = mousePos;
-                            g_mouseState.move.x = 0;
-                            g_mouseState.move.y = 0;
-                            g_mouseState.m_dragging = true;
-                        } // end if not within the GUI region
-                    } // end if dragging vs. starting
-                } // end if got mouse pos
-            }
-            else
-            {
-                g_mouseState.m_dragging = false;
+                }
             }
 
             if (g_keyState.m_anyKeyDown)
@@ -644,11 +625,6 @@ int WINAPI WinMain(
                     g_keyState.key.down - g_keyState.key.up,
                     g_keyState.key.forward - g_keyState.key.back);
                 g_pScene->RotateViewKey(g_keyState.key.rotxl - g_keyState.key.rotxr, g_keyState.key.rotyl - g_keyState.key.rotyr, g_keyState.key.rotzl - g_keyState.key.rotzr);
-            }
-            if (g_mouseState.m_dragging)
-            {
-                g_pScene->RotateViewPixels(g_mouseState.move.y, g_mouseState.move.x);
-                g_mouseState.move = POINT{ 0,0 };
             }
 
             bool drawSuccess = g_pScene->Draw();

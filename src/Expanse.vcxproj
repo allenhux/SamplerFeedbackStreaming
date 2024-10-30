@@ -111,6 +111,7 @@
     <ClCompile Include="BufferViewer.cpp" />
     <ClCompile Include="FrustumViewer.cpp" />
     <ClCompile Include="Gui.cpp" />
+    <ClCompile Include="Mouse.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
@@ -139,6 +140,7 @@
     <ClInclude Include="FrameEventTracing.h" />
     <ClInclude Include="FrustumViewer.h" />
     <ClInclude Include="Gui.h" />
+    <ClInclude Include="Mouse.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Scene.h" />
     <ClInclude Include="SceneObject.h" />
