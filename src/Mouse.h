@@ -15,7 +15,7 @@ public:
     // call within windows message loop
     void Update(WPARAM wParam, LPARAM lParam);
     // call outside loop to get accumulated delta. clears delta.
-    void GetDelta(int& x, int& y);
+    POINT GetDelta();
     int GetPosX() const { return m_posX; }
     int GetPosY() const { return m_posY; }
 private:

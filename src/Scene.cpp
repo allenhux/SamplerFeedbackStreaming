@@ -299,27 +299,14 @@ void Scene::RotateView(float in_x, float in_y, float in_z)
 
     // NOTE: locking the "up" axis feels great when navigating the terrain
     // however, it breaks the controls when flying to other planets
+    rotation = XMMatrixRotationRollPitchYaw(in_x, in_y, in_z);
+    SetViewMatrix(XMMatrixMultiply(m_viewMatrix, rotation));
+
     if (m_args.m_cameraUpLock)
     {
-        XMVECTOR yAxis = XMVectorSet(0, 1, 0, 1);
-        XMMATRIX rotY = XMMatrixRotationAxis(yAxis, in_y);
-
-        XMVECTOR xLate = XMVectorSetW(m_viewMatrixInverse.r[3], 0);
-        rotY = XMMatrixMultiply(XMMatrixTranslationFromVector(-xLate), rotY);
-        rotY = XMMatrixMultiply(rotY, XMMatrixTranslationFromVector(xLate));
-
-        m_viewMatrix = XMMatrixMultiply(rotY, m_viewMatrix);
-
-        rotation = XMMatrixRotationRollPitchYaw(in_x, 0, in_z);
+        SetViewMatrix(XMMatrixLookToLH(m_viewMatrixInverse.r[3], m_viewMatrixInverse.r[2], XMVectorSet(0, 1, 0, 1)));
     }
-    else
-    {
-        rotation = XMMatrixRotationRollPitchYaw(in_x, in_y, in_z);
-    }
-
-    SetViewMatrix(XMMatrixMultiply(m_viewMatrix, rotation));
 }
-
 
 void Scene::RotateViewKey(int in_x, int in_y, int in_z)
 {

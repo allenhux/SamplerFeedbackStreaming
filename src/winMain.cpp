@@ -604,16 +604,14 @@ int WINAPI WinMain(
         {
             // handle mouse movement
             {
-                int dx{ 0 };
-                int dy{ 0 };
-                g_mouse.GetDelta(dx, dy); // clears the delta
-                if (dx || dy)
+                auto delta = g_mouse.GetDelta(); // clears the delta
+                if (delta.x || delta.y)
                 {
                     // only rotate if mouse outside of gui
                     RECT guiRect = g_pScene->GetGuiRect();
                     if (((guiRect.right) < g_mouse.GetPosX()) || (guiRect.bottom < g_mouse.GetPosY()))
                     {
-                        g_pScene->RotateViewPixels(dy, dx);
+                        g_pScene->RotateViewPixels(delta.y, delta.x);
                     }
                 }
             }

@@ -35,10 +35,10 @@ void Mouse::Update(WPARAM wParam, LPARAM lParam)
 // 
 // also clears the delta.
 //-----------------------------------------------------------------------------
-void Mouse::GetDelta(int& x, int& y)
+POINT Mouse::GetDelta()
 {
-    x = m_deltaX;
-    y = m_deltaY;
+    POINT p{ m_deltaX, m_deltaY };
     m_deltaX = 0;
     m_deltaY = 0;
+    return p;
 }
