@@ -33,11 +33,11 @@
 
 enum class RenderEvents
 {
-    FrameBegin,
-    TumEndFrameBegin,
-    TumEndFrame,             // time for TileUpdateManager to perform EndFrame()
-    WaitOnFencesBegin,       // how long between ExecuteCommandLists and next frame end?
-    FrameEnd,                // after wait() on fence
+    PreBeginFrame,           // call before SFSManager::BeginFrame
+    PreEndFrame,             // call before SFSManager::EndFrame
+    PostEndFrame,            // call after SFSManager::EndFrame (measures API call time)
+    PreWaitNextFrame,         // how long between ExecuteCommandLists and next frame end?
+    PostWaitNextFrame,        // after wait() on fence
     Num
 };
 
@@ -133,20 +133,20 @@ inline void FrameEventTracing::WriteEvents(HWND in_hWnd, const CommandLineArgs& 
 
     *this << "\nTimers (ms)\n"
         << "-----------------------------------------------------------------------------------------------------------\n"
-        << "cpu_draw TUM::EndFrame exec_cmd_list wait_present total_frame_time evictions_completed copies_completed cpu_feedback feedback_resolve num_resolves num_submits\n"
+        << "cpu_draw SFSM::EndFrame exec_cmd_list wait_present total_frame_time evictions_completed copies_completed cpu_feedback feedback_resolve num_resolves num_submits\n"
         << "-----------------------------------------------------------------------------------------------------------\n";
 
     for (auto& e : m_events)
     {
-        float frameBegin = e.m_renderTimes.Get(RenderEvents::FrameBegin);
-        float tumEndFrameBegin = e.m_renderTimes.Get(RenderEvents::TumEndFrameBegin);
-        float tumEndFrame = e.m_renderTimes.Get(RenderEvents::TumEndFrame);
-        float waitOnFencesBegin = e.m_renderTimes.Get(RenderEvents::WaitOnFencesBegin);
-        float frameEnd = e.m_renderTimes.Get(RenderEvents::FrameEnd);
+        float frameBegin = e.m_renderTimes.Get(RenderEvents::PreBeginFrame);
+        float tumEndFrameBegin = e.m_renderTimes.Get(RenderEvents::PreEndFrame);
+        float tumEndFrame = e.m_renderTimes.Get(RenderEvents::PostEndFrame);
+        float waitOnFencesBegin = e.m_renderTimes.Get(RenderEvents::PreWaitNextFrame);
+        float frameEnd = e.m_renderTimes.Get(RenderEvents::PostWaitNextFrame);
 
         *this
             << (tumEndFrameBegin - frameBegin) * 1000                // render thread drawing via DrawIndexInstanced(), etc.
-            << " " << (tumEndFrame - tumEndFrameBegin) * 1000        // TUM::EndFrame()
+            << " " << (tumEndFrame - tumEndFrameBegin) * 1000        // SFSM::EndFrame()
             << " " << (waitOnFencesBegin - tumEndFrame) * 1000       // ExecuteCommandLists()
             << " " << (frameEnd - waitOnFencesBegin) * 1000          // WaitForSingleObject()
             << " " << (frameEnd - frameBegin) * 1000                 // frame time

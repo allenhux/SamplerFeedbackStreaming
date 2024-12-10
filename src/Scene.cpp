@@ -42,7 +42,7 @@
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "dxguid.lib")
 
-#pragma comment(lib, "TileUpdateManager.lib")
+#pragma comment(lib, "SFS.lib")
 
 using namespace DirectX;
 
@@ -258,7 +258,7 @@ Scene::~Scene()
         h->Destroy();
     }
 
-    m_pTileUpdateManager->Destroy();
+    m_pSFSManager->Destroy();
 }
 
 //-----------------------------------------------------------------------------
@@ -654,27 +654,27 @@ void Scene::WaitForGpu()
 }
 
 //-----------------------------------------------------------------------------
-// initialize TileUpdateManager
+// initialize SFSManager
 //-----------------------------------------------------------------------------
 void Scene::StartStreamingLibrary()
 {
-    TileUpdateManagerDesc tumDesc;
-    tumDesc.m_pDirectCommandQueue = m_commandQueue.Get();
-    tumDesc.m_maxNumCopyBatches = m_args.m_numStreamingBatches;
-    tumDesc.m_stagingBufferSizeMB = m_args.m_stagingSizeMB;
-    tumDesc.m_maxTileMappingUpdatesPerApiCall = m_args.m_maxTileUpdatesPerApiCall;
-    tumDesc.m_swapChainBufferCount = SharedConstants::SWAP_CHAIN_BUFFER_COUNT;
-    tumDesc.m_addAliasingBarriers = m_args.m_addAliasingBarriers;
-    tumDesc.m_minNumUploadRequests = m_args.m_minNumUploadRequests;
-    tumDesc.m_useDirectStorage = m_args.m_useDirectStorage;
-    tumDesc.m_threadPriority = (TileUpdateManagerDesc::ThreadPriority)m_args.m_threadPriority;
+    SFSManagerDesc desc;
+    desc.m_pDirectCommandQueue = m_commandQueue.Get();
+    desc.m_maxNumCopyBatches = m_args.m_numStreamingBatches;
+    desc.m_stagingBufferSizeMB = m_args.m_stagingSizeMB;
+    desc.m_maxTileMappingUpdatesPerApiCall = m_args.m_maxTileUpdatesPerApiCall;
+    desc.m_swapChainBufferCount = SharedConstants::SWAP_CHAIN_BUFFER_COUNT;
+    desc.m_addAliasingBarriers = m_args.m_addAliasingBarriers;
+    desc.m_minNumUploadRequests = m_args.m_minNumUploadRequests;
+    desc.m_useDirectStorage = m_args.m_useDirectStorage;
+    desc.m_threadPriority = (SFSManagerDesc::ThreadPriority)m_args.m_threadPriority;
 
-    m_pTileUpdateManager = TileUpdateManager::Create(tumDesc);
+    m_pSFSManager = SFSManager::Create(desc);
 
     // create 1 or more heaps to contain our StreamingResources
     for (UINT i = 0; i < m_args.m_numHeaps; i++)
     {
-        m_sharedHeaps.push_back(m_pTileUpdateManager->CreateStreamingHeap(m_args.m_streamingHeapSize));
+        m_sharedHeaps.push_back(m_pSFSManager->CreateHeap(m_args.m_streamingHeapSize));
     }
 }
 
@@ -818,14 +818,14 @@ void Scene::LoadSpheres()
             // only 1 sky, and it must be first because it disables depth when drawn
             if ((nullptr == m_pSky) && (skyTexture.size()))
             {
-                m_pSky = new SceneObjects::Sky(skyTexture, m_pTileUpdateManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU);
+                m_pSky = new SceneObjects::Sky(skyTexture, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU);
                 o = m_pSky;
                 float scale = SharedConstants::UNIVERSE_SIZE * 2;
                 o->GetModelMatrix() = DirectX::XMMatrixScaling(scale, scale, scale);
             }
             else if (nullptr == m_pTerrainSceneObject)
             {
-                m_pTerrainSceneObject = new SceneObjects::Terrain(m_args.m_terrainTexture, m_pTileUpdateManager, pHeap, m_device.Get(), m_args.m_sampleCount, descCPU, m_args, m_assetUploader);
+                m_pTerrainSceneObject = new SceneObjects::Terrain(m_args.m_terrainTexture, m_pSFSManager, pHeap, m_device.Get(), m_args.m_sampleCount, descCPU, m_args, m_assetUploader);
                 m_terrainObjectIndex = objectIndex;
                 o = m_pTerrainSceneObject;
             }
@@ -836,7 +836,7 @@ void Scene::LoadSpheres()
                 {
                     sphereProperties.m_mirrorU = false;
                     sphereProperties.m_topBottom = false;
-                    m_pEarth = new SceneObjects::Planet(textureFilename, m_pTileUpdateManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU, sphereProperties);
+                    m_pEarth = new SceneObjects::Planet(textureFilename, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU, sphereProperties);
                     o = m_pEarth;
                 }
                 else
@@ -860,7 +860,7 @@ void Scene::LoadSpheres()
                 {
                     sphereProperties.m_mirrorU = true;
                     // use different sphere generator
-                    m_pFirstSphere = new SceneObjects::Planet(textureFilename, m_pTileUpdateManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU);
+                    m_pFirstSphere = new SceneObjects::Planet(textureFilename, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU);
                     o = m_pFirstSphere;
                 }
                 else
@@ -1170,7 +1170,7 @@ void Scene::DrawObjects()
 
     //------------------------------------------------------------------------------------
     // set feedback state on each object
-    // objects with feedback enabled will queue feedback resolve on the TileUpdateManager
+    // objects with feedback enabled will queue feedback resolve on the SFSManager
     // objects without feedback enabled will not call WriteSamplerFeedback()
     //------------------------------------------------------------------------------------
     {
@@ -1269,8 +1269,8 @@ void Scene::GatherStatistics()
 {
     // NOTE: streaming isn't aware of frame time.
     // these numbers are approximately a measure of the number of operations during the last frame
-    const UINT numEvictions = m_pTileUpdateManager->GetTotalNumEvictions();
-    const UINT numUploads = m_pTileUpdateManager->GetTotalNumUploads();
+    const UINT numEvictions = m_pSFSManager->GetTotalNumEvictions();
+    const UINT numUploads = m_pSFSManager->GetTotalNumUploads();
     static UINT numSubmits = 0;
 
     m_numEvictionsPreviousFrame = numEvictions - m_numTotalEvictions;
@@ -1284,14 +1284,14 @@ void Scene::GatherStatistics()
         (m_frameNumber > m_args.m_timingStartFrame) &&
         (m_frameNumber <= m_args.m_timingStopFrame))
     {
-        UINT latestNumSubmits = m_pTileUpdateManager->GetTotalNumSubmits();
+        UINT latestNumSubmits = m_pSFSManager->GetTotalNumSubmits();
         UINT numSubmitsLastFrame = latestNumSubmits - numSubmits;
         numSubmits = latestNumSubmits;
 
         m_csvFile->Append(m_renderThreadTimes, m_updateFeedbackTimes,
             m_numUploadsPreviousFrame, m_numEvictionsPreviousFrame,
             // Note: these may be off by 1 frame, but probably good enough
-            m_pTileUpdateManager->GetCpuProcessFeedbackTime(),
+            m_pSFSManager->GetCpuProcessFeedbackTime(),
             m_gpuProcessFeedbackTime, m_prevNumFeedbackObjects[m_frameIndex],
             numSubmitsLastFrame);
 
@@ -1302,7 +1302,7 @@ void Scene::GatherStatistics()
             float tilesPerSecond = float(measuredNumUploads) / measuredTime;
             float bytesPerTileDivMega = float(64 * 1024) / (1000.f * 1000.f);
             float mbps = tilesPerSecond * bytesPerTileDivMega;
-            m_totalTileLatency = m_pTileUpdateManager->GetTotalTileCopyLatency() - m_totalTileLatency;
+            m_totalTileLatency = m_pSFSManager->GetTotalTileCopyLatency() - m_totalTileLatency;
             float approximatePerTileLatency = 1000.f * (m_totalTileLatency / measuredNumUploads);
 
             DebugPrint(L"Gathering final statistics before exiting\n");
@@ -1314,7 +1314,7 @@ void Scene::GatherStatistics()
                 << " " << measuredNumUploads
                 << " " << measuredTime
                 << " " << approximatePerTileLatency
-                << " " << m_pTileUpdateManager->GetTotalNumSubmits() - m_startSubmitCount
+                << " " << m_pSFSManager->GetTotalNumSubmits() - m_startSubmitCount
                 << "\n";
             m_csvFile->close();
             m_csvFile = nullptr;
@@ -1329,15 +1329,15 @@ void Scene::GatherStatistics()
 
     if (m_frameNumber == m_args.m_timingStartFrame)
     {
-        m_pTileUpdateManager->CaptureTraceFile(m_args.m_captureTrace);
+        m_pSFSManager->CaptureTraceFile(m_args.m_captureTrace);
 
         // start timing and gathering uploads from the very beginning of the timed region
         if (m_args.m_timingFrameFileName.size())
         {
-            numSubmits = m_pTileUpdateManager->GetTotalNumSubmits();
-            m_startUploadCount = m_pTileUpdateManager->GetTotalNumUploads();
-            m_startSubmitCount = m_pTileUpdateManager->GetTotalNumSubmits();
-            m_totalTileLatency = m_pTileUpdateManager->GetTotalTileCopyLatency();
+            numSubmits = m_pSFSManager->GetTotalNumSubmits();
+            m_startUploadCount = m_pSFSManager->GetTotalNumUploads();
+            m_startSubmitCount = m_pSFSManager->GetTotalNumSubmits();
+            m_totalTileLatency = m_pSFSManager->GetTotalTileCopyLatency();
             m_cpuTimer.Start();
         }
     }
@@ -1442,7 +1442,7 @@ void Scene::CreateTerrainViewers()
     }
 #endif
 
-    // NOTE: shared minmipmap will be nullptr until after TUM::BeginFrame()
+    // NOTE: shared minmipmap will be nullptr until after SFSM::BeginFrame()
     // NOTE: the data will be delayed by 1 + 1 frame for each swap buffer (e.g. 3 for double-buffering)
     if (nullptr == m_pMinMipMapViewer)
     {
@@ -1450,7 +1450,7 @@ void Scene::CreateTerrainViewers()
         UINT feedbackWidth = m_pTerrainSceneObject->GetStreamingResource()->GetMinMipMapWidth();
         UINT feedbackHeight = m_pTerrainSceneObject->GetStreamingResource()->GetMinMipMapHeight();
 
-        // note: bufferview can't be created until after TUM::BeginFrame because the residency map will be NULL
+        // note: bufferview can't be created until after SFSM::BeginFrame because the residency map will be NULL
         m_pMinMipMapViewer = new BufferViewer(
             m_pTerrainSceneObject->GetMinMipMap(),
             feedbackWidth, feedbackHeight, feedbackWidth,
@@ -1598,10 +1598,10 @@ void Scene::DrawUI()
         {
             // pass in raw cpu frame time and raw # uploads. GUI will keep a running average of bandwidth
             auto a = m_renderThreadTimes.GetLatest();
-            guiDrawParams.m_cpuDrawTime = a.Get(RenderEvents::TumEndFrameBegin) - a.Get(RenderEvents::FrameBegin);
+            guiDrawParams.m_cpuDrawTime = a.Get(RenderEvents::PreEndFrame) - a.Get(RenderEvents::PreBeginFrame);
         }
 
-        guiDrawParams.m_cpuFeedbackTime = m_pTileUpdateManager->GetCpuProcessFeedbackTime();
+        guiDrawParams.m_cpuFeedbackTime = m_pSFSManager->GetCpuProcessFeedbackTime();
         if (m_pTerrainSceneObject)
         {
             guiDrawParams.m_scrollMipDim = m_pTerrainSceneObject->GetStreamingResource()->GetTiledResource()->GetDesc().MipLevels;
@@ -1681,7 +1681,7 @@ void Scene::HandleUIchanges()
     {
         if (m_uiButtonChanges.m_directStorageToggle)
         {
-            m_pTileUpdateManager->UseDirectStorage(m_args.m_useDirectStorage);
+            m_pSFSManager->UseDirectStorage(m_args.m_useDirectStorage);
         }
         if (m_uiButtonChanges.m_frustumToggle)
         {
@@ -1689,7 +1689,7 @@ void Scene::HandleUIchanges()
         }
         if (m_uiButtonChanges.m_visualizationChange)
         {
-            m_pTileUpdateManager->SetVisualizationMode((UINT)m_args.m_dataVisualizationMode);
+            m_pSFSManager->SetVisualizationMode((UINT)m_args.m_dataVisualizationMode);
         }
 
         if (m_uiButtonChanges.m_toggleBenchmarkMode)
@@ -1719,10 +1719,10 @@ bool Scene::WaitForAssetLoad()
     {
         if (!o->GetPackedMipsPresent())
         {
-            // must give TileUpdateManager a chance to process packed mip requests
+            // must give SFSManager a chance to process packed mip requests
             D3D12_CPU_DESCRIPTOR_HANDLE minmipmapDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
-            m_pTileUpdateManager->BeginFrame(m_srvHeap.Get(), minmipmapDescriptor);
-            auto commandLists = m_pTileUpdateManager->EndFrame();
+            m_pSFSManager->BeginFrame(m_srvHeap.Get(), minmipmapDescriptor);
+            auto commandLists = m_pSFSManager->EndFrame();
             ID3D12CommandList* pCommandLists[] = { commandLists.m_beforeDrawCommands, commandLists.m_afterDrawCommands };
             m_commandQueue->ExecuteCommandLists(_countof(pCommandLists), pCommandLists);
 
@@ -1765,14 +1765,14 @@ bool Scene::Draw()
     // check the non-streaming uploader to see if anything needs to be uploaded or any memory can be freed
     m_assetUploader.WaitForUploads(m_commandQueue.Get(), m_commandList.Get());
 
-    m_renderThreadTimes.Set(RenderEvents::FrameBegin);
+    m_renderThreadTimes.Set(RenderEvents::PreBeginFrame);
 
-    // get the total time the GPU spent processing feedback during the previous frame (by calling before TUM::BeginFrame)
-    m_gpuProcessFeedbackTime = m_pTileUpdateManager->GetGpuTime();
+    // get the total time the GPU spent processing feedback during the previous frame (by calling before SFSM::BeginFrame)
+    m_gpuProcessFeedbackTime = m_pSFSManager->GetGpuTime();
 
     // prepare to update Feedback & stream textures
     D3D12_CPU_DESCRIPTOR_HANDLE minmipmapDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
-    m_pTileUpdateManager->BeginFrame(m_srvHeap.Get(), minmipmapDescriptor);
+    m_pSFSManager->BeginFrame(m_srvHeap.Get(), minmipmapDescriptor);
 
     Animate();
 
@@ -1812,9 +1812,9 @@ bool Scene::Draw()
     //-------------------------------------------
     // execute command lists
     //-------------------------------------------
-    m_renderThreadTimes.Set(RenderEvents::TumEndFrameBegin);
-    auto commandLists = m_pTileUpdateManager->EndFrame();
-    m_renderThreadTimes.Set(RenderEvents::TumEndFrame);
+    m_renderThreadTimes.Set(RenderEvents::PreEndFrame);
+    auto commandLists = m_pSFSManager->EndFrame();
+    m_renderThreadTimes.Set(RenderEvents::PostEndFrame);
 
     ID3D12CommandList* pCommandLists[] = { commandLists.m_beforeDrawCommands, m_commandList.Get(), commandLists.m_afterDrawCommands };
     m_commandQueue->ExecuteCommandLists(_countof(pCommandLists), pCommandLists);
@@ -1834,11 +1834,11 @@ bool Scene::Draw()
     // gather statistics before moving to next frame
     //-------------------------------------------
     GatherStatistics();
-    m_renderThreadTimes.Set(RenderEvents::WaitOnFencesBegin);
+    m_renderThreadTimes.Set(RenderEvents::PreWaitNextFrame);
 
     MoveToNextFrame();
 
-    m_renderThreadTimes.Set(RenderEvents::FrameEnd);
+    m_renderThreadTimes.Set(RenderEvents::PostWaitNextFrame);
     m_renderThreadTimes.NextFrame();
 
     return success;

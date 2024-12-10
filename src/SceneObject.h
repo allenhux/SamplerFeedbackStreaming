@@ -105,7 +105,7 @@ namespace SceneObjects
         ID3D12Resource* GetResolvedFeedback() const { return m_pStreamingResource->GetResolvedFeedback(); }
 #endif
 
-        StreamingResource* GetStreamingResource() const { return m_pStreamingResource; }
+        SFSResource* GetStreamingResource() const { return m_pStreamingResource; }
 
         void CopyGeometry(const BaseObject* in_pObjectForSharedHeap);
 
@@ -119,8 +119,8 @@ namespace SceneObjects
         // pass in a location in a descriptor heap where this can write 3 descriptors
         BaseObject(
             const std::wstring& in_filename, // this class takes ownership and deletes in destructor
-            TileUpdateManager* in_pTileUpdateManager,
-            StreamingHeap* in_pStreamingHeap,
+            SFSManager* in_pSFSManager,
+            SFSHeap* in_pStreamingHeap,
             ID3D12Device* in_pDevice,
             D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
             BaseObject* in_pSharedObject);  // to share root sig, etc.
@@ -128,7 +128,7 @@ namespace SceneObjects
         template<typename T> using ComPtr = Microsoft::WRL::ComPtr<T>;
 
         bool m_feedbackEnabled{ true };
-        TileUpdateManager* m_pTileUpdateManager{ nullptr };
+        SFSManager* m_pSFSManager{ nullptr };
 
         DirectX::XMMATRIX m_matrix{ DirectX::XMMatrixIdentity() };
         DirectX::XMMATRIX m_combinedMatrix{ DirectX::XMMatrixIdentity() };
@@ -147,7 +147,7 @@ namespace SceneObjects
             const DirectX::XMMATRIX& in_projection,
             const DirectX::XMMATRIX& in_view);
 
-        StreamingResource* m_pStreamingResource{ nullptr };
+        SFSResource* m_pStreamingResource{ nullptr };
 
         void CreatePipelineState(
             const wchar_t* in_ps, const wchar_t* in_psFB, const wchar_t* in_vs,
@@ -212,8 +212,8 @@ namespace SceneObjects
     {
     public:
         Terrain(const std::wstring& in_filename,
-            TileUpdateManager* in_pTileUpdateManager,
-            StreamingHeap* in_pStreamingHeap,
+            SFSManager* in_pSFSManager,
+            SFSHeap* in_pStreamingHeap,
             ID3D12Device* in_pDevice,
             UINT in_sampleCount,
             D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
@@ -225,21 +225,21 @@ namespace SceneObjects
     {
     public:
         Planet(const std::wstring& in_filename,
-            TileUpdateManager* in_pTileUpdateManager,
-            StreamingHeap* in_pStreamingHeap,
+            SFSManager* in_pSFSManager,
+            SFSHeap* in_pStreamingHeap,
             ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
             UINT in_sampleCount,
             D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
             const SphereGen::Properties& in_properties);
 
         Planet(const std::wstring& in_filename,
-            StreamingHeap* in_pStreamingHeap,
+            SFSHeap* in_pStreamingHeap,
             D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
             Planet* in_pSharedObject);
 
         Planet(const std::wstring& in_filename,
-            TileUpdateManager* in_pTileUpdateManager,
-            StreamingHeap* in_pStreamingHeap,
+            SFSManager* in_pSFSManager,
+            SFSHeap* in_pStreamingHeap,
             ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
             UINT in_sampleCount,
             D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU);
@@ -251,8 +251,8 @@ namespace SceneObjects
     {
     public:
         Sky(const std::wstring& in_filename,
-            TileUpdateManager* in_pTileUpdateManager,
-            StreamingHeap* in_pStreamingHeap,
+            SFSManager* in_pSFSManager,
+            SFSHeap* in_pStreamingHeap,
             ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
             UINT in_sampleCount,
             D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU);

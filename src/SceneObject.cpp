@@ -47,11 +47,11 @@
 //-------------------------------------------------------------------------
 SceneObjects::BaseObject::BaseObject(
     const std::wstring& in_filename,
-    TileUpdateManager* in_pTileUpdateManager,
-    StreamingHeap* in_pStreamingHeap,
+    SFSManager* in_pSFSManager,
+    SFSHeap* in_pStreamingHeap,
     ID3D12Device* in_pDevice,
     D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
-    BaseObject* in_pSharedObject) : m_pTileUpdateManager(in_pTileUpdateManager)
+    BaseObject* in_pSharedObject) : m_pSFSManager(in_pSFSManager)
 {
     //---------------------------------------
     // create root signature
@@ -159,7 +159,7 @@ SceneObjects::BaseObject::BaseObject(
 
         // The tile update manager queries the streaming texture for its tile dimensions
         // The feedback resource will be allocated with a mip region size matching the tile size
-        m_pStreamingResource = in_pTileUpdateManager->CreateStreamingResource(in_filename, in_pStreamingHeap);
+        m_pStreamingResource = in_pSFSManager->CreateResource(in_filename, in_pStreamingHeap);
 
         // sampler feedback view
         CD3DX12_CPU_DESCRIPTOR_HANDLE feedbackHandle(in_srvBaseCPU, (UINT)Descriptors::HeapOffsetFeedback, m_srvUavCbvDescriptorSize);
@@ -167,7 +167,7 @@ SceneObjects::BaseObject::BaseObject(
 
         // texture view
         CD3DX12_CPU_DESCRIPTOR_HANDLE textureHandle(in_srvBaseCPU, (UINT)Descriptors::HeapOffsetTexture, m_srvUavCbvDescriptorSize);
-        m_pStreamingResource->CreateStreamingView(in_pDevice, textureHandle);
+        m_pStreamingResource->CreateShaderResourceView(in_pDevice, textureHandle);
     }
 }
 
@@ -375,7 +375,7 @@ void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList,
         {
             auto feedbackDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(in_drawParams.m_srvBaseGPU,
                 UINT(SceneObjects::Descriptors::HeapOffsetFeedback), m_srvUavCbvDescriptorSize);
-            m_pTileUpdateManager->QueueFeedback(GetStreamingResource(), feedbackDescriptor);
+            m_pSFSManager->QueueFeedback(GetStreamingResource(), feedbackDescriptor);
         }
 
         // uavs and srvs
@@ -469,14 +469,14 @@ void SceneObjects::CreateSphere(SceneObjects::BaseObject* out_pObject,
 //=========================================================================
 //=========================================================================
 SceneObjects::Terrain::Terrain(const std::wstring& in_filename,
-    TileUpdateManager* in_pTileUpdateManager,
-    StreamingHeap* in_pStreamingHeap,
+    SFSManager* in_pSFSManager,
+    SFSHeap* in_pStreamingHeap,
     ID3D12Device* in_pDevice,
     UINT in_sampleCount,
     D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
     const CommandLineArgs& in_args,
     AssetUploader& in_assetUploader) :
-    BaseObject(in_filename, in_pTileUpdateManager, in_pStreamingHeap,
+    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap,
         in_pDevice, in_srvBaseCPU, nullptr)
 {
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
@@ -554,13 +554,13 @@ void SceneObjects::BaseObject::Spin(float in_radians)
 // Texture Coordinates may optionally be mirrored in U
 //=========================================================================
 SceneObjects::Planet::Planet(const std::wstring& in_filename,
-    TileUpdateManager* in_pTileUpdateManager,
-    StreamingHeap* in_pStreamingHeap,
+    SFSManager* in_pSFSManager,
+    SFSHeap* in_pStreamingHeap,
     ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
     UINT in_sampleCount,
     D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
     const SphereGen::Properties& in_sphereProperties) :
-    BaseObject(in_filename, in_pTileUpdateManager, in_pStreamingHeap,
+    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap,
         in_pDevice, in_srvBaseCPU, nullptr)
 {
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
@@ -574,10 +574,10 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
 //-------------------------------------------------------------------------
 //-------------------------------------------------------------------------
 SceneObjects::Planet::Planet(const std::wstring& in_filename,
-    StreamingHeap* in_pStreamingHeap,
+    SFSHeap* in_pStreamingHeap,
     D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
     Planet* in_pSharedObject) :
-    BaseObject(in_filename, in_pSharedObject->m_pTileUpdateManager, in_pStreamingHeap,
+    BaseObject(in_filename, in_pSharedObject->m_pSFSManager, in_pStreamingHeap,
         in_pSharedObject->GetDevice(), in_srvBaseCPU, in_pSharedObject)
 {
     CopyGeometry(in_pSharedObject);
@@ -590,12 +590,12 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
 // shading is much simpler: no lighting
 //=============================================================================
 SceneObjects::Sky::Sky(const std::wstring& in_filename,
-    TileUpdateManager* in_pTileUpdateManager,
-    StreamingHeap* in_pStreamingHeap,
+    SFSManager* in_pSFSManager,
+    SFSHeap* in_pStreamingHeap,
     ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
     UINT in_sampleCount,
     D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU) :
-    BaseObject(in_filename, in_pTileUpdateManager, in_pStreamingHeap,
+    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap,
         in_pDevice, in_srvBaseCPU, nullptr)
 {
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);

@@ -214,7 +214,7 @@ private:
     ComPtr<ID3D12DescriptorHeap> m_samplerHeap;
     void SetSampler();
 
-    struct TileUpdateManager* m_pTileUpdateManager{ nullptr };
+    struct SFSManager* m_pSFSManager{ nullptr };
 
     UINT DetermineMaxNumFeedbackResolves();
     void DrawObjects();   // draw all the objects
@@ -262,7 +262,7 @@ private:
     UINT m_numUploadsPreviousFrame{ 0 };
 
     void StartStreamingLibrary();
-    std::vector<StreamingHeap*> m_sharedHeaps;
+    std::vector<SFSHeap*> m_sharedHeaps;
 
     void GatherStatistics();
     UINT m_startUploadCount{ 0 };

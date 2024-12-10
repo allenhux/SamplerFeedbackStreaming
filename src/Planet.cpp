@@ -94,12 +94,12 @@ static ID3D12Resource* CreatePlanetVertexBuffer(
 // Texture Coordinates may optionally be mirrored in U
 //=========================================================================
 SceneObjects::Planet::Planet(const std::wstring& in_filename,
-    TileUpdateManager* in_pTileUpdateManager,
-    StreamingHeap* in_pStreamingHeap,
+    SFSManager* in_pSFSManager,
+    SFSHeap* in_pStreamingHeap,
     ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
     UINT in_sampleCount,
     D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU) :
-    BaseObject(in_filename, in_pTileUpdateManager, in_pStreamingHeap,
+    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap,
         in_pDevice, in_srvBaseCPU, nullptr)
 {
     SetAxis(DirectX::XMVectorSet(0, 0, 1, 0));
