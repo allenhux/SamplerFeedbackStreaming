@@ -1168,11 +1168,9 @@ bool IsVisible(SceneObjects::BaseObject* in_pObject, const DirectX::XMMATRIX& in
     float x = DirectX::XMVectorGetX(pos);
     float y = DirectX::XMVectorGetY(pos);
 
-    // TODO: use XMVectorGreaterR and XMComparisonAllTrue
-
     // if all the vertices are to one side of a frustum plane in homogeneous space, cull.
     // e.g. the right side of the AABBis to the left of the frustum if (x + radius)/w < -1
-    DirectX::XMVECTOR zv = DirectX::XMVectorReplicate(z - radius); // near side of AABB
+    DirectX::XMVECTOR zv = DirectX::XMVectorReplicate(z); // side of AABB
     DirectX::XMVECTOR verts = DirectX::XMVectorSet(-(x + rx), x - rx, -(y + ry), y - ry);
     uint32_t cv = DirectX::XMVector4GreaterR(verts, zv);
     bool visible = DirectX::XMComparisonAllFalse(cv);
@@ -1256,7 +1254,10 @@ void Scene::DrawObjects()
             }
             else // evict tiles of objects that are not visible
             {
-                o->GetStreamingResource()->QueueEviction();
+                if (m_args.m_enableTileUpdates)
+                {
+                    o->GetStreamingResource()->QueueEviction();
+                }
             }
         }
 
