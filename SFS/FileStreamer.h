@@ -29,6 +29,8 @@
 #include "Streaming.h"
 #include "JsonParser.h"
 #include <unordered_map>
+#include <string>
+#include <dstorage.h>
 
 namespace SFS
 {
@@ -89,13 +91,24 @@ namespace SFS
 
         void TraceRequest(
             ID3D12Resource* in_pDstResource, const D3D12_TILED_RESOURCE_COORDINATE& in_dstCoord,
-            const std::wstring& in_srcFilename, UINT64 in_srcOffset, UINT32 in_srcNumBytes, UINT32 in_compressionFormat);
+            const DSTORAGE_REQUEST& in_request, const std::wstring& in_fileName);
         void TraceSubmit();
     private:
         bool m_firstSubmit{ true };
         JsonParser m_trace; // array of submits, each submit is an array of requests
-        UINT m_traceSubmitIndex{ 0 };
-        UINT m_traceRequestIndex{ 0 };
+        // map textures to descriptions so they can be properly re-created during playback
         std::unordered_map<ID3D12Resource*, D3D12_RESOURCE_DESC> m_tracingResources;
+        // map file handles to path strings
+        std::unordered_map<const void*, std::string> m_files;
+        struct Trace
+        {
+            ID3D12Resource* m_pDstResource;
+            D3D12_TILED_RESOURCE_COORDINATE m_coord;
+            const void* m_pFileHandle;
+            UINT64 m_offset;
+            UINT32 m_numBytes;
+            UINT32 m_compressionFormat;
+        };
+        std::list<std::vector<Trace>> m_traces = {};
     };
 }

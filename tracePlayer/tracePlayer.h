@@ -37,6 +37,8 @@
 #include <string>
 #include <dstorage.h>
 #include <map>
+#include <vector>
+#include <list>
 
 class TracePlayer
 {
@@ -66,6 +68,7 @@ public:
     void Inspect();       // display information about the trace, e.g. # submits
 
     UINT64 GetNumRequests() const { return m_numRequestsTotal; }
+    UINT64 GetNumSubmits() const { return (UINT64)m_submits.size(); }
     UINT64 GetNumFileBytesRead() const { return m_numFileBytesRead; } // bytes read during 1 playback
     UINT64 GetNumBytesWritten() const { return m_numBytesWritten; } // uncompressed bytes written to GPU
     const std::wstring& GetAdapterDescription() const { return m_params.m_adapterDescription; }
@@ -95,7 +98,7 @@ private:
         UINT32 m_compressionFormat{ 0 };
     };
     typedef std::vector<Request> RequestArray;
-    std::vector<RequestArray> m_submits;
+    std::list<RequestArray> m_submits;
 
     // release these when done
     std::vector<IDStorageFile*> m_fileHandles;

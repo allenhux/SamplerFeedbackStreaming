@@ -19,6 +19,7 @@
   "addAliasingBarriers": false, //// adds a barrier for each streaming resource: alias(nullptr, pResource)
 
   "adapter": "", // create device on adapter with description containig substring ignoring case e.g. "intel"
+  "arch": 0, // create device with specified architecture {0, 1, 2} {default, discrete, integrated} 
 
   "animationrate": 0, // rotation of individual objects
   "cameraRate": 0, // camera motion rate

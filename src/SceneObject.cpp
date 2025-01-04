@@ -590,15 +590,13 @@ bool SceneObjects::Planet::IsVisible(const DirectX::XMMATRIX& in_projection)
 {
     const DirectX::XMVECTOR pos = GetCombinedMatrix().r[3];
 
+    // "z" is depth adjusted for near plane (z = Qz - QZnear)
     // note: not worrying about far plane
-    float w = DirectX::XMVectorGetW(pos);
-    if (w < 0)
+    // assuming Q > 0 (Q = Zfar / (Zfar - Znear)), object is visible if projected z > 0:
+    if (DirectX::XMVectorGetZ(pos) < 0)
     {
         return false;
     }
-
-    float q = DirectX::XMVectorGetZ(in_projection.r[2]); // Q = Zfar / (Zfar - Znear)
-    float z = DirectX::XMVectorGetZ(pos) / q; // pre-projection z
 
     // scale of sphere is the radius
     DirectX::XMVECTOR scale = DirectX::XMVector3LengthEst(GetModelMatrix().r[0]);
@@ -614,9 +612,10 @@ bool SceneObjects::Planet::IsVisible(const DirectX::XMMATRIX& in_projection)
     // if all the vertices are to one side of a frustum plane in homogeneous space, cull.
     // e.g. the right side of the AABB is to the left of the frustum if (x + radius)/w < -1
     // multiply through by w, and flip the comparisons so always doing greater than:
-    DirectX::XMVECTOR zv = DirectX::XMVectorReplicate(z);
+    float w = DirectX::XMVectorGetW(pos);
+    DirectX::XMVECTOR wv = DirectX::XMVectorReplicate(w);
     DirectX::XMVECTOR verts = DirectX::XMVectorSet(-(x + rx), x - rx, -(y + ry), y - ry);
-    uint32_t cv = DirectX::XMVector4GreaterR(verts, zv);
+    uint32_t cv = DirectX::XMVector4GreaterR(verts, wv);
     bool visible = DirectX::XMComparisonAllFalse(cv);
 
     return visible;

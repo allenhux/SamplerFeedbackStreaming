@@ -548,6 +548,7 @@ int main()
     std::wcout << "adapter string: " << tracePlayer.GetAdapterDescription().c_str() << "\n";
     std::wcout << "file bytes to read (per iter): " << AddCommaSeparators(tracePlayer.GetNumFileBytesRead()).c_str() << "\n";
     std::cout << "number of requests: " << tracePlayer.GetNumRequests() << "\n";
+    std::cout << "number of submits: " << tracePlayer.GetNumSubmits() << "\n";
     std::cout << "staging buffer size MB: " << tracePlayerParams.m_stagingBufferSizeMB << "\n";
     std::cout << "executing trace, # iterations = " << numItersPlayback << "\n";
     Timer timer;

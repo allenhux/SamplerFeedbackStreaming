@@ -114,11 +114,7 @@ void SFS::FileStreamerDS::StreamTexture(SFS::UpdateList& in_updateList)
 
             if (m_captureTrace)
             {
-                std::wstring fileName = std::filesystem::path(in_updateList.m_pResource->GetFileName()).filename();
-                TraceRequest(pAtlas, coord, fileName,
-                    request.Source.File.Offset,
-                    (UINT32)request.Source.File.Size,
-                    (UINT32)request.Options.CompressionFormat);
+                TraceRequest(pAtlas, coord, request, in_updateList.m_pResource->GetFileName());
             }
         }
     }

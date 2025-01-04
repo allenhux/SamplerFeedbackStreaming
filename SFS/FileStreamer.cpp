@@ -27,6 +27,7 @@
 #include "pch.h"
 
 #include "FileStreamer.h"
+#include "SFSResourceDU.h"
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -105,11 +106,31 @@ SFS::FileStreamer::~FileStreamer()
         {
             auto& r = m_trace.GetRoot()["resources"][resourceIndex];
             r["rsrc"] = (UINT64)d.first;
-            r["fmt"] = (UINT32)d.second.Format;
-            r["dim"][0] = (UINT32)d.second.Width;
-            r["dim"][1] = (UINT32)d.second.Height;
-            r["dim"][2] = (UINT32)d.second.MipLevels;
+            const D3D12_RESOURCE_DESC& desc = d.second;
+            r["fmt"] = (UINT32)desc.Format;
+            r["dim"][0] = (UINT32)desc.Width;
+            r["dim"][1] = (UINT32)desc.Height;
+            r["dim"][2] = (UINT32)desc.MipLevels;
             resourceIndex++;
+        }
+
+        UINT submitIndex = 0;
+        for (const auto& l : m_traces)
+        {
+            UINT traceIndex = 0;
+            for (const auto& t : l)
+            {
+                auto& r = m_trace.GetRoot()["submits"][submitIndex][traceIndex++];
+                r["rsrc"] = (UINT64)t.m_pDstResource;
+                r["coord"][0] = t.m_coord.X;
+                r["coord"][1] = t.m_coord.Y;
+                r["coord"][2] = t.m_coord.Subresource;
+                r["file"] = m_files[t.m_pFileHandle];
+                r["off"] = t.m_offset;
+                r["size"] = t.m_numBytes;
+                if (t.m_compressionFormat) { r["comp"] = t.m_compressionFormat; }
+            }
+            submitIndex++;
         }
 
         int index = 0;
@@ -131,28 +152,27 @@ SFS::FileStreamer::~FileStreamer()
 //-----------------------------------------------------------------------------
 void SFS::FileStreamer::TraceRequest(
     ID3D12Resource* in_pDstResource, const D3D12_TILED_RESOURCE_COORDINATE& in_dstCoord,
-    const std::wstring& in_srcFilename, UINT64 in_srcOffset, UINT32 in_srcNumBytes, UINT32 in_compressionFormat)
+    const DSTORAGE_REQUEST& in_request, const std::wstring& in_fileName)
 {
-    auto& r = m_trace.GetRoot()["submits"][m_traceSubmitIndex][m_traceRequestIndex++];
-    r["rsrc"] = (UINT64)in_pDstResource;
-    r["coord"][0] = in_dstCoord.X;
-    r["coord"][1] = in_dstCoord.Y;
-    r["coord"][2] = in_dstCoord.Subresource;
+    m_traces.back().push_back({ in_pDstResource, in_dstCoord,
+        in_request.Source.File.Source, in_request.Source.File.Offset,
+        in_request.Source.File.Size, in_request.Options.CompressionFormat });
 
-    std::string filename;
-    int buf_len = ::WideCharToMultiByte(CP_UTF8, 0, in_srcFilename.c_str(), -1, NULL, 0, NULL, NULL);
-    filename.resize(buf_len);
-    ::WideCharToMultiByte(CP_UTF8, 0, in_srcFilename.c_str(), -1, filename.data(), buf_len, NULL, NULL);
-    r["file"] = filename;
-
-    r["off"] = in_srcOffset;
-    r["size"] = in_srcNumBytes;
-    if (in_compressionFormat) { r["comp"] = in_compressionFormat; }
-
-    auto desc = m_tracingResources.find(in_pDstResource);
-    if (m_tracingResources.end() == desc)
+    // find atlas it is writing to
+    if (!m_tracingResources.contains(in_pDstResource))
     {
         m_tracingResources[in_pDstResource] = in_pDstResource->GetDesc();
+    }
+
+    // find file it is reading from
+    if (!m_files.contains(in_request.Source.File.Source))
+    {
+        std::wstring path = std::filesystem::path(in_fileName).filename();
+        const wchar_t* pChars = path.c_str();
+        int buf_len = ::WideCharToMultiByte(CP_UTF8, 0, pChars, -1, NULL, 0, NULL, NULL);
+        std::string filename(buf_len, ' ');
+        ::WideCharToMultiByte(CP_UTF8, 0, pChars, -1, filename.data(), buf_len, NULL, NULL);
+        m_files[in_request.Source.File.Source] = filename;
     }
 }
 
@@ -167,9 +187,9 @@ void SFS::FileStreamer::TraceSubmit()
         m_firstSubmit = false;
         return;
     }
-    ASSERT(0 != m_traceRequestIndex); // should never call Submit() without any requests
-    m_traceRequestIndex = 0;
-    m_traceSubmitIndex++;
+    ASSERT(0 != m_traces.size()); // should never call Submit() without any requests
+    ASSERT(0 != m_traces.back().size()); // should never call Submit() without any requests
+    m_traces.resize(m_traces.size() + 1);
 }
 
 //-----------------------------------------------------------------------------

@@ -1,6 +1,9 @@
 # Sampler Feedback Streaming With DirectStorage
 
-*Latest Updates*: uses GPU Upload Heaps (new D3D12 Agility SDK feature), requiring developer mode. Updated to DS 1.2.1.
+*Latest Updates*:
+- Added frustum occlusion culling; now will only do sampler feedback on the visible objects.
+- Uses GPU Upload Heaps (new D3D12 Agility SDK feature), requiring developer mode.
+- Updated to DirectStorage 1.2.3.
 
 ## Introduction
 
@@ -28,18 +31,18 @@ Notes:
 
 ## Requirements:
 - minimum:
-    - Windows 10 20H1 (aka May 2020 Update, build 19041)
+    - Windows 11
     - GPU with D3D12 Sampler Feedback Support such as Intel Iris Xe Graphics as found in 11th Generation Intel&reg; Core&trade; processors and discrete GPUs (driver version **[30.0.100.9667](https://downloadcenter.intel.com/product/80939/Graphics) or later**)
 - recommended:
-    - Windows 11
     - nvme SSD with PCIe gen4 or later
-    - Intel Arc A770 discrete GPU or later
+
+
+Tested on Win11 23H2, nvidia 4xxx
 
 ## Build Instructions
 
 Download the source. Build the appropriate solution file
-- Visual Studio 2022: [SamplerFeedbackStreaming_vs2022.sln](SamplerFeedbackStreaming_vs2022.sln)
-- Visual Studio 2019: [SamplerFeedbackStreaming.sln](SamplerFeedbackStreaming.sln).
+- Visual Studio 2022: [SamplerFeedbackStreaming.sln](SamplerFeedbackStreaming.sln)
 
 All executables, scripts, configurations, and media files will be found in the x64/Release or x64/Debug directories. You can run from within the Visual Studio IDE or from the command line, e.g.:
 
@@ -63,15 +66,16 @@ Two sets of high resolution textures are available for use with "demo-hubble.bat
 ## Keyboard controls
 
 * `qwe / asd` : strafe left, forward, strafe right / rotate left, back, rotate right
-* `z c` : levitate up and down
-* `v b` : rotate around the look direction (z axis)
+* `z c` : roll left (counter/clockwise), roll right (clockwise) *unless up-lock engaged*
+* `f v` : vertical up, down
 * `arrow keys` : rotate left/right, pitch down/up
 * `shift` : move faster
 * `mouse left-click drag` : rotate view
 * `page up` : toggle the min mip map overlay onto every object (visualize tiles loading)
 * `page down` : while camera animation is non-zero, toggles fly-through "rollercoaster" vs. fly-around "orbit"
 * `space` : toggles camera animation on/off.
-* `home` : toggles UI. Hold "shift" while UI is enabled to toggle mini UI mode.
+* `home` : toggles UI.
+* `shift-home`: toggles mini-UI.
 * `insert` : toggles frustum visualization
 * `esc` : while windowed, exit. while full-screen, return to windowed mode
 
@@ -135,9 +139,15 @@ m_pStreamingResource = std::unique_ptr<StreamingResource>(in_pTileUpdateManager-
 
 # Known issues
 
+## AMD 780M (and others?)
+
+GPU timer returns 0ms for sampler feedback resolve, thus invalidating the frame-time limiter for processing feedback. As a result, every visible object participates in SFS every frame, resulting in very low framerates and very low bandwidth.
+
 ## Performance Degradation
 
-Performance appears to degrade over time with some non-Intel devices/drivers as exposed by the bandwidth graph in benchmark mode after a few minutes. Compare the following healthy graph to the graph containing stalls below:
+(2025: Mostly fixed via Microsoft improvements to Tiled Resource mapping operations?)
+
+Performance degrades over time with some non-Intel devices/drivers as exposed by the bandwidth graph in benchmark mode after a few minutes. Compare the following healthy graph to the graph containing stalls below:
 
 - healthy: ![Healthy Streaming](./readme-images/streamingHealthy.png "Healthy Streaming")
 - stalling: ![Streaming Stalls](./readme-images/streamingStalls.png "Streaming Stalls")
@@ -300,6 +310,8 @@ ID3D12CommandList* pCommandLists[] = { commandLists.m_beforeDrawCommands, m_comm
 
 ## Log
 
+- 2025-01-04: GPU Heaps, OS improvements for tile mapping, and Frustum culling provide nice performance benefits. The library has been renamed to look more production-ready.
+- 2024-05-23: Hemi-spherical texture coordinate projection in pixel shader provides super crisp, low distortion text and images across geometry LoDs. Sort of novel technique?
 - 2022-10-24: Added DirectStorage trace playback utility to measure performance of file upload independent of rendering. For example, to capture and playback the DirectStorage requests and submits for 500 "stressful" frames with a staging buffer size of 128MB, cd to the build directory and:
 ```
 stress.bat -timingstart 200 -timingstop 700 -capturetrace
