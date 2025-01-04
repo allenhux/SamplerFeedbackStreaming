@@ -89,8 +89,8 @@ namespace SceneObjects
             return m_feedbackEnabled ? m_pipelineStateFB.Get() : m_pipelineState.Get();
         }
 
+        virtual bool IsVisible([[maybe_unused]] const DirectX::XMMATRIX& in_projection) { return true; }
         virtual void Draw(ID3D12GraphicsCommandList1* in_pCommandList, const DrawParams& in_drawParams);
-        UINT ComputeLod(const float in_distance, const SceneObjects::DrawParams& in_drawParams);
 
         DirectX::XMMATRIX& GetModelMatrix() { return m_matrix; }
         DirectX::XMMATRIX& GetCombinedMatrix() { return m_combinedMatrix; }
@@ -148,6 +148,8 @@ namespace SceneObjects
             const DirectX::XMMATRIX& in_view);
 
         SFSResource* m_pStreamingResource{ nullptr };
+
+        UINT ComputeLod(const float in_distance, const SceneObjects::DrawParams& in_drawParams);
 
         void CreatePipelineState(
             const wchar_t* in_ps, const wchar_t* in_psFB, const wchar_t* in_vs,
@@ -243,6 +245,8 @@ namespace SceneObjects
             ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
             UINT in_sampleCount,
             D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU);
+
+        bool IsVisible(const DirectX::XMMATRIX& in_projection) override;
     };
 
     // special render state (front face cull)

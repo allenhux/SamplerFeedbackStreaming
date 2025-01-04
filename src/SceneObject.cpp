@@ -583,6 +583,45 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
     CopyGeometry(in_pSharedObject);
 }
 
+//-------------------------------------------------------------------------
+// visibility of sphere for frustum culling
+//-------------------------------------------------------------------------
+bool SceneObjects::Planet::IsVisible(const DirectX::XMMATRIX& in_projection)
+{
+    const DirectX::XMVECTOR pos = GetCombinedMatrix().r[3];
+
+    // note: not worrying about far plane
+    float w = DirectX::XMVectorGetW(pos);
+    if (w < 0)
+    {
+        return false;
+    }
+
+    float q = DirectX::XMVectorGetZ(in_projection.r[2]); // Q = Zfar / (Zfar - Znear)
+    float z = DirectX::XMVectorGetZ(pos) / q; // pre-projection z
+
+    // scale of sphere is the radius
+    DirectX::XMVECTOR scale = DirectX::XMVector3LengthEst(GetModelMatrix().r[0]);
+    float radius = DirectX::XMVectorGetX(scale);
+
+    // pull fov scales out of the projection matrix
+    float rx = 2 * radius * DirectX::XMVectorGetX(in_projection.r[0]); // (cot FOVwidth / 2)
+    float ry = 2 * radius * DirectX::XMVectorGetY(in_projection.r[1]); // (cot FOVheight / 2)
+
+    float x = DirectX::XMVectorGetX(pos);
+    float y = DirectX::XMVectorGetY(pos);
+
+    // if all the vertices are to one side of a frustum plane in homogeneous space, cull.
+    // e.g. the right side of the AABB is to the left of the frustum if (x + radius)/w < -1
+    // multiply through by w, and flip the comparisons so always doing greater than:
+    DirectX::XMVECTOR zv = DirectX::XMVectorReplicate(z);
+    DirectX::XMVECTOR verts = DirectX::XMVectorSet(-(x + rx), x - rx, -(y + ry), y - ry);
+    uint32_t cv = DirectX::XMVector4GreaterR(verts, zv);
+    bool visible = DirectX::XMComparisonAllFalse(cv);
+
+    return visible;
+}
+
 //=============================================================================
 // sky is like a planet with front culling instead of backface culling
 // it is always positioned around 0,0,0. The camera only rotates relative to the sky
