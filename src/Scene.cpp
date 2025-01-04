@@ -1139,6 +1139,48 @@ void Scene::DrawObjectSets(SceneObjects::DrawParams& in_params,
 }
 
 //-----------------------------------------------------------------------------
+// Frustum clip of sphere using it's Axis Aligned Bounding Box AABB
+// input position from combined (pose*camera*projection) matrix and projection matrix
+// would be nice if the object provided a radius for bounding sphere (which we use to make AABB)
+//-----------------------------------------------------------------------------
+bool IsVisible(SceneObjects::BaseObject* in_pObject, const DirectX::XMMATRIX& in_projection)
+{
+    const DirectX::XMVECTOR pos = in_pObject->GetCombinedMatrix().r[3];
+
+    // note: not worrying about far plane
+    float w = DirectX::XMVectorGetW(pos);
+    if (w < 0)
+    {
+        return false;
+    }
+
+    float q = DirectX::XMVectorGetZ(in_projection.r[2]); // Q = Zfar / (Zfar - Znear)
+    float z = DirectX::XMVectorGetZ(pos) / q; // pre-projection z
+
+    // scale of sphere is the radius
+    DirectX::XMVECTOR scale = DirectX::XMVector3LengthEst(in_pObject->GetModelMatrix().r[0]);
+    float radius = DirectX::XMVectorGetX(scale);
+
+    // pull fov scales out of the projection matrix
+    float rx = 2 * radius * DirectX::XMVectorGetX(in_projection.r[0]); // (cot FOVwidth / 2)
+    float ry = 2 * radius * DirectX::XMVectorGetY(in_projection.r[1]); // (cot FOVheight / 2)
+
+    float x = DirectX::XMVectorGetX(pos);
+    float y = DirectX::XMVectorGetY(pos);
+
+    // TODO: use XMVectorGreaterR and XMComparisonAllTrue
+
+    // if all the vertices are to one side of a frustum plane in homogeneous space, cull.
+    // e.g. the right side of the AABBis to the left of the frustum if (x + radius)/w < -1
+    DirectX::XMVECTOR zv = DirectX::XMVectorReplicate(z - radius); // near side of AABB
+    DirectX::XMVECTOR verts = DirectX::XMVectorSet(-(x + rx), x - rx, -(y + ry), y - ry);
+    uint32_t cv = DirectX::XMVector4GreaterR(verts, zv);
+    bool visible = DirectX::XMComparisonAllFalse(cv);
+
+    return visible;
+}
+
+//-----------------------------------------------------------------------------
 // draw all objects
 // uses the min-mip-map created using Sampler Feedback on the GPU
 // to recommend updates to the internal memory map managed by the CPU
@@ -1187,11 +1229,13 @@ void Scene::DrawObjects()
             UINT objectIndex = i % (UINT)m_objects.size();
             auto o = m_objects[objectIndex];
 
-            // FIXME: want proper frustum culling here
-            float w = XMVectorGetW(o->GetCombinedMatrix().r[3]);
             // never cull the sky
             // also never cull the terrain object, or will see incorrect behavior when inspecting closely
-            bool visible = (w > 0) || (o == m_pSky) || (o == m_pTerrainSceneObject);
+            bool visible = true;
+            if ((o != m_pSky) && (o != m_pTerrainSceneObject))
+            {
+                visible = IsVisible(o, m_projection);
+            }
 
             // get sampler feedback for this object?
             bool queueFeedback = false;
