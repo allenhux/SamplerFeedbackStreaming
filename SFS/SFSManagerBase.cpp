@@ -32,8 +32,8 @@
 #include "SFSHeap.h"
 #include "BitVector.h"
 
-// 710 is the agility sdk preview with gpu upload heaps
-extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 715; }
+// agility sdk 1.613.3 or later required for gpu upload heaps 
+extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 615; }
 extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = ".\\D3D12\\"; }
 
 //=============================================================================
@@ -335,6 +335,7 @@ void SFS::ManagerBase::AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descr
             if (options.GPUUploadHeapSupported)
             {
                 uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_GPU_UPLOAD);
+                // per DirectX-Specs, "CPUPageProperty and MemoryPoolPreference must be ..._UNKNOWN"
                 uploadHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
                 uploadHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
             }

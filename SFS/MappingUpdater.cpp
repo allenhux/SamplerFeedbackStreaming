@@ -38,7 +38,7 @@ std::vector<UINT> SFS::MappingUpdater::m_rangeTileCounts; // all 1s
 SFS::MappingUpdater::MappingUpdater(UINT in_maxTileMappingUpdatesPerApiCall) :
     m_maxTileMappingUpdatesPerApiCall(std::max(UINT(1), in_maxTileMappingUpdatesPerApiCall))
 {
-    // paranoia: make sure static arrays are sized to the maximum of requested sizes
+    // ensure static arrays are sized to the maximum of requested sizes
     UINT size = std::max(m_maxTileMappingUpdatesPerApiCall, (UINT)m_rangeTileCounts.size());
 
     // these will never change size
@@ -53,6 +53,8 @@ void SFS::MappingUpdater::Map(ID3D12CommandQueue* in_pCommandQueue, ID3D12Resour
     const std::vector<D3D12_TILED_RESOURCE_COORDINATE>& in_coords,
     const std::vector<UINT>& in_indices)
 {
+    // will only hit this assert if there is a bug in the SFS library;
+    // should not be possible for application code to induce this assert
     ASSERT(in_coords.size() == in_indices.size());
 
     UINT numTotal = (UINT)in_coords.size();
