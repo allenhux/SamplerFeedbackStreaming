@@ -359,7 +359,14 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     //---------------------------------------------------------------------
     // number of objects. affects heap occupancy
     //---------------------------------------------------------------------
-    ImGui::SliderInt("Num Objects", &in_args.m_numSpheres, 1, (int)in_args.m_maxNumObjects);
+    static int numObjects = in_args.m_numSpheres;
+    ImGui::SliderInt("Num Objects", &numObjects, 1, (int)in_args.m_maxNumObjects);
+
+    // only change # objects after slider released.
+    if (ImGui::IsItemDeactivatedAfterEdit())
+    {
+        in_args.m_numSpheres = numObjects;
+    }
 
     //---------------------------------------------------------------------
     // terrain feedback viewer
