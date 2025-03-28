@@ -235,6 +235,7 @@ private:
     SceneObjects::Planet* m_pEarth{ nullptr };         // special geometry (no mirror in U)
     SceneObjects::BaseObject* m_pSky{ nullptr }; // lifetime owned by m_objects
 
+    bool TryFit(DirectX::XMMATRIX& out_matrix, float in_radius, float in_universe, float in_gap);
     DirectX::XMMATRIX SetSphereMatrix();
     void LoadSpheres(); // progressively over multiple frames
 

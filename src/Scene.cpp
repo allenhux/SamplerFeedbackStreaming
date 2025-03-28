@@ -679,16 +679,50 @@ void Scene::StartStreamingLibrary()
 }
 
 //-----------------------------------------------------------------------------
+// generate a random pose
+// return true if the pose does not intersect anything in the universe
+//-----------------------------------------------------------------------------
+bool Scene::TryFit(XMMATRIX& out_matrix, float in_radius, float in_universe, float in_gap)
+{
+    static std::uniform_real_distribution<float> dis(-1, 1);
+
+    float x = in_universe * std::abs(dis(m_gen));
+    XMMATRIX xlate = XMMatrixTranslation(0, 0, x);
+    XMMATRIX rtate = XMMatrixRotationRollPitchYaw((XM_PI)*dis(m_gen), (XM_PI)*dis(m_gen), (XM_PI)*dis(m_gen));
+    XMMATRIX scale = XMMatrixScaling(in_radius, in_radius, in_radius);
+
+    out_matrix = scale * xlate * rtate;
+
+    XMVECTOR p0 = out_matrix.r[3];
+    for (const auto o : m_objects)
+    {
+        if (o == m_pSky)
+        {
+            continue;
+        }
+
+        XMVECTOR p1 = o->GetModelMatrix().r[3];
+        float dist = XMVectorGetX(XMVector3LengthEst(p1 - p0));
+        float radius2 = o->GetBoundingSphereRadius();
+
+        // leave a minimum spacing between planets
+        if (dist - (in_radius + radius2) < in_gap)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+//-----------------------------------------------------------------------------
 // generate a random scale, position, and rotation
 // also space the spheres so they do not touch
 //-----------------------------------------------------------------------------
 XMMATRIX Scene::SetSphereMatrix()
 {
-    static std::uniform_real_distribution<float> dis(-1, 1);
-
     constexpr float MIN_SPHERE_SIZE = SharedConstants::SPHERE_SCALE;
     constexpr float MAX_SPHERE_SIZE = SharedConstants::MAX_SPHERE_SCALE * MIN_SPHERE_SIZE;
-    constexpr float SPHERE_SPACING = float(MIN_SPHERE_SIZE) * .75f;
+    constexpr float SPHERE_SPACING = float(MIN_SPHERE_SIZE) * .5f;
     static std::uniform_real_distribution<float> scaleDis(MIN_SPHERE_SIZE, MAX_SPHERE_SIZE);
 
     bool tryAgain = true;
@@ -709,58 +743,8 @@ XMMATRIX Scene::SetSphereMatrix()
 
         float sphereScale = scaleDis(m_gen);
 
-        float x = SharedConstants::UNIVERSE_SIZE * std::abs(dis(m_gen));
-
-        // position sphere far from terrain
-        const float hollowCenter = 4 * m_pTerrainSceneObject->GetBoundingSphereRadius();
-        if (x < -hollowCenter) { x -= hollowCenter; }
-        else if (x < hollowCenter) { x += hollowCenter; }
-         
-        float rx = (XM_2PI) * dis(m_gen);
-        float ry = (XM_2PI) * dis(m_gen);
-        float rz = (XM_2PI) * dis(m_gen);
-
-        XMMATRIX rtate0 = XMMatrixRotationRollPitchYaw((XM_2PI)*dis(m_gen), (XM_2PI)*dis(m_gen), (XM_2PI)*dis(m_gen));
-        XMMATRIX xlate = XMMatrixTranslation(0, 0, x);
-        XMMATRIX rtate = XMMatrixRotationRollPitchYaw(rx, ry, rz);
-        XMMATRIX scale = XMMatrixScaling(sphereScale, sphereScale, sphereScale);
-
-        matrix = rtate0 * scale * xlate * rtate;
-        matrix = scale * xlate * rtate;
-
-        tryAgain = false;
-
-        // spread the spheres out
-        {
-            XMVECTOR p0 = matrix.r[3];
-            float s0 = sphereScale;
-            for (const auto o : m_objects)
-            {
-                if (o == m_pSky)
-                {
-                    continue;
-                }
-
-                XMVECTOR p1 = o->GetModelMatrix().r[3];
-                float dist = XMVectorGetX(XMVector3LengthEst(p1 - p0));
-                float s1 = XMVectorGetX(XMVector3LengthEst(o->GetModelMatrix().r[0]));
-
-                // leave a minimum spacing between planets
-                if (dist - (s0 + s1) < SPHERE_SPACING)
-                {
-                    tryAgain = true;
-                    break;
-                }
-            }
-        }
+        tryAgain = !TryFit(matrix, sphereScale, SharedConstants::UNIVERSE_SIZE, SPHERE_SPACING);
     }
-
-    // pre-rotate to randomize axes
-    float rx = (1.5f * XM_PI) * dis(m_gen);
-    float ry = (2.5f * XM_PI) * dis(m_gen);
-    float rz = (2.0f * XM_PI) * dis(m_gen); // rotation around polar axis of sphere model
-    XMMATRIX rtate = XMMatrixRotationRollPitchYaw(rx, ry, rz);
-    matrix = rtate * matrix;
 
     return matrix;
 }
