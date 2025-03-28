@@ -47,6 +47,7 @@ Gui::Gui(HWND in_hWnd, ID3D12Device* in_pDevice,
     , m_width(300)
     , m_height(600)
     , m_bandwidthHistory(m_historySize)
+    , m_numObjects(in_args.m_numSpheres)
 {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -254,6 +255,7 @@ void Gui::ToggleDemoMode(CommandLineArgs& in_args)
     std::swap(cameraRate, in_args.m_cameraAnimationRate);
     std::swap(animationRate, in_args.m_animationRate);
     std::swap(numSpheres, in_args.m_numSpheres);
+    m_numObjects = in_args.m_numSpheres;
 
     in_args.m_showFeedbackMaps = false;
 }
@@ -284,6 +286,7 @@ void Gui::ToggleBenchmarkMode(CommandLineArgs& in_args)
     std::swap(cameraRate, in_args.m_cameraAnimationRate);
     std::swap(animationRate, in_args.m_animationRate);
     std::swap(numSpheres, in_args.m_numSpheres);
+    m_numObjects = in_args.m_numSpheres;
 
     in_args.m_showFeedbackMaps = false;
 }
@@ -359,13 +362,12 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     //---------------------------------------------------------------------
     // number of objects. affects heap occupancy
     //---------------------------------------------------------------------
-    static int numObjects = in_args.m_numSpheres;
-    ImGui::SliderInt("Num Objects", &numObjects, 1, (int)in_args.m_maxNumObjects);
+    ImGui::SliderInt("Num Objects", &m_numObjects, 1, (int)in_args.m_maxNumObjects);
 
     // only change # objects after slider released.
     if (ImGui::IsItemDeactivatedAfterEdit())
     {
-        in_args.m_numSpheres = numObjects;
+        in_args.m_numSpheres = m_numObjects;
     }
 
     //---------------------------------------------------------------------

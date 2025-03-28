@@ -87,6 +87,8 @@ private:
     TotalSince m_numUploads;
     RawCpuTimer m_cpuTimer;
 
+    int m_numObjects{ 1 };
+
     static constexpr int m_historySize = 128;
     std::vector<float> m_bandwidthHistory;
     UINT m_bandwidthHistoryIndex{ 0 };
