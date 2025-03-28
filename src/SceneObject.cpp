@@ -318,9 +318,7 @@ void SceneObjects::BaseObject::SetCommonGraphicsState(ID3D12GraphicsCommandList1
 //-------------------------------------------------------------------------
 UINT SceneObjects::BaseObject::ComputeLod(const float in_distance, const SceneObjects::DrawParams& in_drawParams)
 {
-    // FIXME? could store bounding sphere diameter in object
-    DirectX::XMVECTOR scale = DirectX::XMVector3LengthEst(m_matrix.r[0]);
-    float radius = DirectX::XMVectorGetX(scale); // scale equals radius
+    const float radius = GetBoundingSphereRadius();
 
     // within sphere?
     if (in_distance < radius)
@@ -490,6 +488,7 @@ SceneObjects::Terrain::Terrain(const std::wstring& in_filename,
     ID3D12Resource* pIndexBuffer{ nullptr };
 
     TerrainGenerator mesh(in_args.m_terrainParams);
+    m_radius = std::max((float)in_args.m_terrainParams.m_terrainSideSize, in_args.m_terrainParams.m_heightScale) / 2.f;
 
     // build vertex buffer
     {
@@ -589,10 +588,7 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
 bool SceneObjects::Planet::IsVisible(const DirectX::XMMATRIX& in_projection)
 {
     const DirectX::XMVECTOR pos = GetCombinedMatrix().r[3];
-
-    // scale of sphere is the radius
-    DirectX::XMVECTOR scale = DirectX::XMVector3LengthEst(GetModelMatrix().r[0]);
-    float radius = DirectX::XMVectorGetX(scale);
+    const float radius = GetBoundingSphereRadius();
 
     // projected z has visible range 0..zFar
     // account for radius of sphere to handle edge case where center is behind camera
@@ -633,6 +629,21 @@ bool SceneObjects::Planet::IsVisible(const DirectX::XMMATRIX& in_projection)
     bool visible = DirectX::XMComparisonAllFalse(cv);
 
     return visible;
+}
+
+//-------------------------------------------------------------------------
+// compute bounding sphere radius for a sphere
+// assumes scale factor same in x, y, z
+//-------------------------------------------------------------------------
+float SceneObjects::Planet::GetBoundingSphereRadius()
+{
+    if (0 == m_radius)
+    {
+        DirectX::XMVECTOR s = DirectX::XMVector3LengthEst(GetModelMatrix().r[0]);
+        m_radius = DirectX::XMVectorGetX(s);
+    }
+
+    return m_radius;
 }
 
 //=============================================================================

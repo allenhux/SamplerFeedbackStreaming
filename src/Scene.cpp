@@ -712,7 +712,7 @@ XMMATRIX Scene::SetSphereMatrix()
         float x = SharedConstants::UNIVERSE_SIZE * std::abs(dis(m_gen));
 
         // position sphere far from terrain
-        constexpr float hollowCenter = 4 * 128; // 128 is texture dim
+        const float hollowCenter = 4 * m_pTerrainSceneObject->GetBoundingSphereRadius();
         if (x < -hollowCenter) { x -= hollowCenter; }
         else if (x < hollowCenter) { x += hollowCenter; }
          

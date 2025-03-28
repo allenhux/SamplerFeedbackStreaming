@@ -115,6 +115,8 @@ namespace SceneObjects
         void SetFeedbackEnabled(bool in_value) { m_feedbackEnabled = in_value; }
 
         void SetAxis(DirectX::XMVECTOR in_vector) { m_axis.v = in_vector; }
+
+        virtual float GetBoundingSphereRadius() { return m_radius; }
     protected:
         // pass in a location in a descriptor heap where this can write 3 descriptors
         BaseObject(
@@ -174,8 +176,11 @@ namespace SceneObjects
 
         ID3D12Device* GetDevice();
         DirectX::XMVECTORF32 m_axis{ { { 0.0f, 1.0f, 0.0f, 0.0f } } };
-    private:
 
+        // cache bounding sphere radius
+        float m_radius{ 0.0f };
+
+    private:
         struct Geometry
         {
             UINT m_numIndices{ 0 };
@@ -247,6 +252,7 @@ namespace SceneObjects
             D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU);
 
         bool IsVisible(const DirectX::XMMATRIX& in_projection) override;
+        float GetBoundingSphereRadius() override;
     };
 
     // special render state (front face cull)

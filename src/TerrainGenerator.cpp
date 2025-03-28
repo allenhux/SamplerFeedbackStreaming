@@ -139,10 +139,9 @@ void TerrainGenerator::Normalize(DirectX::XMFLOAT3& out_v)
 //-----------------------------------------------------------------------------
 void TerrainGenerator::GenerateVertices()
 {
-    float minDimension = -100.0f;
-    float maxDimension = 100.0f;
+    float minDimension = -float(m_args.m_terrainSideSize) / 2.f;
 
-    float length = maxDimension - minDimension;
+    float length = float(m_args.m_terrainSideSize);
     const float frac = 1.0f / static_cast<float>(m_args.m_terrainSideSize - 1);
 
     for (UINT y = 0; y < m_args.m_terrainSideSize; y++)
