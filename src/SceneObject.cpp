@@ -590,17 +590,27 @@ bool SceneObjects::Planet::IsVisible(const DirectX::XMMATRIX& in_projection)
 {
     const DirectX::XMVECTOR pos = GetCombinedMatrix().r[3];
 
-    // "z" is depth adjusted for near plane (z = Qz - QZnear)
-    // note: not worrying about far plane
-    // assuming Q > 0 (Q = Zfar / (Zfar - Znear)), object is visible if projected z > 0:
-    if (DirectX::XMVectorGetZ(pos) < 0)
+    // scale of sphere is the radius
+    DirectX::XMVECTOR scale = DirectX::XMVector3LengthEst(GetModelMatrix().r[0]);
+    float radius = DirectX::XMVectorGetX(scale);
+
+    // projected z has visible range 0..zFar
+    // account for radius of sphere to handle edge case where center is behind camera
+    float z = DirectX::XMVectorGetZ(pos);
+    if (z + radius < 0)
     {
         return false;
     }
 
-    // scale of sphere is the radius
-    DirectX::XMVECTOR scale = DirectX::XMVector3LengthEst(GetModelMatrix().r[0]);
-    float radius = DirectX::XMVectorGetX(scale);
+    // ignore far plane (for now)
+#if 0
+    float w = DirectX::XMVectorGetW(pos);
+    float q = DirectX::XMVectorGetZ(in_projection.r[2]);
+    if ((z - q*radius)/w > 1.f) // WARNING div by 0 possible
+    {
+        return false;
+    }
+#endif
 
     // pull fov scales out of the projection matrix
     float rx = 2 * radius * DirectX::XMVectorGetX(in_projection.r[0]); // (cot FOVwidth / 2)
@@ -613,6 +623,10 @@ bool SceneObjects::Planet::IsVisible(const DirectX::XMMATRIX& in_projection)
     // e.g. the right side of the AABB is to the left of the frustum if (x + radius)/w < -1
     // multiply through by w, and flip the comparisons so always doing greater than:
     float w = DirectX::XMVectorGetW(pos);
+
+    // flip the comparison when w is negative
+    if (w < 0) { w *= -1; }
+
     DirectX::XMVECTOR wv = DirectX::XMVectorReplicate(w);
     DirectX::XMVECTOR verts = DirectX::XMVectorSet(-(x + rx), x - rx, -(y + ry), y - ry);
     uint32_t cv = DirectX::XMVector4GreaterR(verts, wv);
