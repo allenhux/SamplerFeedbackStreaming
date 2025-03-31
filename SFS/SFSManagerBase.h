@@ -129,9 +129,6 @@ namespace SFS
         };
         std::vector<FeedbackReadback> m_feedbackReadbacks;
 
-        // packed-mip transition barriers
-        SFS::BarrierList m_packedMipTransitionBarriers;
-
         ComPtr<ID3D12Resource> m_residencyMapLocal; // GPU copy of residency state
 
         SFS::SynchronizationFlag m_processFeedbackFlag;
@@ -147,17 +144,14 @@ namespace SFS
         //---------------------------------------------------------------------------
         enum class CommandListName
         {
-            Before,    // before any draw calls: clear feedback, transition packed mips
             After,    // after all draw calls: resolve feedback
             Num
         };
         ID3D12GraphicsCommandList1* GetCommandList(CommandListName in_name) { return m_commandLists[UINT(in_name)].m_commandList.Get(); }
 
-        SFS::BarrierList m_barrierUavToResolveSrc; // also copy source to resolve dest
-        SFS::BarrierList m_barrierResolveSrcToUav; // also resolve dest to copy source
-
-        SFS::BarrierList m_aliasingBarriers; // optional barrier for performance analysis only
-        bool m_addAliasingBarriers{ false };
+        SFS::BarrierList m_barrierUavToResolveSrc; // transition copy source to resolve dest
+        SFS::BarrierList m_barrierResolveSrcToUav; // transition resolve dest to copy source
+        SFS::BarrierList m_packedMipTransitionBarriers; // transition packed-mips from common (copy dest)
 
         UINT m_renderFrameIndex{ 0 };
 
@@ -211,15 +205,12 @@ NOTE:
 Because there are several small per-object operations, there can be a lot of barriers if there are many objects.
 These have all been coalesced into 2 command lists per frame:
 
-before draw commands:
-    feedback clears
-    barriers for aliasing with the texture atlas
-    barriers for packed mips
-
 after draw commands:
+    barriers for packed mips
     barriers for opaque feedback transition UAV->RESOLVE_SOURCE
     feedback resolves
     barriers for opaque feedback transition RESOLVE_SOURCE->UAV
+    feedback clears
 
     // unnecessary when resolving directly to cpu:
     barriers for resolved feedback transition RESOLVE_DEST->COPY_SOURCE

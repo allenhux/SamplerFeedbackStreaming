@@ -664,7 +664,6 @@ void Scene::StartStreamingLibrary()
     desc.m_stagingBufferSizeMB = m_args.m_stagingSizeMB;
     desc.m_maxTileMappingUpdatesPerApiCall = m_args.m_maxTileUpdatesPerApiCall;
     desc.m_swapChainBufferCount = SharedConstants::SWAP_CHAIN_BUFFER_COUNT;
-    desc.m_addAliasingBarriers = m_args.m_addAliasingBarriers;
     desc.m_minNumUploadRequests = m_args.m_minNumUploadRequests;
     desc.m_useDirectStorage = m_args.m_useDirectStorage;
     desc.m_threadPriority = (SFSManagerDesc::ThreadPriority)m_args.m_threadPriority;
@@ -1180,6 +1179,12 @@ void Scene::DrawObjects()
                 {
                     queueFeedback = true;
                     numFeedbackObjects++;
+
+                    // aliasing barriers for performance analysis only, NOT REQUIRED FOR CORRECT BEHAVIOR
+                    if (m_args.m_addAliasingBarriers)
+                    {
+                        m_aliasingBarriers.push_back(CD3DX12_RESOURCE_BARRIER::Aliasing(nullptr, o->GetStreamingResource()->GetTiledResource()));
+                    }
                 }
 
                 o->SetFeedbackEnabled(queueFeedback);
@@ -1704,7 +1709,7 @@ bool Scene::WaitForAssetLoad()
             D3D12_CPU_DESCRIPTOR_HANDLE minmipmapDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
             m_pSFSManager->BeginFrame(m_srvHeap.Get(), minmipmapDescriptor);
             auto commandLists = m_pSFSManager->EndFrame();
-            ID3D12CommandList* pCommandLists[] = { commandLists.m_beforeDrawCommands, commandLists.m_afterDrawCommands };
+            ID3D12CommandList* pCommandLists[] = { commandLists.m_afterDrawCommands };
             m_commandQueue->ExecuteCommandLists(_countof(pCommandLists), pCommandLists);
 
             MoveToNextFrame();
@@ -1742,6 +1747,15 @@ bool Scene::Draw()
     // prepare for new commands (need an open command list for LoadSpheres)
     m_commandAllocators[m_frameIndex]->Reset();
     m_commandList->Reset((ID3D12CommandAllocator*)m_commandAllocators[m_frameIndex].Get(), nullptr);
+
+    // Aliasing barriers are unnecessary, as draw commands only access modified resources after a fence has signaled on the copy queue
+    // Note it is also theoretically possible for tiles to be re-assigned while a draw command is executing
+    // However, performance analysis tools like to know about changes to resources
+    if (m_aliasingBarriers.size())
+    {
+        m_commandList->ResourceBarrier((UINT)m_aliasingBarriers.size(), m_aliasingBarriers.data());
+        m_aliasingBarriers.clear();
+    }
 
     // check the non-streaming uploader to see if anything needs to be uploaded or any memory can be freed
     m_assetUploader.WaitForUploads(m_commandQueue.Get(), m_commandList.Get());
@@ -1797,7 +1811,7 @@ bool Scene::Draw()
     auto commandLists = m_pSFSManager->EndFrame();
     m_renderThreadTimes.Set(RenderEvents::PostEndFrame);
 
-    ID3D12CommandList* pCommandLists[] = { commandLists.m_beforeDrawCommands, m_commandList.Get(), commandLists.m_afterDrawCommands };
+    ID3D12CommandList* pCommandLists[] = { m_commandList.Get(), commandLists.m_afterDrawCommands };
     m_commandQueue->ExecuteCommandLists(_countof(pCommandLists), pCommandLists);
 
     //-------------------------------------------

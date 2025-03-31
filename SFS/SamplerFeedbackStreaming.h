@@ -38,8 +38,8 @@ Draw loop:
 2. Draw your assets using the streaming textures, min-mip-map, and sampler feedback SRVs
     Optionally call SFSM::QueueFeedback() to get sampler feedback for this draw.
     SRVs can be created using SFSResource methods
-3. EndFrame() (with the SFSM) returns 2 command lists: beforeDraw and afterDraw
-4. ExecuteCommandLists() with [beforeDraw, yourCommandList, afterDraw] command lists.
+3. EndFrame() (with the SFSM) returns 1 command list: afterDrawCommands
+4. ExecuteCommandLists() with [yourCommandList, afterDrawCommands] command lists.
 =============================================================================*/
 
 #pragma once
@@ -124,11 +124,6 @@ struct SFSManagerDesc
     // need the swap chain count so we can create per-frame upload buffers
     UINT m_swapChainBufferCount{ 2 };
 
-    // Aliasing barriers are unnecessary, as draw commands only access modified resources after a fence has signaled on the copy queue
-    // Note it is also theoretically possible for tiles to be re-assigned while a draw command is executing
-    // However, performance analysis tools like to know about changes to resources
-    bool m_addAliasingBarriers{ false };
-
     UINT m_minNumUploadRequests{ 2000 }; // heuristic to reduce frequency of Submit() calls
 
     // applied to all internal threads: submit, fenceMonitor, processFeedback, updateResidency
@@ -182,17 +177,15 @@ struct SFSManager
 
     //--------------------------------------------
     // Call EndFrame() last, paired with each BeginFrame() and after all draw commands
-    // returns two command lists:
-    //   m_beforeDrawCommands: must be called /before/ any draw commands
+    // returns one command list:
     //   m_afterDrawCommands: must be called /after/ any draw commands
     // e.g.
     //    auto commandLists = pSFSManager->EndFrame();
-    //    ID3D12CommandList* pCommandLists[] = { commandLists.m_beforeDrawCommands, myCommandList, commandLists.m_afterDrawCommands };
+    //    ID3D12CommandList* pCommandLists[] = { myCommandList, commandLists.m_afterDrawCommands };
     //    m_commandQueue->ExecuteCommandLists(_countof(pCommandLists), pCommandLists);
     //--------------------------------------------
     struct CommandLists
     {
-        ID3D12CommandList* m_beforeDrawCommands;
         ID3D12CommandList* m_afterDrawCommands;
     };
     virtual CommandLists EndFrame() = 0;

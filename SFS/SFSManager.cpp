@@ -103,7 +103,6 @@ void SFS::ManagerBase::UseDirectStorage(bool in_useDS)
 }
 
 //-----------------------------------------------------------------------------
-// note to self to create Clear() and Resolve() commands during EndFrame()
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor)
 {
@@ -111,8 +110,7 @@ void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRI
 
     m_feedbackReadbacks.push_back({ pResource, in_gpuDescriptor });
 
-    // add feedback clears
-    pResource->ClearFeedback(GetCommandList(CommandListName::Before), in_gpuDescriptor);
+    // NOTE: feedback buffers will be cleared will happen after readback, in CommandListName::After
 
     // barrier coalescing around blocks of commands in EndFrame():
 
@@ -201,8 +199,10 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
         allocator->Reset();
         ThrowIfFailed(cl.m_commandList->Reset(allocator.Get(), nullptr));
     }
+
+    // clear UAV requires heap (to access gpu descriptor)
     ID3D12DescriptorHeap* ppHeaps[] = { in_pDescriptorHeap };
-    GetCommandList(CommandListName::Before)->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+    GetCommandList(CommandListName::After)->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
     // capture cpu time spent processing feedback
     {
@@ -216,73 +216,46 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
 //-----------------------------------------------------------------------------
 // Call this method once corresponding to BeginFrame()
 // expected to be called once per frame, after everything was drawn.
+//
+// returns 1 command list: afterDrawCommands
+// 
 //-----------------------------------------------------------------------------
 SFSManager::CommandLists SFS::ManagerBase::EndFrame()
 {
-    ASSERT(GetWithinFrame());
     // NOTE: we are "within frame" until the end of EndFrame()
-
-    // transition packed mips if necessary
-    // FIXME? if any 1 needs a transition, go ahead and check all of them. not worth optimizing.
-    // NOTE: the debug layer will complain about CopyTextureRegion() if the resource state is not state_copy_dest (or common)
-    //       despite the fact the copy queue doesn't really care about resource state
-    //       CopyTiles() won't complain because this library always targets an atlas that is always state_copy_dest
-    if (m_packedMipTransition)
-    {
-        m_packedMipTransition = false;
-        for (auto o : m_streamingResources)
-        {
-            if (o->GetPackedMipsNeedTransition())
-            {
-                D3D12_RESOURCE_BARRIER b = CD3DX12_RESOURCE_BARRIER::Transition(
-                    o->GetTiledResource(),
-                    D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-                m_packedMipTransitionBarriers.push_back(b);
-            }
-        }
-    }
-
-    //------------------------------------------------------------------
-    // before draw calls, do the following:
-    //     - clear feedback buffers
-    //     - resource barriers for aliasing and packed mip transitions
-    //------------------------------------------------------------------
-    {
-        auto pCommandList = GetCommandList(CommandListName::Before);
-
-        /*
-        * Aliasing barriers are unnecessary, as draw commands only access modified resources after a fence has signaled on the copy queue
-        * However, performance analysis tools like to know about changes to resources
-        * Note it is also theoretically possible for tiles to be re-assigned while a draw command is executing
-        */
-        if ((m_addAliasingBarriers) && (m_streamingResources.size()))
-        {
-            m_aliasingBarriers.reserve(m_streamingResources.size());
-            m_aliasingBarriers.resize(0);
-            for (auto pResource : m_streamingResources)
-            {
-                m_aliasingBarriers.push_back(CD3DX12_RESOURCE_BARRIER::Aliasing(nullptr, pResource->GetTiledResource()));
-            }
-
-            pCommandList->ResourceBarrier((UINT)m_aliasingBarriers.size(), m_aliasingBarriers.data());
-        }
-
-        // get any packed mip transition barriers accumulated by DataUploader
-        if (m_packedMipTransitionBarriers.size())
-        {
-            pCommandList->ResourceBarrier((UINT)m_packedMipTransitionBarriers.size(), m_packedMipTransitionBarriers.data());
-            m_packedMipTransitionBarriers.clear();
-        }
-
-        pCommandList->Close();
-    }
+    ASSERT(GetWithinFrame());
 
     //------------------------------------------------------------------
     // after draw calls,
-    // resolve feedback and copy to readback buffers
+    //    - transition packed mips (do not draw affected objects until subsequent frame)
+    //    - resolve feedback
+    //    - copy feedback to readback buffers
+    //    - clear feedback
     //------------------------------------------------------------------
     {
         auto pCommandList = GetCommandList(CommandListName::After);
+
+        // transition packed mips if necessary
+        // FIXME? if any 1 needs a transition, go ahead and check all of them. not worth optimizing.
+        // NOTE: the debug layer may complain about CopyTextureRegion() if the resource state is not state_copy_dest (or common)
+        //       despite the fact the copy queue doesn't really care about resource state
+        //       CopyTiles() won't complain because this library always targets an atlas that is always state_copy_dest
+        if (m_packedMipTransition)
+        {
+            m_packedMipTransition = false;
+            for (auto o : m_streamingResources)
+            {
+                if (o->GetPackedMipsNeedTransition())
+                {
+                    D3D12_RESOURCE_BARRIER b = CD3DX12_RESOURCE_BARRIER::Transition(
+                        o->GetTiledResource(),
+                        D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                    m_packedMipTransitionBarriers.push_back(b);
+                }
+            }
+            pCommandList->ResourceBarrier((UINT)m_packedMipTransitionBarriers.size(), m_packedMipTransitionBarriers.data());
+            m_packedMipTransitionBarriers.clear();
+        }
 
         if (m_feedbackReadbacks.size())
         {
@@ -311,17 +284,24 @@ SFSManager::CommandLists SFS::ManagerBase::EndFrame()
                 t.m_pStreamingResource->ReadbackFeedback(pCommandList);
             }
 #endif
-            m_gpuTimerResolve.EndTimer(pCommandList, m_renderFrameIndex);
-            m_feedbackReadbacks.clear();
 
+            // now safe to clear feedback buffers
+            for (auto& t : m_feedbackReadbacks)
+            {
+                t.m_pStreamingResource->ClearFeedback(GetCommandList(CommandListName::After), t.m_gpuDescriptor);
+            }
+
+            m_gpuTimerResolve.EndTimer(pCommandList, m_renderFrameIndex);
             m_gpuTimerResolve.ResolveTimer(pCommandList, m_renderFrameIndex);
+
+            // feedback array consumed, clear for next frame
+            m_feedbackReadbacks.clear();
         }
 
         pCommandList->Close();
     }
 
     SFSManager::CommandLists outputCommandLists;
-    outputCommandLists.m_beforeDrawCommands = m_commandLists[(UINT)CommandListName::Before].m_commandList.Get();
     outputCommandLists.m_afterDrawCommands = m_commandLists[(UINT)CommandListName::After].m_commandList.Get();
 
     m_withinFrame = false;

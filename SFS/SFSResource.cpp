@@ -86,7 +86,7 @@ UINT SFS::ResourceBase::GetMinMipMapHeight() const
 //-----------------------------------------------------------------------------
 UINT SFS::ResourceBase::GetMinMipMapOffset() const
 {
-    return m_residencyMapOffsetBase; 
+    return m_residencyMapOffsetBase;
 }
 
 //-----------------------------------------------------------------------------
@@ -94,7 +94,7 @@ UINT SFS::ResourceBase::GetMinMipMapOffset() const
 //-----------------------------------------------------------------------------
 bool SFS::ResourceBase::GetPackedMipsResident() const
 {
-    return (PackedMipStatus::RESIDENT == m_packedMipStatus) || (PackedMipStatus::NEEDS_TRANSITION == m_packedMipStatus);
+    return (PackedMipStatus::RESIDENT == m_packedMipStatus);// || (PackedMipStatus::NEEDS_TRANSITION == m_packedMipStatus);
 }
 
 //-----------------------------------------------------------------------------
