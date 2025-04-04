@@ -95,6 +95,7 @@ namespace SFS
         ComPtr<ID3D12Device8> m_device;
 
         const UINT m_numSwapBuffers;
+        const UINT m_evictionDelay;
 
         // track the objects that this resource created
         // used to discover which resources have been updated within a frame

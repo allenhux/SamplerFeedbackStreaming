@@ -124,6 +124,9 @@ struct SFSManagerDesc
     // need the swap chain count so we can create per-frame upload buffers
     UINT m_swapChainBufferCount{ 2 };
 
+    // number of frames to delay before evicting a tile
+    UINT m_evictionDelay{ 10 };
+
     UINT m_minNumUploadRequests{ 2000 }; // heuristic to reduce frequency of Submit() calls
 
     // applied to all internal threads: submit, fenceMonitor, processFeedback, updateResidency
@@ -137,6 +140,7 @@ struct SFSManagerDesc
     ThreadPriority m_threadPriority{ ThreadPriority::Prefer_Normal };
 
     // true: use Microsoft DirectStorage. false: use internal file streaming system
+    // NOTE: internal file streaming system does not support DirectStorage compression
     bool m_useDirectStorage{ true };
 };
 

@@ -1,12 +1,7 @@
 {
-  "fullScreen": false,
-  "vsync": false,
-  "windowWidth": 1280,
-  "windowHeight": 800,
-  "sampleCount": 4, // multisample anti-aliasing
-  "lodBias": 0, // sampler bias. positive is blurrier
-  "anisotropy": 4, // sampler anisotropy
-
+  //---------------------------------------
+  // -------- SFS Library settings --------
+  //---------------------------------------
   "directStorage": true, // use directstorage vs. dedicated thread with ReadFile() and CopyTiles()
   "stagingSizeMB": 128, // size of the staging buffer for DirectStorage or reference streaming code
 
@@ -15,7 +10,27 @@
   "numStreamingBatches": 64,
   // sum of #tiles of pending batches. heuristic to reduce frequency of DS Submit() calls
   "minNumUploadRequests": 1024,
+  // number of frames to delay evicting a tile
+  "evictionDelay":  8,
 
+  "heapSizeTiles": 24576, // size for each heap. 64KB per tile * 16384 tiles -> 1GB heap
+  "numHeaps": 1, // number of heaps. objects will be distributed among heaps
+  "maxTileUpdatesPerApiCall": 4096, // limit to # tiles passed to D3D12 UpdateTileMappings()
+
+  // applied to all internal threads: submit, fenceMonitor, processFeedback, updateResidency
+  // 1 prefers P cores, -1 prefers E cores. 0 is normal.
+  "threadPriority": 0,
+
+  //---------------------------------------
+  // ---- application general settings ----
+  //---------------------------------------
+  "fullScreen": false,
+  "vsync": false,
+  "windowWidth": 1280,
+  "windowHeight": 800,
+  "sampleCount": 4, // multisample anti-aliasing
+  "lodBias": 0, // sampler bias. positive is blurrier
+  "anisotropy": 4, // sampler anisotropy
   "addAliasingBarriers": false, //// adds a barrier for each streaming resource: alias(nullptr, pResource)
 
   "adapter": "", // create device on adapter with description containig substring ignoring case e.g. "intel"
@@ -34,7 +49,7 @@
   "numSpheres": 0, // number of objects besides the terrain
   "lightFromView": false, // light direction is look direction
 
-  "maxFeedbackTime": 0.75, // maximum milliseconds for GPU to resolve feedback
+  "maxFeedbackTime": 0.75, // target milliseconds for GPU to resolve feedback
 
   "visualizeMinMip": false, // color overlayed onto texture by PS corresponding to mip level
   "hideFeedback": false, // hide the terrain feedback windows
@@ -43,10 +58,6 @@
 
   "updateAll": false, // update feedback for every object every frame
 
-  "heapSizeTiles": 24576, // size for each heap. 64KB per tile * 16384 tiles -> 1GB heap
-  "numHeaps": 1, // number of heaps. objects will be distributed among heaps
-  "maxTileUpdatesPerApiCall": 4096, // limit to # tiles passed to D3D12 UpdateTileMappings()
-
   "waitForAssetLoad": false,
 
   "timingStart": 0, // start recording statistics this frame
@@ -54,7 +65,7 @@
   "timingFileFrames": "", // file name for per-frame statistics. no statistics unless set. ".csv" will be appended
   "exitImageFile": "", // if set, outputs final image on exit. extension (e.g. .png) will be appended
 
-  // sphere geometry
+  // sphere geometry (earth model only)
   "sphereLong": 64, // # steps vertically. must be even
   "sphereLat": 65, // # steps around. must be odd
 
@@ -63,9 +74,5 @@
   "heightScale": 50,
   "noiseScale": 25,
   "octaves": 8,
-  "mountainSize": 4000,
-
-  // applied to all internal threads: submit, fenceMonitor, processFeedback, updateResidency
-  // 1 prefers P cores, -1 prefers E cores. 0 is normal.
-  "threadPriority": 0
+  "mountainSize": 4000
 }

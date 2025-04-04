@@ -54,6 +54,8 @@ namespace SFS
 
         UINT GetNumSwapBuffers() const { return m_numSwapBuffers; }
 
+        UINT GetEvictionDelay() const { return m_evictionDelay; }
+
         // stop tracking this SFSResource. Called by its destructor
         void Remove(ResourceBase* in_pResource)
         {

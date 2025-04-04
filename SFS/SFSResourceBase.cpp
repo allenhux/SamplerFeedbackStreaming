@@ -55,8 +55,7 @@ SFS::ResourceBase::ResourceBase(
     m_readbackIndex(0)
     , m_pSFSManager(in_pSFSManager)
     , m_queuedFeedback(in_pSFSManager->GetNumSwapBuffers())
-    // delay eviction by enough to not affect a pending frame
-    , m_pendingEvictions(in_pSFSManager->GetNumSwapBuffers() + 1)
+    , m_pendingEvictions(in_pSFSManager->GetEvictionDelay())
     , m_pHeap(in_pHeap)
     , m_pFileHandle(in_pFileHandle)
     , m_filename(in_filename)
@@ -773,17 +772,12 @@ SFS::ResourceBase::EvictionDelay::EvictionDelay(UINT in_numSwapBuffers)
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::EvictionDelay::NextFrame()
 {
-    // start with A, B, C
-    // after swaps, have C, A, B
-    // then insert C, A, BC
-    // then clear 0, A, BC
-    UINT lastMapping = (UINT)m_mappings.size() - 1;
-    for (UINT i = lastMapping; i > 0; i--)
-    {
-        m_mappings[i].swap(m_mappings[i - 1]);
-    }
-    m_mappings.back().insert(m_mappings.back().end(), m_mappings[0].begin(), m_mappings[0].end());
-    m_mappings[0].clear();
+    // move next-to-last vector to front of the list
+    m_mappings.splice(m_mappings.begin(), m_mappings, --m_mappings.end());
+    // append elements of first vector to end of last vector
+    m_mappings.back().insert(m_mappings.back().end(), m_mappings.front().begin(), m_mappings.front().end());
+    // clear first vector
+    m_mappings.front().clear();
 }
 
 //-----------------------------------------------------------------------------

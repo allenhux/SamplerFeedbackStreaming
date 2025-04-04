@@ -112,6 +112,7 @@ struct CommandLineArgs
     bool m_cameraUpLock{ true };       // navigation locks "up" to be y=1
     UINT m_numStreamingBatches{ 128 }; // number of in-flight batches of updates (UpdateLists)
     UINT m_minNumUploadRequests{ 2000 }; // milliseconds. heuristic to reduce frequency of Submit() calls
+    UINT m_evictionDelay{ 1 }; // frames before tile eviction. internally, at least swap chain size to avoid artifacts
 
     // planet parameters
     UINT m_sphereLong{ 128 }; // # steps vertically. must be even

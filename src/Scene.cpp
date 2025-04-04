@@ -667,6 +667,7 @@ void Scene::StartStreamingLibrary()
     desc.m_minNumUploadRequests = m_args.m_minNumUploadRequests;
     desc.m_useDirectStorage = m_args.m_useDirectStorage;
     desc.m_threadPriority = (SFSManagerDesc::ThreadPriority)m_args.m_threadPriority;
+    desc.m_evictionDelay = m_args.m_evictionDelay;
 
     m_pSFSManager = SFSManager::Create(desc);
 

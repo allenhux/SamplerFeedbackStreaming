@@ -41,6 +41,8 @@ extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = ".\\D3D12\\
 //=============================================================================
 SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_pDevice) :// required for constructor
 m_numSwapBuffers(in_desc.m_swapChainBufferCount)
+// delay eviction by enough to not affect a pending frame
+,m_evictionDelay(std::max(in_desc.m_swapChainBufferCount + 1, in_desc.m_evictionDelay))
 , m_gpuTimerResolve(in_pDevice, in_desc.m_swapChainBufferCount, D3D12GpuTimer::TimerType::Direct)
 , m_renderFrameIndex(0)
 , m_directCommandQueue(in_desc.m_pDirectCommandQueue)

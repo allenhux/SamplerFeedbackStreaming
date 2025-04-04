@@ -269,7 +269,7 @@ namespace SFS
             EvictionDelay(UINT in_numSwapBuffers);
 
             using MappingCoords = std::vector<D3D12_TILED_RESOURCE_COORDINATE>;
-            void Append(D3D12_TILED_RESOURCE_COORDINATE in_coord) { m_mappings[0].push_back(in_coord); }
+            void Append(D3D12_TILED_RESOURCE_COORDINATE in_coord) { m_mappings.front().push_back(in_coord); }
             MappingCoords& GetReadyToEvict() { return m_mappings.back(); }
 
             void NextFrame();
@@ -278,7 +278,7 @@ namespace SFS
             // drop pending evictions for tiles that now have non-zero refcount
             void Rescue(const TileMappingState& in_tileMappingState);
         private:
-            std::vector<MappingCoords> m_mappings;
+            std::list<MappingCoords> m_mappings;
         };
         EvictionDelay m_pendingEvictions;
 

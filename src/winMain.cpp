@@ -496,6 +496,7 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
             if (root.isMember("maxTileUpdatesPerApiCall")) out_args.m_maxTileUpdatesPerApiCall = root["maxTileUpdatesPerApiCall"].asUInt();
             if (root.isMember("numStreamingBatches")) out_args.m_numStreamingBatches = root["numStreamingBatches"].asUInt();
             if (root.isMember("minNumUploadRequests")) out_args.m_minNumUploadRequests = root["minNumUploadRequests"].asUInt();
+            if (root.isMember("evictionDelay")) out_args.m_evictionDelay = root["evictionDelay"].asUInt();
 
             if (root.isMember("maxFeedbackTime")) out_args.m_maxGpuFeedbackTimeMs = root["maxFeedbackTime"].asFloat();
 
