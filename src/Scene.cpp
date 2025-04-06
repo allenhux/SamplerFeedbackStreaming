@@ -147,6 +147,20 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
 
     UINT factoryFlags = 0;
 
+    // is there a sky?
+    if (m_args.m_skyTexture.size())
+    {
+        for (auto& n : m_args.m_textures)
+        {
+            if (std::wstring::npos != n.find(m_args.m_skyTexture))
+            {
+                m_skyTexture = n;
+                break;
+            }
+        }
+    }
+
+
 #ifdef _DEBUG
     factoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
     InitDebugLayer();
@@ -724,12 +738,18 @@ XMMATRIX Scene::SetSphereMatrix()
     constexpr float MAX_SPHERE_SIZE = SharedConstants::MAX_SPHERE_SCALE * MIN_SPHERE_SIZE;
     constexpr float SPHERE_SPACING = float(MIN_SPHERE_SIZE) * .5f;
     static std::uniform_real_distribution<float> scaleDis(MIN_SPHERE_SIZE, MAX_SPHERE_SIZE);
+    constexpr UINT MAX_TRIES = 100;
 
-    bool tryAgain = true;
-    UINT maxTries = 1000;
+    UINT maxTries = MAX_TRIES;
+
+    // start with a tiny universe
+    static float universeSize = 2 * MAX_SPHERE_SIZE;
 
     XMMATRIX matrix = XMMatrixIdentity();
 
+    float sphereScale = scaleDis(m_gen);
+
+    bool tryAgain = true;
     while (tryAgain)
     {
         if (maxTries)
@@ -738,12 +758,12 @@ XMMATRIX Scene::SetSphereMatrix()
         }
         else
         {
-            ErrorMessage("Failed to fit planet in universe. Universe too small?");
+            // grow the universe enough that this sphere should fit
+            universeSize += sphereScale + SPHERE_SPACING;
+            maxTries = MAX_TRIES;
         }
 
-        float sphereScale = scaleDis(m_gen);
-
-        tryAgain = !TryFit(matrix, sphereScale, SharedConstants::UNIVERSE_SIZE, SPHERE_SPACING);
+        tryAgain = !TryFit(matrix, sphereScale, universeSize, SPHERE_SPACING);
     }
 
     return matrix;
@@ -754,27 +774,15 @@ XMMATRIX Scene::SetSphereMatrix()
 //-----------------------------------------------------------------------------
 void Scene::LoadSpheres()
 {
+    const UINT maxNewObjectsPerFrame = 50;
+    UINT numObjectsAdded = 0;
     if (m_objects.size() < (UINT)m_args.m_numSpheres)
     {
         // offset by all the objects that have been loaded so far
         UINT descriptorOffset = (UINT)DescriptorHeapOffsets::NumEntries + UINT(m_objects.size()) * (UINT)SceneObjects::Descriptors::NumEntries;
         CD3DX12_CPU_DESCRIPTOR_HANDLE descCPU = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), descriptorOffset, m_srvUavCbvDescriptorSize);
 
-        // is there a sky?
-        std::wstring skyTexture;
-        if (m_args.m_skyTexture.size())
-        {
-            for (auto& n : m_args.m_textures)
-            {
-                if (std::wstring::npos != n.find(m_args.m_skyTexture))
-                {
-                    skyTexture = n;
-                    break;
-                }
-            }
-        }
-
-        UINT textureIndex = 0;
+        UINT textureIndex = (UINT)m_objects.size();
         while (m_objects.size() < (UINT)m_args.m_numSpheres)
         {
             // this object's index-to-be
@@ -800,9 +808,9 @@ void Scene::LoadSpheres()
             // 3 options: sphere, earth, sky
 
             // only 1 sky, and it must be first because it disables depth when drawn
-            if ((nullptr == m_pSky) && (skyTexture.size()))
+            if ((nullptr == m_pSky) && (m_skyTexture.size()))
             {
-                m_pSky = new SceneObjects::Sky(skyTexture, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU);
+                m_pSky = new SceneObjects::Sky(m_skyTexture, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU);
                 o = m_pSky;
                 float scale = SharedConstants::UNIVERSE_SIZE * 2;
                 o->GetModelMatrix() = DirectX::XMMatrixScaling(scale, scale, scale);
@@ -859,10 +867,15 @@ void Scene::LoadSpheres()
 
             // offset to the next sphere
             descCPU.Offset((UINT)SceneObjects::Descriptors::NumEntries, m_srvUavCbvDescriptorSize);
+
+            numObjectsAdded++;
+            if (maxNewObjectsPerFrame <= numObjectsAdded)
+            {
+                break;
+            }
         }
-    }
-    // evict spheres?
-    else if (m_objects.size() > (UINT)m_args.m_numSpheres)
+    } // end if adding objects
+    else if (m_objects.size() > (UINT)m_args.m_numSpheres) // else evict objects
     {
         WaitForGpu();
         while (m_objects.size() > (UINT)m_args.m_numSpheres)

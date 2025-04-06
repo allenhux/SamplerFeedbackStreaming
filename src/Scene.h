@@ -174,6 +174,7 @@ private:
     class BufferViewer* m_pMinMipMapViewer{ nullptr };
     class BufferViewer* m_pFeedbackViewer{ nullptr };
     class FrustumViewer* m_pFrustumViewer{ nullptr };
+    std::wstring m_skyTexture;
 
     // minimize state transitions by grouping objects by material each frame
     struct ObjectIndexPair
