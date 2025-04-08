@@ -57,7 +57,7 @@ namespace SFS
         // external APIs
         //-----------------------------------------------------------------
         virtual void Destroy() override;
-        virtual void CreateFeedbackView(ID3D12Device* in_pDevice, D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor) override;
+        virtual void CreateFeedbackView(ID3D12Device* in_pDevice, D3D12_CPU_DESCRIPTOR_HANDLE out_descriptor) override;
         virtual void CreateShaderResourceView(ID3D12Device* in_pDevice, D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor) override;
         virtual UINT GetMinMipMapWidth() const override;
         virtual UINT GetMinMipMapHeight() const override;
@@ -102,6 +102,8 @@ namespace SFS
         // the following are called only if the application made a feedback request for the object:
 
         // called before draw to clear the feedback map
+        D3D12_CPU_DESCRIPTOR_HANDLE  m_clearUavDescriptor{};
+        void SetClearUavDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE in_cpuDescriptor) { m_clearUavDescriptor = in_cpuDescriptor; }
         void ClearFeedback(ID3D12GraphicsCommandList* in_pCmdList, const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor);
 
         ID3D12Resource* GetOpaqueFeedback() { return m_resources->GetOpaqueFeedback(); }

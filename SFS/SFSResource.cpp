@@ -42,11 +42,18 @@ void SFS::ResourceBase::Destroy()
 //-----------------------------------------------------------------------------
 // create views of resources used directly by the application
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::CreateFeedbackView(ID3D12Device* in_pDevice, D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle)
+void SFS::ResourceBase::CreateFeedbackView(ID3D12Device* in_pDevice, D3D12_CPU_DESCRIPTOR_HANDLE out_descriptorHandle)
 {
+    ((ID3D12Device8*)in_pDevice)->CreateSamplerFeedbackUnorderedAccessView(
+        m_resources->GetTiledResource(),
+        m_resources->GetOpaqueFeedback(),
+        out_descriptorHandle);
+#if 0
+    // FIXME? could copy m_clearUavDescriptor, except this is method is used to create that descriptor also
     in_pDevice->CopyDescriptorsSimple(1, in_descriptorHandle,
         m_resources->GetClearUavHeap()->GetCPUDescriptorHandleForHeapStart(),
-        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        m_clearUavDescriptor);
+#endif
 }
 
 void SFS::ResourceBase::CreateShaderResourceView(ID3D12Device* in_pDevice, D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle)

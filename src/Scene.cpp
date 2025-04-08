@@ -1105,9 +1105,10 @@ UINT Scene::DetermineMaxNumFeedbackResolves()
 // draw objects grouped by same pipeline state
 //----------------------------------------------------------
 void Scene::DrawObjectSets(SceneObjects::DrawParams& in_params,
-    const D3D12_GPU_DESCRIPTOR_HANDLE in_descriptorBase, UINT in_descriptorSize,
     ID3D12GraphicsCommandList1* out_pCommandList)
 {
+    const D3D12_GPU_DESCRIPTOR_HANDLE srvBaseGPU = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::NumEntries, m_srvUavCbvDescriptorSize);
+
     for (auto& set : m_frameObjectSets)
     {
         auto pipelineState = set.first;
@@ -1127,8 +1128,7 @@ void Scene::DrawObjectSets(SceneObjects::DrawParams& in_params,
 
             for (auto& o : objects)
             {
-                in_params.m_srvBaseGPU = CD3DX12_GPU_DESCRIPTOR_HANDLE(in_descriptorBase, (INT)(o.index * (INT)SceneObjects::Descriptors::NumEntries), in_descriptorSize);
-
+                in_params.m_srvBaseGPU = CD3DX12_GPU_DESCRIPTOR_HANDLE(srvBaseGPU, (INT)(o.index * (INT)SceneObjects::Descriptors::NumEntries), m_srvUavCbvDescriptorSize);
                 o.pObject->Draw(out_pCommandList, in_params);
             }
         }
@@ -1160,8 +1160,6 @@ void Scene::DrawObjects()
     drawParams.m_windowWidth = m_windowWidth;
     drawParams.m_windowHeight = m_windowHeight;
     drawParams.m_fov = m_fieldOfView;
-
-    const D3D12_GPU_DESCRIPTOR_HANDLE srvBaseGPU = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::NumEntries, m_srvUavCbvDescriptorSize);
 
     m_frameObjectSets.clear();
 
@@ -1224,7 +1222,7 @@ void Scene::DrawObjects()
         m_prevNumFeedbackObjects[m_frameIndex] = numFeedbackObjects;
     }
 
-    DrawObjectSets(drawParams, srvBaseGPU, m_srvUavCbvDescriptorSize, m_commandList.Get());
+    DrawObjectSets(drawParams, m_commandList.Get());
 }
 
 //-------------------------------------------------------------------------

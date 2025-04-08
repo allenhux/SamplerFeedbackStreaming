@@ -184,6 +184,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     {
         m_numStreamingResourcesChanged = false;
         AllocateResidencyMap(in_minmipmapDescriptorHandle);
+        AllocateSharedClearUavHeap();
     }
 
     // the frame fence is used to optimize readback of feedback
@@ -284,7 +285,6 @@ SFSManager::CommandLists SFS::ManagerBase::EndFrame()
                 t.m_pStreamingResource->ReadbackFeedback(pCommandList);
             }
 #endif
-
             // now safe to clear feedback buffers
             for (auto& t : m_feedbackReadbacks)
             {

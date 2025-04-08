@@ -72,7 +72,7 @@ struct SFSResource
     //--------------------------------------------
     // applications need access to the resources to create descriptors
     //--------------------------------------------
-    virtual void CreateFeedbackView(ID3D12Device* in_pDevice, D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor) = 0;
+    virtual void CreateFeedbackView(ID3D12Device* in_pDevice, D3D12_CPU_DESCRIPTOR_HANDLE out_descriptor) = 0;
     virtual void CreateShaderResourceView(ID3D12Device* in_pDevice, D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor) = 0;
 
     // shader reading min-mip-map buffer will want its dimensions

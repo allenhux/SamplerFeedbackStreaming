@@ -194,6 +194,9 @@ namespace SFS
 
         std::vector<UINT> m_residencyMapOffsets; // one min mip map for each SFSResource
 
+        ComPtr<ID3D12DescriptorHeap> m_sharedClearUavHeap; // CPU heap to clear feedback resources, shared by all
+        void AllocateSharedClearUavHeap();
+
         //-------------------------------------------
         // statistics
         //-------------------------------------------

@@ -357,6 +357,34 @@ void SFS::ManagerBase::AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descr
 }
 
 //-----------------------------------------------------------------------------
+// create a shared heap for clearing the feedback resources
+// this heap will not be bound to a command list
+//-----------------------------------------------------------------------------
+void SFS::ManagerBase::AllocateSharedClearUavHeap()
+{
+    UINT numDescriptorsNeeded = (UINT)m_streamingResources.size();
+    if ((nullptr == m_sharedClearUavHeap.Get()) || (m_sharedClearUavHeap->GetDesc().NumDescriptors < numDescriptorsNeeded))
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+        desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        desc.NumDescriptors = numDescriptorsNeeded;
+        desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        ThrowIfFailed(m_device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_sharedClearUavHeap)));
+        m_sharedClearUavHeap->SetName(L"m_sharedClearUavHeap");
+    }
+
+    UINT sharedClearUavHeapIndex = 0;
+    auto srvUavCbvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    for (const auto& r : m_streamingResources)
+    {
+        CD3DX12_CPU_DESCRIPTOR_HANDLE clearHandle(m_sharedClearUavHeap->GetCPUDescriptorHandleForHeapStart(), sharedClearUavHeapIndex, srvUavCbvDescriptorSize);
+        sharedClearUavHeapIndex++;
+        r->CreateFeedbackView(m_device.Get(), clearHandle);
+        r->SetClearUavDescriptor(clearHandle);
+    }
+}
+
+//-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::CreateMinMipMapView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle)
 {

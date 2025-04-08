@@ -52,7 +52,6 @@ namespace SFS
 #endif
 
         ID3D12Resource* GetOpaqueFeedback() const { return m_feedbackResource.Get(); }
-        ID3D12DescriptorHeap* GetClearUavHeap() const { return m_clearUavHeap.Get(); }
 
         UINT GetNumTilesWidth() const { return m_tiling[0].WidthInTiles; }
         UINT GetNumTilesHeight() const { return m_tiling[0].HeightInTiles; }
@@ -62,7 +61,8 @@ namespace SFS
         const D3D12_SUBRESOURCE_TILING* GetTiling() const { return m_tiling.data(); }
         UINT GetNumTilesVirtual() const { return m_numTilesTotal; }
 
-        void ClearFeedback(ID3D12GraphicsCommandList* out_pCmdList, const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor);
+        void ClearFeedback(ID3D12GraphicsCommandList* out_pCmdList, const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor,
+            const D3D12_CPU_DESCRIPTOR_HANDLE in_cpuDescriptor);
 
         void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, UINT in_index);
 #if RESOLVE_TO_TEXTURE
@@ -71,11 +71,7 @@ namespace SFS
 
     private:
         ComPtr<ID3D12Resource> m_tiledResource;
-        ComPtr<ID3D12Resource> m_tiledResourceAlloc;     // notify thread creates new tiled resource, to be swapped in later
-        ComPtr<ID3D12Resource> m_tiledResourceDelete;    // resource in pergatory is moved here to be deleted by notify thread
-
         ComPtr<ID3D12Resource2> m_feedbackResource;
-        ComPtr<ID3D12DescriptorHeap> m_clearUavHeap; // CPU heap to clear the feedback
 
 #if RESOLVE_TO_TEXTURE
         // feedback resolved on gpu for visualization

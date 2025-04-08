@@ -90,25 +90,6 @@ SFS::InternalResources::InternalResources(
         m_feedbackResource->SetName(L"m_feedbackResource");
     }
 
-    // CPU heap used for ClearUnorderedAccessView on feedback map
-    {
-        D3D12_DESCRIPTOR_HEAP_DESC desc = {};
-        desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        desc.NumDescriptors = 1; // only need the one for the single feedback map
-        desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-        ThrowIfFailed(in_pDevice->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_clearUavHeap)));
-        m_clearUavHeap->SetName(L"m_clearUavHeap");
-    }
-
-    // now that both feedback map and paired texture have been created,
-    // can create the sampler feedback view
-    {
-        in_pDevice->CreateSamplerFeedbackUnorderedAccessView(
-            m_tiledResource.Get(),
-            m_feedbackResource.Get(),
-            m_clearUavHeap->GetCPUDescriptorHandleForHeapStart());
-    }
-
 #if RESOLVE_TO_TEXTURE
     // create gpu-side resolve destination
     {
@@ -170,16 +151,15 @@ SFS::InternalResources::InternalResources(
 //-----------------------------------------------------------------------------
 void SFS::InternalResources::ClearFeedback(
     ID3D12GraphicsCommandList* out_pCmdList,
-    const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor)
-{
+    const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor,
     // CPU descriptor corresponding to separate CPU heap /not/ bound to command list
-    D3D12_CPU_DESCRIPTOR_HANDLE secondHeapCPU = m_clearUavHeap->GetCPUDescriptorHandleForHeapStart();
-
+    const D3D12_CPU_DESCRIPTOR_HANDLE in_cpuDescriptor)
+{
     // note clear value is ignored when clearing feedback maps
     UINT clearValue[4]{};
     out_pCmdList->ClearUnorderedAccessViewUint(
         in_gpuDescriptor,
-        secondHeapCPU,
+        in_cpuDescriptor,
         m_feedbackResource.Get(),
         clearValue, 0, nullptr);
 }
