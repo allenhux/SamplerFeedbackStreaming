@@ -142,8 +142,10 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
     , m_renderThreadTimes(in_args.m_statisticsNumFrames)
     , m_updateFeedbackTimes(in_args.m_statisticsNumFrames)
 {
-    m_gen.seed(42);
     m_windowInfo.cbSize = sizeof(WINDOWINFO);
+
+    m_gen.seed(42);
+    PreparePoses();
 
     UINT factoryFlags = 0;
 
@@ -696,28 +698,35 @@ void Scene::StartStreamingLibrary()
 // generate a random pose
 // return true if the pose does not intersect anything in the universe
 //-----------------------------------------------------------------------------
-bool Scene::TryFit(XMMATRIX& out_matrix, float in_radius, float in_universe, float in_gap)
+bool Scene::TryFit(XMMATRIX& out_matrix, float in_radius, float in_universe, float in_gap,
+    float in_minDistance, bool in_max)
 {
-    static std::uniform_real_distribution<float> dis(-1, 1);
+    static std::uniform_real_distribution<float> dis(0, 1);
 
-    float x = in_universe * std::abs(dis(m_gen));
+    float x;
+    if (in_max)
+    {
+        x = in_universe;
+    }
+    else
+    {
+        x = std::max(in_universe * dis(m_gen), in_minDistance);
+
+    }
     XMMATRIX xlate = XMMatrixTranslation(0, 0, x);
-    XMMATRIX rtate = XMMatrixRotationRollPitchYaw((XM_PI)*dis(m_gen), (XM_PI)*dis(m_gen), (XM_PI)*dis(m_gen));
+    XMMATRIX rtate = XMMatrixRotationRollPitchYaw((XM_2PI)*dis(m_gen), (XM_2PI)*dis(m_gen), (XM_2PI)*dis(m_gen));
     XMMATRIX scale = XMMatrixScaling(in_radius, in_radius, in_radius);
 
     out_matrix = scale * xlate * rtate;
 
-    XMVECTOR p0 = out_matrix.r[3];
-    for (const auto o : m_objects)
-    {
-        if (o == m_pSky)
-        {
-            continue;
-        }
+    if (in_max) { return true; }
 
-        XMVECTOR p1 = o->GetModelMatrix().r[3];
+    XMVECTOR p0 = out_matrix.r[3];
+    for (const auto& o : m_objectPoses)
+    {
+        XMVECTOR p1 = o.m_matrix.r[3];
         float dist = XMVectorGetX(XMVector3LengthEst(p1 - p0));
-        float radius2 = o->GetBoundingSphereRadius();
+        float radius2 = o.m_radius;
 
         // leave a minimum spacing between planets
         if (dist - (in_radius + radius2) < in_gap)
@@ -732,13 +741,15 @@ bool Scene::TryFit(XMMATRIX& out_matrix, float in_radius, float in_universe, flo
 // generate a random scale, position, and rotation
 // also space the spheres so they do not touch
 //-----------------------------------------------------------------------------
-XMMATRIX Scene::SetSphereMatrix()
+void Scene::SetSphereMatrix(float in_minDistance)
 {
     constexpr float MIN_SPHERE_SIZE = SharedConstants::SPHERE_SCALE;
     constexpr float MAX_SPHERE_SIZE = SharedConstants::MAX_SPHERE_SCALE * MIN_SPHERE_SIZE;
     constexpr float SPHERE_SPACING = float(MIN_SPHERE_SIZE) * .5f;
     static std::uniform_real_distribution<float> scaleDis(MIN_SPHERE_SIZE, MAX_SPHERE_SIZE);
     constexpr UINT MAX_TRIES = 100;
+
+    in_minDistance += MAX_SPHERE_SIZE + SPHERE_SPACING;
 
     UINT maxTries = MAX_TRIES;
 
@@ -750,6 +761,7 @@ XMMATRIX Scene::SetSphereMatrix()
     float sphereScale = scaleDis(m_gen);
 
     bool tryAgain = true;
+    bool useMaxRadius = false;
     while (tryAgain)
     {
         if (maxTries)
@@ -760,13 +772,12 @@ XMMATRIX Scene::SetSphereMatrix()
         {
             // grow the universe enough that this sphere should fit
             universeSize += sphereScale + SPHERE_SPACING;
-            maxTries = MAX_TRIES;
+            useMaxRadius = true;
         }
 
-        tryAgain = !TryFit(matrix, sphereScale, universeSize, SPHERE_SPACING);
+        tryAgain = !TryFit(matrix, sphereScale, universeSize, SPHERE_SPACING, in_minDistance, useMaxRadius);
     }
-
-    return matrix;
+    m_objectPoses.push_back({ matrix, sphereScale });
 }
 
 //-----------------------------------------------------------------------------
@@ -836,7 +847,7 @@ void Scene::LoadSpheres()
                     o = new SceneObjects::Planet(textureFilename, pHeap, descCPU, m_pEarth);
                 }
                 o->SetAxis(XMVectorSet(0, 0, 1, 0));
-                o->GetModelMatrix() = SetSphereMatrix();
+                o->GetModelMatrix() = m_objectPoses[m_objects.size()].m_matrix;
             }
 
             // if there are textures other than the terrain texture, skip this one
@@ -861,7 +872,7 @@ void Scene::LoadSpheres()
                 }
                 static std::uniform_real_distribution<float> dis(-1.f, 1.f);
                 o->SetAxis(DirectX::XMVector3NormalizeEst(DirectX::XMVectorSet(dis(m_gen), dis(m_gen), dis(m_gen), 0)));
-                o->GetModelMatrix() = SetSphereMatrix();
+                o->GetModelMatrix() = m_objectPoses[m_objects.size()].m_matrix;
             }
             m_objects.push_back(o);
 
@@ -906,6 +917,20 @@ void Scene::LoadSpheres()
             delete pObject;
             m_objects.resize(m_objects.size() - 1);
         }
+    }
+}
+
+//-----------------------------------------------------------------------------
+// precompute position and radius of all objects
+//-----------------------------------------------------------------------------
+void Scene::PreparePoses()
+{
+    float minRadius = (float)m_args.m_terrainParams.m_terrainSideSize;
+
+    m_objectPoses.reserve(m_args.m_maxNumObjects);
+    for(UINT i = 0; i < m_args.m_maxNumObjects; i++)
+    {
+        SetSphereMatrix(minRadius);
     }
 }
 

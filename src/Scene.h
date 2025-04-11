@@ -234,8 +234,16 @@ private:
     SceneObjects::Planet* m_pEarth{ nullptr };         // special geometry (no mirror in U)
     SceneObjects::BaseObject* m_pSky{ nullptr }; // lifetime owned by m_objects
 
-    bool TryFit(DirectX::XMMATRIX& out_matrix, float in_radius, float in_universe, float in_gap);
-    DirectX::XMMATRIX SetSphereMatrix();
+    struct ObjectPose
+    {
+        DirectX::XMMATRIX m_matrix;
+        float m_radius;
+    };
+    std::vector<ObjectPose> m_objectPoses;
+    void PreparePoses(); // pre-compute position of everything in the scene
+    bool TryFit(DirectX::XMMATRIX& out_matrix, float in_radius, float in_universe, float in_gap,
+        float in_minDistance, bool in_max = false);
+    void SetSphereMatrix(float in_minDistance);
     void LoadSpheres(); // progressively over multiple frames
 
     // each frame, update objects until timeout reached
