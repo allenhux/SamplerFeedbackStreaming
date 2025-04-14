@@ -174,7 +174,6 @@ private:
     class BufferViewer* m_pMinMipMapViewer{ nullptr };
     class BufferViewer* m_pFeedbackViewer{ nullptr };
     class FrustumViewer* m_pFrustumViewer{ nullptr };
-    std::wstring m_skyTexture;
 
     // minimize state transitions by grouping objects by material each frame
     struct ObjectIndexPair
@@ -240,7 +239,9 @@ private:
         float m_radius;
     };
     std::vector<ObjectPose> m_objectPoses;
-    void PreparePoses(); // pre-compute position of everything in the scene
+    float m_universeSize{ 0 };
+    void PrepareScene();
+
     bool TryFit(DirectX::XMMATRIX& out_matrix, float in_radius, float in_universe, float in_gap,
         float in_minDistance, bool in_max = false);
     void SetSphereMatrix(float in_minDistance);

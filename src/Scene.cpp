@@ -144,24 +144,9 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
 {
     m_windowInfo.cbSize = sizeof(WINDOWINFO);
 
-    m_gen.seed(42);
-    PreparePoses();
-
     UINT factoryFlags = 0;
 
-    // is there a sky?
-    if (m_args.m_skyTexture.size())
-    {
-        for (auto& n : m_args.m_textures)
-        {
-            if (std::wstring::npos != n.find(m_args.m_skyTexture))
-            {
-                m_skyTexture = n;
-                break;
-            }
-        }
-    }
-
+    PrepareScene();
 
 #ifdef _DEBUG
     factoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
@@ -753,9 +738,6 @@ void Scene::SetSphereMatrix(float in_minDistance)
 
     UINT maxTries = MAX_TRIES;
 
-    // start with a tiny universe
-    static float universeSize = 2 * MAX_SPHERE_SIZE;
-
     XMMATRIX matrix = XMMatrixIdentity();
 
     float sphereScale = scaleDis(m_gen);
@@ -771,11 +753,11 @@ void Scene::SetSphereMatrix(float in_minDistance)
         else
         {
             // grow the universe enough that this sphere should fit
-            universeSize += sphereScale + SPHERE_SPACING;
+            m_universeSize += sphereScale + SPHERE_SPACING;
             useMaxRadius = true;
         }
 
-        tryAgain = !TryFit(matrix, sphereScale, universeSize, SPHERE_SPACING, in_minDistance, useMaxRadius);
+        tryAgain = !TryFit(matrix, sphereScale, m_universeSize, SPHERE_SPACING, in_minDistance, useMaxRadius);
     }
     m_objectPoses.push_back({ matrix, sphereScale });
 }
@@ -785,7 +767,7 @@ void Scene::SetSphereMatrix(float in_minDistance)
 //-----------------------------------------------------------------------------
 void Scene::LoadSpheres()
 {
-    const UINT maxNewObjectsPerFrame = 50;
+    const UINT maxNewObjectsPerFrame = 100;
     UINT numObjectsAdded = 0;
     if (m_objects.size() < (UINT)m_args.m_numSpheres)
     {
@@ -819,11 +801,11 @@ void Scene::LoadSpheres()
             // 3 options: sphere, earth, sky
 
             // only 1 sky, and it must be first because it disables depth when drawn
-            if ((nullptr == m_pSky) && (m_skyTexture.size()))
+            if ((nullptr == m_pSky) && (m_args.m_skyTexture.size()))
             {
-                m_pSky = new SceneObjects::Sky(m_skyTexture, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU);
+                m_pSky = new SceneObjects::Sky(m_args.m_skyTexture, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU);
                 o = m_pSky;
-                float scale = SharedConstants::UNIVERSE_SIZE * 2;
+                float scale = m_universeSize * 2; // FIXME this can grow after sky size has been fixed
                 o->GetModelMatrix() = DirectX::XMMatrixScaling(scale, scale, scale);
             }
             else if (nullptr == m_pTerrainSceneObject)
@@ -833,29 +815,22 @@ void Scene::LoadSpheres()
                 o = m_pTerrainSceneObject;
             }
             // earth
-            else if (m_args.m_earthTexture.size() && (std::wstring::npos != textureFilename.find(m_args.m_earthTexture)))
+            else if (m_args.m_earthTexture.size() && (0 == fileIndex))
             {
                 if (nullptr == m_pEarth)
                 {
                     sphereProperties.m_mirrorU = false;
                     sphereProperties.m_topBottom = false;
-                    m_pEarth = new SceneObjects::Planet(textureFilename, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU, sphereProperties);
+                    m_pEarth = new SceneObjects::Planet(m_args.m_earthTexture, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU, sphereProperties);
                     o = m_pEarth;
                 }
                 else
                 {
-                    o = new SceneObjects::Planet(textureFilename, pHeap, descCPU, m_pEarth);
+                    o = new SceneObjects::Planet(m_args.m_earthTexture, pHeap, descCPU, m_pEarth);
                 }
                 o->SetAxis(XMVectorSet(0, 0, 1, 0));
                 o->GetModelMatrix() = m_objectPoses[m_objects.size()].m_matrix;
             }
-
-            // if there are textures other than the terrain texture, skip this one
-            else if ((std::wstring::npos != textureFilename.find(m_args.m_terrainTexture)) && (m_args.m_textures.size() > 1))
-            {
-                continue;
-            }
-
             // planet
             else
             {
@@ -921,10 +896,73 @@ void Scene::LoadSpheres()
 }
 
 //-----------------------------------------------------------------------------
+// scene and texture fixup,
 // precompute position and radius of all objects
 //-----------------------------------------------------------------------------
-void Scene::PreparePoses()
+void Scene::PrepareScene()
 {
+    // is there a sky? is it among the textures in the media directory?
+    if (m_args.m_skyTexture.size())
+    {
+        for (auto i = m_args.m_textures.begin(); i != m_args.m_textures.end(); i++)
+        {
+            if (std::wstring::npos != i->find(m_args.m_skyTexture))
+            {
+                m_args.m_skyTexture = *i;
+                m_args.m_textures.erase(i);
+                break;
+            }
+        }
+        if (std::filesystem::exists(m_args.m_skyTexture))
+        {
+            m_args.m_skyTexture = std::filesystem::absolute(m_args.m_skyTexture);
+        }
+        else
+        {
+            m_args.m_skyTexture.clear();
+        }
+    }
+
+    // is there an earth? is it among the textures in the media directory?
+    if (m_args.m_earthTexture.size())
+    {
+        for (auto i = m_args.m_textures.begin(); i != m_args.m_textures.end(); i++)
+        {
+            if (std::wstring::npos != i->find(m_args.m_earthTexture))
+            {
+                m_args.m_earthTexture = *i;
+                m_args.m_textures.erase(i);
+                break;
+            }
+        }
+        if (std::filesystem::exists(m_args.m_earthTexture))
+        {
+            m_args.m_earthTexture = std::filesystem::absolute(m_args.m_earthTexture);
+        }
+        else
+        {
+            m_args.m_earthTexture.clear();
+        }
+    }
+
+
+    // if there is more than one texture, remove texture file name from list of textures
+    // NOTE: all file paths should be fully qualified by now
+    if (m_args.m_textures.size() > 1)
+    {
+        auto i = std::find(m_args.m_textures.begin(), m_args.m_textures.end(), m_args.m_terrainTexture);
+        if (m_args.m_textures.end() != i)
+        {
+            m_args.m_textures.erase(i);
+        }
+    }
+
+    // precompute poses
+    m_gen.seed(42);
+
+    // start with a tiny universe
+    m_universeSize = SharedConstants::SPHERE_SCALE * SharedConstants::MAX_SPHERE_SCALE * 2;
+
     float minRadius = (float)m_args.m_terrainParams.m_terrainSideSize;
 
     m_objectPoses.reserve(m_args.m_maxNumObjects);
@@ -1386,7 +1424,7 @@ void Scene::Animate()
 
         static float theta = -XM_PIDIV2;
         const float delta = 0.01f * m_args.m_cameraAnimationRate;
-        float radius = 5.5 * (float)SharedConstants::CAMERA_ANIMATION_RADIUS;
+        float radius = m_universeSize;
 
         if (m_args.m_cameraRollerCoaster)
         {

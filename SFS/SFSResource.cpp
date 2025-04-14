@@ -49,7 +49,7 @@ void SFS::ResourceBase::CreateFeedbackView(ID3D12Device* in_pDevice, D3D12_CPU_D
         m_resources->GetOpaqueFeedback(),
         out_descriptorHandle);
 #if 0
-    // FIXME? could copy m_clearUavDescriptor, except this is method is used to create that descriptor also
+    // FIXME? instead of create, could copy m_clearUavDescriptor, except this is method is used to create that descriptor also
     in_pDevice->CopyDescriptorsSimple(1, in_descriptorHandle,
         m_resources->GetClearUavHeap()->GetCPUDescriptorHandleForHeapStart(),
         m_clearUavDescriptor);
@@ -97,7 +97,7 @@ UINT SFS::ResourceBase::GetMinMipMapOffset() const
 }
 
 //-----------------------------------------------------------------------------
-// // check if the packed mips are loaded. application likely will not want to use this texture before they have loaded
+// // check if the packed mips are loaded. application should not use this texture before they have loaded
 //-----------------------------------------------------------------------------
 bool SFS::ResourceBase::GetPackedMipsResident() const
 {

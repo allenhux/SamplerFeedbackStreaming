@@ -64,12 +64,6 @@ SFS::ResourceBase::ResourceBase(
     m_resources = std::make_unique<SFS::InternalResources>(in_pSFSManager->GetDevice(), m_textureFileInfo, (UINT)m_queuedFeedback.size());
     m_tileMappingState.Init(m_resources->GetPackedMipInfo().NumStandardMips, m_resources->GetTiling());
 
-    // no packed mips. odd, but possible. no need to check/update this variable again.
-    if (0 == m_resources->GetPackedMipInfo().NumTilesForPackedMips)
-    {
-        m_packedMipStatus = PackedMipStatus::RESIDENT;
-    }
-
     // initialize a structure that holds ref counts with dimensions equal to min-mip-map
     // set the bottom-most bits, representing the packed mips as being resident
     m_tileReferencesWidth = m_resources->GetNumTilesWidth();
@@ -86,7 +80,16 @@ SFS::ResourceBase::ResourceBase(
     m_pHeap->AllocateAtlas(in_pSFSManager->GetMappingQueue(), m_textureFileInfo.GetFormat());
 
     // Load packed mips. packed mips are not streamed or evicted.
-    LoadPackedMips();
+    if (m_resources->GetPackedMipInfo().NumTilesForPackedMips)
+    {
+        LoadPackedMips();
+    }
+    else
+    {
+        // no packed mips. odd, but possible. no need to check/update this variable again.
+        m_packedMipStatus = PackedMipStatus::RESIDENT;
+        m_resources->Initialize(m_pSFSManager->GetDevice());
+    }
 }
 
 //-----------------------------------------------------------------------------

@@ -41,6 +41,9 @@ namespace SFS
             // need the swap chain count so we can create per-frame upload buffers
             UINT in_swapChainBufferCount);
 
+        // finish some initialization until when the packed mips arrive
+        void Initialize(ID3D12Device8* in_pDevice);
+
         ID3D12Resource* GetTiledResource() const { return m_tiledResource.Get(); }
 
         void* MapResolvedReadback(UINT in_index) const;

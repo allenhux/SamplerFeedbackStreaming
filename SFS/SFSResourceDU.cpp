@@ -96,6 +96,9 @@ void SFS::ResourceDU::NotifyEvicted(const std::vector<D3D12_TILED_RESOURCE_COORD
 //-----------------------------------------------------------------------------
 void SFS::ResourceDU::NotifyPackedMips()
 {
+    // finish creating/initializing internal resources
+    m_resources->Initialize(m_pSFSManager->GetDevice());
+
     m_packedMipStatus = PackedMipStatus::NEEDS_TRANSITION;
     m_pSFSManager->NotifyPackedMips();
 
@@ -105,4 +108,12 @@ void SFS::ResourceDU::NotifyPackedMips()
     // don't need to hold on to packed mips any longer.
     std::vector<BYTE> empty;
     m_packedMips.swap(empty);
+}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+std::vector<BYTE>& SFS::ResourceDU::GetPaddedPackedMips(UINT& out_uncompressedSize)
+{
+    out_uncompressedSize = m_packedMipsUncompressedSize;
+    return m_packedMips;
 }

@@ -52,6 +52,7 @@
 #include <functional>
 #include <algorithm>
 #include <memory>
+#include <filesystem>
 
 // DirectXTK12
 #include "d3dx12.h"

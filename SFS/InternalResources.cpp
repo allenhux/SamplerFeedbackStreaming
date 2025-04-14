@@ -65,8 +65,11 @@ SFS::InternalResources::InternalResources(
     {
         UINT subresourceCount = GetTiledResource()->GetDesc().MipLevels;
         m_tiling.resize(subresourceCount);
-        in_pDevice->GetResourceTiling(GetTiledResource(), &m_numTilesTotal, &m_packedMipInfo, &m_tileShape, &subresourceCount, 0, &m_tiling[0]);
+        in_pDevice->GetResourceTiling(GetTiledResource(), &m_numTilesTotal, &m_packedMipInfo, &m_tileShape, &subresourceCount, 0, m_tiling.data());
     }
+
+    m_resolvedReadback.resize(in_swapChainBufferCount);
+    m_resolvedReadbackCpuAddress.reserve(in_swapChainBufferCount);
 
     // create the feedback map
     // the dimensions of the feedback map must match the size of the streaming texture
@@ -89,7 +92,14 @@ SFS::InternalResources::InternalResources(
             nullptr, IID_PPV_ARGS(&m_feedbackResource)));
         m_feedbackResource->SetName(L"m_feedbackResource");
     }
+}
 
+//-----------------------------------------------------------------------------
+// Defer creating some resources until after packed mips arrive
+// to reduce impact of creating an SFS Resource
+//-----------------------------------------------------------------------------
+void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice)
+{
 #if RESOLVE_TO_TEXTURE
     // create gpu-side resolve destination
     {
@@ -121,9 +131,6 @@ SFS::InternalResources::InternalResources(
         pitch = (pitch + 0x0ff) & ~0x0ff;
         rd.Width = pitch * GetNumTilesHeight();
 #endif
-
-        m_resolvedReadback.resize(in_swapChainBufferCount);
-        m_resolvedReadbackCpuAddress.reserve(in_swapChainBufferCount);
 
         for (auto& b : m_resolvedReadback)
         {
