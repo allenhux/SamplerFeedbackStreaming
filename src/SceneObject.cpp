@@ -391,6 +391,23 @@ void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList,
 }
 
 //-----------------------------------------------------------------------------
+// rough approximation of screen area in pixels
+//-----------------------------------------------------------------------------
+float SceneObjects::BaseObject::GetScreenAreaPixels(const SceneObjects::DrawParams& in_drawParams)
+{
+    float pixelScale = in_drawParams.m_windowHeight / std::tanf(in_drawParams.m_fov / 2.f);
+    float radius = GetBoundingSphereRadius();
+    float z = DirectX::XMVectorGetW(m_combinedMatrix.r[3]);
+    if (z > radius)
+    {
+        radius /= z;
+    }
+    radius *= pixelScale;
+    float area =  DirectX::XM_PI * radius * radius;
+    return area;
+}
+
+//-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 void SceneObjects::CreateSphereResources(
     ID3D12Resource** out_ppVertexBuffer, ID3D12Resource** out_ppIndexBuffer,

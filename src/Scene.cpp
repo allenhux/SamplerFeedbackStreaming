@@ -1245,35 +1245,37 @@ void Scene::DrawObjects()
             UINT objectIndex = i % (UINT)m_objects.size();
             auto o = m_objects[objectIndex];
 
+
+            bool isVisible = o->IsVisible(m_projection);
+
+            // FIXME: idea is to limit feedback to objects large enough to need streaming, that is, > packed mips
+            bool isLarge = isVisible && o->GetScreenAreaPixels(drawParams) > (50 * 50);
             // get sampler feedback for this object?
-            bool queueFeedback = false;
+            bool queueFeedback = isLarge && (numFeedbackObjects < maxNumFeedbackResolves);
+            bool evict = !isVisible;
 
-            if (o->IsVisible(m_projection))
+            if (isVisible)
             {
-                if (numFeedbackObjects < maxNumFeedbackResolves)
-                {
-                    queueFeedback = true;
-                    numFeedbackObjects++;
-
-                    // aliasing barriers for performance analysis only, NOT REQUIRED FOR CORRECT BEHAVIOR
-                    if (m_args.m_addAliasingBarriers)
-                    {
-                        m_aliasingBarriers.push_back(CD3DX12_RESOURCE_BARRIER::Aliasing(nullptr, o->GetStreamingResource()->GetTiledResource()));
-                    }
-                }
-
                 o->SetFeedbackEnabled(queueFeedback);
-
                 // only draw visible objects
                 // group objects by material (PSO)
                 m_frameObjectSets[o->GetPipelineState()].push_back({ o, objectIndex });
             }
-            else // evict tiles of objects that are not visible
+
+            if (queueFeedback)
             {
-                if (m_args.m_enableTileUpdates)
+                numFeedbackObjects++;
+
+                // aliasing barriers for performance analysis only, NOT REQUIRED FOR CORRECT BEHAVIOR
+                if (m_args.m_addAliasingBarriers)
                 {
-                    o->GetStreamingResource()->QueueEviction();
+                    m_aliasingBarriers.push_back(CD3DX12_RESOURCE_BARRIER::Aliasing(nullptr, o->GetStreamingResource()->GetTiledResource()));
                 }
+            }
+
+            if (m_args.m_enableTileUpdates && evict)
+            {
+                o->GetStreamingResource()->QueueEviction();
             }
         }
 

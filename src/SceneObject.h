@@ -117,6 +117,8 @@ namespace SceneObjects
         void SetAxis(DirectX::XMVECTOR in_vector) { m_axis.v = in_vector; }
 
         virtual float GetBoundingSphereRadius() { return m_radius; }
+
+        float GetScreenAreaPixels(const SceneObjects::DrawParams& in_drawParams);
     protected:
         // pass in a location in a descriptor heap where this can write 3 descriptors
         BaseObject(
