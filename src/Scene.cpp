@@ -801,11 +801,12 @@ void Scene::LoadSpheres()
             // 3 options: sphere, earth, sky
 
             // only 1 sky, and it must be first because it disables depth when drawn
+            // FIXME? material sorting broke ordering
             if ((nullptr == m_pSky) && (m_args.m_skyTexture.size()))
             {
                 m_pSky = new SceneObjects::Sky(m_args.m_skyTexture, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU);
                 o = m_pSky;
-                float scale = m_universeSize * 2; // FIXME this can grow after sky size has been fixed
+                float scale = m_universeSize * 2; // NOTE: expects universe size to not change
                 o->GetModelMatrix() = DirectX::XMMatrixScaling(scale, scale, scale);
             }
             else if (nullptr == m_pTerrainSceneObject)
@@ -817,6 +818,7 @@ void Scene::LoadSpheres()
             // earth
             else if (m_args.m_earthTexture.size() && (0 == fileIndex))
             {
+                ASSERT(0 == textureFilename.size()); // expect empty; cleared during scene creation
                 if (nullptr == m_pEarth)
                 {
                     sphereProperties.m_mirrorU = false;
@@ -836,7 +838,6 @@ void Scene::LoadSpheres()
             {
                 if (nullptr == m_pFirstSphere)
                 {
-                    sphereProperties.m_mirrorU = true;
                     // use different sphere generator
                     m_pFirstSphere = new SceneObjects::Planet(textureFilename, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU);
                     o = m_pFirstSphere;
@@ -980,6 +981,7 @@ void Scene::PrepareScene()
 
     float minRadius = (float)m_args.m_terrainParams.m_terrainSideSize;
 
+    m_objects.reserve(m_args.m_maxNumObjects);
     m_objectPoses.reserve(m_args.m_maxNumObjects);
     for(UINT i = 0; i < m_args.m_maxNumObjects; i++)
     {
@@ -1182,9 +1184,20 @@ UINT Scene::DetermineMaxNumFeedbackResolves()
 //----------------------------------------------------------
 // draw objects grouped by same pipeline state
 //----------------------------------------------------------
-void Scene::DrawObjectSets(SceneObjects::DrawParams& in_params,
-    ID3D12GraphicsCommandList1* out_pCommandList)
+void Scene::DrawObjectSets(ID3D12GraphicsCommandList1* out_pCommandList)
 {
+    // set common draw state
+    SceneObjects::DrawParams drawParams;
+    drawParams.m_sharedMinMipMap = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
+    drawParams.m_constantBuffers = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), m_frameIndex + (UINT)DescriptorHeapOffsets::FRAME_CBV0, m_srvUavCbvDescriptorSize);
+    drawParams.m_samplers = m_samplerHeap->GetGPUDescriptorHandleForHeapStart();
+    drawParams.m_projection = m_projection;
+    drawParams.m_view = m_viewMatrix;
+    drawParams.m_viewInverse = m_viewMatrixInverse;
+    drawParams.m_windowWidth = m_windowWidth;
+    drawParams.m_windowHeight = m_windowHeight;
+    drawParams.m_fov = m_fieldOfView;
+
     const D3D12_GPU_DESCRIPTOR_HANDLE srvBaseGPU = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::NumEntries, m_srvUavCbvDescriptorSize);
 
     for (auto& set : m_frameObjectSets)
@@ -1202,12 +1215,14 @@ void Scene::DrawObjectSets(SceneObjects::DrawParams& in_params,
             out_pCommandList->SetGraphicsRootSignature(pObject->GetRootSignature());
             out_pCommandList->SetPipelineState(pipelineState);
 
-            pObject->SetCommonGraphicsState(out_pCommandList, in_params);
+            pObject->SetCommonGraphicsState(out_pCommandList, drawParams);
 
             for (auto& o : objects)
             {
-                in_params.m_srvBaseGPU = CD3DX12_GPU_DESCRIPTOR_HANDLE(srvBaseGPU, (INT)(o.index * (INT)SceneObjects::Descriptors::NumEntries), m_srvUavCbvDescriptorSize);
-                o.pObject->Draw(out_pCommandList, in_params);
+                D3D12_GPU_DESCRIPTOR_HANDLE srvGPU = CD3DX12_GPU_DESCRIPTOR_HANDLE(srvBaseGPU, (INT)(o.index * (INT)SceneObjects::Descriptors::NumEntries), m_srvUavCbvDescriptorSize);
+                drawParams.m_texture.ptr = srvGPU.ptr + ((UINT)SceneObjects::Descriptors::HeapOffsetTexture * m_srvUavCbvDescriptorSize);
+                drawParams.m_feedback.ptr = srvGPU.ptr + ((UINT)SceneObjects::Descriptors::HeapOffsetFeedback * m_srvUavCbvDescriptorSize);
+                o.pObject->Draw(out_pCommandList, drawParams);
             }
         }
     }
@@ -1227,17 +1242,6 @@ void Scene::DrawObjects()
     {
         return;
     }
-
-    SceneObjects::DrawParams drawParams;
-    drawParams.m_sharedMinMipMap = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
-    drawParams.m_constantBuffers = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), m_frameIndex + (UINT)DescriptorHeapOffsets::FRAME_CBV0, m_srvUavCbvDescriptorSize);
-    drawParams.m_samplers = m_samplerHeap->GetGPUDescriptorHandleForHeapStart();
-    drawParams.m_projection = m_projection;
-    drawParams.m_view = m_viewMatrix;
-    drawParams.m_viewInverse = m_viewMatrixInverse;
-    drawParams.m_windowWidth = m_windowWidth;
-    drawParams.m_windowHeight = m_windowHeight;
-    drawParams.m_fov = m_fieldOfView;
 
     m_frameObjectSets.clear();
 
@@ -1260,19 +1264,18 @@ void Scene::DrawObjects()
             UINT objectIndex = i % (UINT)m_objects.size();
             auto o = m_objects[objectIndex];
 
+            if (!o->Drawable()) { continue; }
 
-            bool isVisible = o->IsVisible(m_projection);
-
-            // FIXME: idea is to limit feedback to objects large enough to need streaming, that is, > packed mips
-            bool isLarge = isVisible && o->GetScreenAreaPixels(drawParams) > (50 * 50);
+            bool isVisible = o->IsVisible(m_projection); // draw or evict?
+            // FIXME: magic number. idea is, no need to stream texture data to tiny objects
+            bool isLarge = o->GetScreenAreaPixels(m_windowHeight, m_fieldOfView) > (50 * 50);
             // get sampler feedback for this object?
-            bool queueFeedback = isLarge && (numFeedbackObjects < maxNumFeedbackResolves);
+            bool queueFeedback = isVisible && isLarge && (numFeedbackObjects < maxNumFeedbackResolves);
             bool evict = !isVisible;
 
             if (isVisible)
             {
-                o->SetFeedbackEnabled(queueFeedback);
-                // only draw visible objects
+                o->SetFeedbackEnabled(queueFeedback); // must set if false or true
                 // group objects by material (PSO)
                 m_frameObjectSets[o->GetPipelineState()].push_back({ o, objectIndex });
             }
@@ -1302,7 +1305,7 @@ void Scene::DrawObjects()
         m_prevNumFeedbackObjects[m_frameIndex] = numFeedbackObjects;
     }
 
-    DrawObjectSets(drawParams, m_commandList.Get());
+    DrawObjectSets(m_commandList.Get());
 }
 
 //-------------------------------------------------------------------------
@@ -1601,7 +1604,7 @@ void Scene::DrawUI()
     //-------------------------------------------
     // Display various textures
     //-------------------------------------------
-    if (m_args.m_showFeedbackMaps && (nullptr != m_pTerrainSceneObject) && (m_pTerrainSceneObject->GetPackedMipsPresent()))
+    if (m_args.m_showFeedbackMaps && (nullptr != m_pTerrainSceneObject) && (m_pTerrainSceneObject->Drawable()))
     {
         CreateTerrainViewers();
 
@@ -1795,7 +1798,7 @@ bool Scene::WaitForAssetLoad()
 {
     for (const auto o : m_objects)
     {
-        if (!o->GetPackedMipsPresent())
+        if (!o->Drawable())
         {
             // must give SFSManager a chance to process packed mip requests
             D3D12_CPU_DESCRIPTOR_HANDLE minmipmapDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);

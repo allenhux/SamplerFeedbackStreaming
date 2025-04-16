@@ -183,7 +183,7 @@ private:
     };
     typedef std::vector<ObjectIndexPair> ObjectSet;
     std::unordered_map<ID3D12PipelineState*, ObjectSet> m_frameObjectSets;
-    void DrawObjectSets(SceneObjects::DrawParams& in_params, ID3D12GraphicsCommandList1* out_pCommandList);
+    void DrawObjectSets(ID3D12GraphicsCommandList1* out_pCommandList);
 
     void MsaaResolve();
 

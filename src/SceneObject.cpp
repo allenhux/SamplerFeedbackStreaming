@@ -155,18 +155,18 @@ SceneObjects::BaseObject::BaseObject(
     // create streaming resources
     //---------------------------------------
     {
-        m_srvUavCbvDescriptorSize = in_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        UINT srvUavCbvDescriptorSize = in_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
         // The tile update manager queries the streaming texture for its tile dimensions
         // The feedback resource will be allocated with a mip region size matching the tile size
         m_pStreamingResource = in_pSFSManager->CreateResource(in_filename, in_pStreamingHeap);
 
         // sampler feedback view
-        CD3DX12_CPU_DESCRIPTOR_HANDLE feedbackHandle(in_srvBaseCPU, (UINT)Descriptors::HeapOffsetFeedback, m_srvUavCbvDescriptorSize);
+        CD3DX12_CPU_DESCRIPTOR_HANDLE feedbackHandle(in_srvBaseCPU, (UINT)Descriptors::HeapOffsetFeedback, srvUavCbvDescriptorSize);
         m_pStreamingResource->CreateFeedbackView(in_pDevice, feedbackHandle);
 
         // texture view
-        CD3DX12_CPU_DESCRIPTOR_HANDLE textureHandle(in_srvBaseCPU, (UINT)Descriptors::HeapOffsetTexture, m_srvUavCbvDescriptorSize);
+        CD3DX12_CPU_DESCRIPTOR_HANDLE textureHandle(in_srvBaseCPU, (UINT)Descriptors::HeapOffsetTexture, srvUavCbvDescriptorSize);
         m_pStreamingResource->CreateShaderResourceView(in_pDevice, textureHandle);
     }
 }
@@ -348,54 +348,60 @@ UINT SceneObjects::BaseObject::ComputeLod(const float in_distance, const SceneOb
 }
 
 //-------------------------------------------------------------------------
+// do not draw until minimal assets have been created/uploaded
+// streaming resource must have packed mips, geometry loaded, etc.
+//-------------------------------------------------------------------------
+bool SceneObjects::BaseObject::Drawable() const
+{
+    return m_pStreamingResource->GetPackedMipsResident();
+}
+
+//-------------------------------------------------------------------------
 //-------------------------------------------------------------------------
 void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList, const SceneObjects::DrawParams& in_drawParams)
 {
+    ASSERT(Drawable());
+
     //-------------------------------------------
     // draw object to multi-sampled rendertarget
     //-------------------------------------------
-    if (m_pStreamingResource->GetPackedMipsResident())
-    {
         // choose LoD if applicable
-        UINT lod = 0;
-        if (m_lods.size() > 1)
-        {
-            DirectX::XMVECTOR eye = in_drawParams.m_viewInverse.r[3];
-            DirectX::XMVECTOR pos = m_matrix.r[3];
-            DirectX::XMVECTOR direction = DirectX::XMVectorSubtract(pos, eye);
-            float distance = DirectX::XMVectorGetX(DirectX::XMVector3LengthEst(direction));
+    UINT lod = 0;
+    if (m_lods.size() > 1)
+    {
+        DirectX::XMVECTOR eye = in_drawParams.m_viewInverse.r[3];
+        DirectX::XMVECTOR pos = m_matrix.r[3];
+        DirectX::XMVECTOR direction = DirectX::XMVectorSubtract(pos, eye);
+        float distance = DirectX::XMVectorGetX(DirectX::XMVector3LengthEst(direction));
 
-            lod = ComputeLod(distance, in_drawParams);
-        }
-        const auto& geometry = m_lods[lod];
-
-        if (m_feedbackEnabled)
-        {
-            auto feedbackDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(in_drawParams.m_srvBaseGPU,
-                UINT(SceneObjects::Descriptors::HeapOffsetFeedback), m_srvUavCbvDescriptorSize);
-            m_pSFSManager->QueueFeedback(GetStreamingResource(), feedbackDescriptor);
-        }
-
-        // uavs and srvs
-        in_pCommandList->SetGraphicsRootDescriptorTable((UINT)RootSigParams::ParamObjectTextures, in_drawParams.m_srvBaseGPU);
-
-        ModelConstantData modelConstantData{};
-        SetModelConstants(modelConstantData, in_drawParams.m_projection, in_drawParams.m_view);
-        UINT num32BitValues = sizeof(ModelConstantData) / sizeof(UINT32);
-        in_pCommandList->SetGraphicsRoot32BitConstants((UINT)RootSigParams::Param32BitConstants, num32BitValues, &modelConstantData, 0);
-
-        in_pCommandList->IASetIndexBuffer(&geometry.m_indexBufferView);
-        in_pCommandList->IASetVertexBuffers(0, 1, &geometry.m_vertexBufferView);
-        in_pCommandList->DrawIndexedInstanced(geometry.m_numIndices, 1, 0, 0, 0);
+        lod = ComputeLod(distance, in_drawParams);
     }
+    const auto& geometry = m_lods[lod];
+
+    if (m_feedbackEnabled)
+    {
+        m_pSFSManager->QueueFeedback(GetStreamingResource(), in_drawParams.m_feedback);
+    }
+
+    // uavs and srvs
+    in_pCommandList->SetGraphicsRootDescriptorTable((UINT)RootSigParams::ParamObjectTextures, in_drawParams.m_texture);
+
+    ModelConstantData modelConstantData{};
+    SetModelConstants(modelConstantData, in_drawParams.m_projection, in_drawParams.m_view);
+    UINT num32BitValues = sizeof(ModelConstantData) / sizeof(UINT32);
+    in_pCommandList->SetGraphicsRoot32BitConstants((UINT)RootSigParams::Param32BitConstants, num32BitValues, &modelConstantData, 0);
+
+    in_pCommandList->IASetIndexBuffer(&geometry.m_indexBufferView);
+    in_pCommandList->IASetVertexBuffers(0, 1, &geometry.m_vertexBufferView);
+    in_pCommandList->DrawIndexedInstanced(geometry.m_numIndices, 1, 0, 0, 0);
 }
 
 //-----------------------------------------------------------------------------
 // rough approximation of screen area in pixels
 //-----------------------------------------------------------------------------
-float SceneObjects::BaseObject::GetScreenAreaPixels(const SceneObjects::DrawParams& in_drawParams)
+float SceneObjects::BaseObject::GetScreenAreaPixels(UINT in_windowHeight, float in_fov)
 {
-    float pixelScale = in_drawParams.m_windowHeight / std::tanf(in_drawParams.m_fov / 2.f);
+    float pixelScale = in_windowHeight / std::tanf(in_fov / 2.f);
     float radius = GetBoundingSphereRadius();
     float z = DirectX::XMVectorGetW(m_combinedMatrix.r[3]);
     if (z > radius)

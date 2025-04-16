@@ -54,7 +54,8 @@ namespace SceneObjects
 
     struct DrawParams
     {
-        D3D12_GPU_DESCRIPTOR_HANDLE m_srvBaseGPU;
+        D3D12_GPU_DESCRIPTOR_HANDLE m_texture;
+        D3D12_GPU_DESCRIPTOR_HANDLE m_feedback;
         D3D12_GPU_DESCRIPTOR_HANDLE m_sharedMinMipMap;
         D3D12_GPU_DESCRIPTOR_HANDLE m_constantBuffers;
         D3D12_GPU_DESCRIPTOR_HANDLE m_samplers;
@@ -74,7 +75,8 @@ namespace SceneObjects
             m_pStreamingResource->Destroy();
         }
 
-        bool GetPackedMipsPresent() const { return m_pStreamingResource->GetPackedMipsResident(); }
+        // do not draw until minimal assets have been created/uploaded
+        bool Drawable() const;
 
         // state re-used by a number of objects
         void SetCommonGraphicsState(ID3D12GraphicsCommandList1* in_pCommandList, const SceneObjects::DrawParams& in_drawParams);
@@ -118,7 +120,7 @@ namespace SceneObjects
 
         virtual float GetBoundingSphereRadius() { return m_radius; }
 
-        float GetScreenAreaPixels(const SceneObjects::DrawParams& in_drawParams);
+        float GetScreenAreaPixels(UINT in_windowHeight, float in_fov);
     protected:
         // pass in a location in a descriptor heap where this can write 3 descriptors
         BaseObject(
@@ -205,8 +207,6 @@ namespace SceneObjects
         //-----------------------------------
 
         std::wstring GetAssetFullPath(const std::wstring& in_filename);
-
-        UINT m_srvUavCbvDescriptorSize{ 0 };
     };
 
     void CreateSphere(SceneObjects::BaseObject* out_pObject,
