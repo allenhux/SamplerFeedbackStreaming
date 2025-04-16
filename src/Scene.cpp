@@ -901,7 +901,31 @@ void Scene::LoadSpheres()
 //-----------------------------------------------------------------------------
 void Scene::PrepareScene()
 {
+    // is terrain among the textures in the media directory?
+    // this logic will find a texture in the media directory that includes a substring, like "terrain"
+    if (m_args.m_terrainTexture.size())
+    {
+        for (auto i = m_args.m_textures.begin(); i != m_args.m_textures.end(); i++)
+        {
+            if (std::wstring::npos != i->find(m_args.m_terrainTexture))
+            {
+                m_args.m_terrainTexture = *i;
+                m_args.m_textures.erase(i);
+                break;
+            }
+        }
+        if (std::filesystem::exists(m_args.m_terrainTexture))
+        {
+            m_args.m_terrainTexture = std::filesystem::absolute(m_args.m_terrainTexture);
+        }
+        else
+        {
+            m_args.m_terrainTexture.clear();
+        }
+    }
+
     // is there a sky? is it among the textures in the media directory?
+    // this logic will find a texture in the media directory that includes a substring, like "sky"
     if (m_args.m_skyTexture.size())
     {
         for (auto i = m_args.m_textures.begin(); i != m_args.m_textures.end(); i++)
@@ -924,6 +948,8 @@ void Scene::PrepareScene()
     }
 
     // is there an earth? is it among the textures in the media directory?
+    // if so, move it to the beginning and clear it. always draw earth instead of texture 0.
+    // this logic will find a texture in the media directory that includes a substring, like "earth"
     if (m_args.m_earthTexture.size())
     {
         for (auto i = m_args.m_textures.begin(); i != m_args.m_textures.end(); i++)
@@ -931,7 +957,8 @@ void Scene::PrepareScene()
             if (std::wstring::npos != i->find(m_args.m_earthTexture))
             {
                 m_args.m_earthTexture = *i;
-                m_args.m_textures.erase(i);
+                *i = m_args.m_textures[0];
+                m_args.m_textures[0].clear();
                 break;
             }
         }
@@ -942,18 +969,6 @@ void Scene::PrepareScene()
         else
         {
             m_args.m_earthTexture.clear();
-        }
-    }
-
-
-    // if there is more than one texture, remove texture file name from list of textures
-    // NOTE: all file paths should be fully qualified by now
-    if (m_args.m_textures.size() > 1)
-    {
-        auto i = std::find(m_args.m_textures.begin(), m_args.m_textures.end(), m_args.m_terrainTexture);
-        if (m_args.m_textures.end() != i)
-        {
-            m_args.m_textures.erase(i);
         }
     }
 
@@ -1586,7 +1601,7 @@ void Scene::DrawUI()
     //-------------------------------------------
     // Display various textures
     //-------------------------------------------
-    if (m_args.m_showFeedbackMaps && (nullptr != m_pTerrainSceneObject))
+    if (m_args.m_showFeedbackMaps && (nullptr != m_pTerrainSceneObject) && (m_pTerrainSceneObject->GetPackedMipsPresent()))
     {
         CreateTerrainViewers();
 

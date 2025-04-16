@@ -681,7 +681,7 @@ SceneObjects::Sky::Sky(const std::wstring& in_filename,
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     rasterizerDesc.CullMode = D3D12_CULL_MODE_FRONT;
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-    depthStencilDesc.DepthEnable = false;
+    depthStencilDesc.DepthEnable = true; // false; FIXME? if sky was drawn first, could disable depth.
 
     CreatePipelineState(L"skyPS.cso", L"skyPS-FB.cso", L"skyVS.cso", in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc);
 
@@ -691,6 +691,8 @@ SceneObjects::Sky::Sky(const std::wstring& in_filename,
     sphereProperties.m_mirrorU = true;
     sphereProperties.m_topBottom = true;
     CreateSphere(this, in_pDevice, in_assetUploader, sphereProperties);
+
+    m_radius = std::numeric_limits<float>::max();
 }
 
 //-------------------------------------------------------------------------
