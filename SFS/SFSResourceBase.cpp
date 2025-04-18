@@ -459,6 +459,9 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
         } // end if changed
     }
 
+    // if refcount -> 0, treat as though evicted even though resident. memory not recycled until later.
+    // if refcount -> 1+ and resident, treat as though loaded immediately. memory was never released.
+
     // update min mip map to adjust to new references
     // required so the eviction timeout is relative to the current expected mapping
     if (changed)
@@ -612,16 +615,12 @@ UINT SFS::ResourceBase::QueuePendingTileEvictions()
 
         // else: refcount positive or eviction already in progress? rescue this eviction (by not adding to pending evictions)
     }
-#if 1
-    // UpdateTileMappings() calls SetResidencyChanged() as soon as refcount reaches 0
-    // by the time this function is called, it is multiple frames later
-#else
-    // because we aren't unmapping, we aren't calling NotifyEvicted() which would call SetResidencyChanged()
-    if (numEvictions)
-    {
-        SetResidencyChanged();
-    }
-#endif
+
+    // UpdateTileMappings() calls SetResidencyChanged() as soon as refcount reaches 0, so
+    // the minmipmap will already reflect eviction of affected tiles.
+    // This function is called multiple frames later, leaving time for tiles to be Rescue()d.
+    // Do not call SetResidencyChanged() here, as it will cause the minmipmap to be updated again.
+    // i.e. do not: if (numEvictions) { SetResidencyChanged(); }
     // replace the ready evictions with just the delayed evictions.
     pendingEvictions.resize(numDelayed);
     return numEvictions;

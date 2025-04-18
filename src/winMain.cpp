@@ -612,7 +612,7 @@ int WINAPI WinMain(
                     RECT guiRect = g_pScene->GetGuiRect();
                     if (((guiRect.right) < g_mouse.GetPosX()) || (guiRect.bottom < g_mouse.GetPosY()))
                     {
-                        g_pScene->RotateViewPixels(delta.y, delta.x);
+                        g_pScene->RotateViewPixels(delta.x, delta.y);
                     }
                 }
             }

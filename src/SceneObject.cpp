@@ -316,34 +316,38 @@ void SceneObjects::BaseObject::SetCommonGraphicsState(ID3D12GraphicsCommandList1
 // Pick LoD
 // FIXME: need to know size of object on screen, calc triangles/pixel
 //-------------------------------------------------------------------------
-UINT SceneObjects::BaseObject::ComputeLod(const float in_distance, const SceneObjects::DrawParams& in_drawParams)
+UINT SceneObjects::BaseObject::ComputeLod(const SceneObjects::DrawParams& in_drawParams)
 {
     const float radius = GetBoundingSphereRadius();
 
+    float z = DirectX::XMVectorGetZ(GetCombinedMatrix().r[2]);
+    float w = DirectX::XMVectorGetW(GetCombinedMatrix().r[3]);
+
     // within sphere?
-    if (in_distance < radius)
+    if (z < 0)
     {
         return 0;
     }
 
     // rough estimate of the projected radius in pixels:
-    float radiusPixels = (radius / in_distance) *
-        (in_drawParams.m_windowHeight / std::tanf(in_drawParams.m_fov / 2.f));
-
+    const float cotWdiv2 = 1.f / std::tanf(in_drawParams.m_fov / 2);
+    const float radiusScreen = radius / w * cotWdiv2;
+    const float radiusPixels = in_drawParams.m_windowHeight * radiusScreen;
     float areaPixels = DirectX::XM_PI * radiusPixels * radiusPixels;
 
     UINT lod = (UINT)m_lods.size() - 1; // least triangles
     while (lod > 0)
     {
         UINT numTriangles = m_lods[lod - 1].m_numIndices / 3;
-        float pixelsPerTriangle = areaPixels / numTriangles;
-        if (pixelsPerTriangle < SharedConstants::SPHERE_LOD_BIAS)
+        numTriangles /= 2; // half the triangles are back-facing
+        if (areaPixels / numTriangles < SharedConstants::SPHERE_LOD_BIAS)
         {
             break;
         }
         lod--;
     }
 
+    DebugPrint(lod, " ", w);
     return lod;
 }
 
@@ -369,12 +373,7 @@ void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList,
     UINT lod = 0;
     if (m_lods.size() > 1)
     {
-        DirectX::XMVECTOR eye = in_drawParams.m_viewInverse.r[3];
-        DirectX::XMVECTOR pos = m_matrix.r[3];
-        DirectX::XMVECTOR direction = DirectX::XMVectorSubtract(pos, eye);
-        float distance = DirectX::XMVectorGetX(DirectX::XMVector3LengthEst(direction));
-
-        lod = ComputeLod(distance, in_drawParams);
+        lod = ComputeLod(in_drawParams);
     }
     const auto& geometry = m_lods[lod];
 
@@ -608,33 +607,28 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
 //-------------------------------------------------------------------------
 // visibility of sphere for frustum culling
 //-------------------------------------------------------------------------
-bool SceneObjects::Planet::IsVisible(const DirectX::XMMATRIX& in_projection)
+bool SceneObjects::Planet::IsVisible(const DirectX::XMMATRIX& in_projection, const float in_zFar)
 {
     const DirectX::XMVECTOR pos = GetCombinedMatrix().r[3];
     const float radius = GetBoundingSphereRadius();
 
-    // projected z has visible range 0..zFar
+    // z has visible range 0..zFar
     // account for radius of sphere to handle edge case where center is behind camera
     float z = DirectX::XMVectorGetZ(pos);
-    if (z + radius < 0)
+    if ((z + radius < 0) || (z - radius > in_zFar))
     {
         return false;
     }
 
-    // ignore far plane (for now)
-#if 0
-    float w = DirectX::XMVectorGetW(pos);
-    float q = DirectX::XMVectorGetZ(in_projection.r[2]);
-    if ((z - q*radius)/w > 1.f) // WARNING div by 0 possible
-    {
-        return false;
-    }
-#endif
+    // FIXME? work around for objects going through w = 0
+    // edge case of objects centered behind view that are potentially visible
+    if (z < 0) { return true; }
 
     // pull fov scales out of the projection matrix
-    // add in a 10% margin. FIXME? y seems accurate with no margin, but x can have error.
-    float rx = 1.1f * radius * DirectX::XMVectorGetX(in_projection.r[0]); // (cot FOVwidth / 2)
-    float ry = 1.1f * radius * DirectX::XMVectorGetY(in_projection.r[1]); // (cot FOVheight / 2)
+    // add in a margin, this is a rough estimate
+    // FIXME! breaks when rotating view and object approaches zNear
+    float rx = 1.25f * radius * DirectX::XMVectorGetX(in_projection.r[0]); // (cot FOVwidth / 2)
+    float ry = 1.25f * radius * DirectX::XMVectorGetY(in_projection.r[1]); // (cot FOVheight / 2)
 
     float x = DirectX::XMVectorGetX(pos);
     float y = DirectX::XMVectorGetY(pos);
@@ -644,8 +638,10 @@ bool SceneObjects::Planet::IsVisible(const DirectX::XMMATRIX& in_projection)
     // multiply through by w, and flip the comparisons so always doing greater than:
     float w = DirectX::XMVectorGetW(pos);
 
+    ASSERT(w > 0);
+
     // flip the comparison when w is negative
-    if (w < 0) { w *= -1; }
+    // if (w < 0) { w *= -1; }
 
     DirectX::XMVECTOR wv = DirectX::XMVectorReplicate(w);
     DirectX::XMVECTOR verts = DirectX::XMVectorSet(-(x + rx), x - rx, -(y + ry), y - ry);

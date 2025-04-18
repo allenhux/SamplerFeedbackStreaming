@@ -91,7 +91,7 @@ namespace SceneObjects
             return m_feedbackEnabled ? m_pipelineStateFB.Get() : m_pipelineState.Get();
         }
 
-        virtual bool IsVisible([[maybe_unused]] const DirectX::XMMATRIX& in_projection) { return true; }
+        virtual bool IsVisible([[maybe_unused]] const DirectX::XMMATRIX& in_projection, [[maybe_unused]]const float in_zFar ) { return true; }
         virtual void Draw(ID3D12GraphicsCommandList1* in_pCommandList, const DrawParams& in_drawParams);
 
         DirectX::XMMATRIX& GetModelMatrix() { return m_matrix; }
@@ -155,7 +155,7 @@ namespace SceneObjects
 
         SFSResource* m_pStreamingResource{ nullptr };
 
-        UINT ComputeLod(const float in_distance, const SceneObjects::DrawParams& in_drawParams);
+        UINT ComputeLod(const SceneObjects::DrawParams& in_drawParams);
 
         void CreatePipelineState(
             const wchar_t* in_ps, const wchar_t* in_psFB, const wchar_t* in_vs,
@@ -253,7 +253,7 @@ namespace SceneObjects
             UINT in_sampleCount,
             D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU);
 
-        bool IsVisible(const DirectX::XMMATRIX& in_projection) override;
+        bool IsVisible(const DirectX::XMMATRIX& in_projection, const float in_zFar) override;
         float GetBoundingSphereRadius() override;
     };
 

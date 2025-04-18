@@ -320,10 +320,11 @@ void Scene::RotateViewKey(int in_x, int in_y, int in_z)
 
 void Scene::RotateViewPixels(int in_x, int in_y)
 {
-    float xRadians = (sin(m_fieldOfView) / m_viewport.Width) * 2.0f;
+    float xRadians = m_fieldOfView / m_viewport.Width;
     float x = float(in_x) * xRadians;
-    float y = float(in_y) * xRadians;
-    RotateView(x, y, 0);
+    float yRadians = xRadians * m_viewport.Width / m_viewport.Height;
+    float y = float(in_y) * yRadians;
+    RotateView(y, x, 0);
 }
 
 //-----------------------------------------------------------------------------
@@ -434,9 +435,7 @@ void Scene::Resize()
         m_viewport = CD3DX12_VIEWPORT(0.0f, 0.0f, static_cast<FLOAT>(width), static_cast<FLOAT>(height));
         m_scissorRect = CD3DX12_RECT(0, 0, width, height);
         m_aspectRatio = m_viewport.Width / m_viewport.Height;
-        float nearZ = 1.0f;
-        float farZ = 100000.0f;
-        m_projection = DirectX::XMMatrixPerspectiveFovLH(m_fieldOfView, m_aspectRatio, nearZ, farZ);
+        m_projection = DirectX::XMMatrixPerspectiveFovLH(m_fieldOfView / 2, m_aspectRatio, m_zNear, m_zFar);
 
         for (UINT i = 0; i < m_swapBufferCount; i++)
         {
@@ -1266,7 +1265,7 @@ void Scene::DrawObjects()
 
             if (!o->Drawable()) { continue; }
 
-            bool isVisible = o->IsVisible(m_projection); // draw or evict?
+            bool isVisible = o->IsVisible(m_projection, m_zFar); // draw or evict?
             // FIXME: magic number. idea is, no need to stream texture data to tiny objects
             bool isLarge = o->GetScreenAreaPixels(m_windowHeight, m_fieldOfView) > (50 * 50);
             // get sampler feedback for this object?
