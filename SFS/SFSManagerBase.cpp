@@ -262,14 +262,10 @@ void SFS::ManagerBase::ProcessFeedbackThread()
 }
 
 //-----------------------------------------------------------------------------
-// flushes all internal queues
-// submits all outstanding command lists
-// stops all processing threads
+// stop only SFSManager threads. Used by Finish() and CreateResource()
 //-----------------------------------------------------------------------------
-void SFS::ManagerBase::Finish()
+void SFS::ManagerBase::StopThreads()
 {
-    ASSERT(!GetWithinFrame());
- 
     if (m_threadsRunning)
     {
         // stop SFSManager threads
@@ -291,6 +287,19 @@ void SFS::ManagerBase::Finish()
             m_updateResidencyThread.join();
         }
     }
+}
+
+//-----------------------------------------------------------------------------
+// flushes all internal queues
+// submits all outstanding command lists
+// stops all processing threads
+//-----------------------------------------------------------------------------
+void SFS::ManagerBase::Finish()
+{
+    ASSERT(!GetWithinFrame());
+ 
+    StopThreads();
+
     // now we are no longer producing work for the DataUploader, so its commands can be drained
     m_dataUploader.FlushCommands();
 }

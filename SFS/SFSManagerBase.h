@@ -138,6 +138,7 @@ namespace SFS
 
         void StartThreads();
         void ProcessFeedbackThread();
+        void StopThreads(); // stop only SFSManager threads. Used by Finish() and CreateResource()
 
         //---------------------------------------------------------------------------
         // SFSM creates 2 command lists to be executed Before & After application draw

@@ -347,7 +347,6 @@ UINT SceneObjects::BaseObject::ComputeLod(const SceneObjects::DrawParams& in_dra
         lod--;
     }
 
-    DebugPrint(lod, " ", w);
     return lod;
 }
 

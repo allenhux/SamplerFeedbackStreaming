@@ -87,6 +87,7 @@ SFS::ResourceBase::ResourceBase(
     else
     {
         // no packed mips. odd, but possible. no need to check/update this variable again.
+        // NOTE: in this case, for simplicity, initialize now (usually deferred)
         m_packedMipStatus = PackedMipStatus::RESIDENT;
         m_resources->Initialize(m_pSFSManager->GetDevice());
     }

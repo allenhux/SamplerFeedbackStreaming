@@ -67,7 +67,7 @@ SFSHeap* SFS::ManagerBase::CreateHeap(UINT in_maxNumTilesHeap)
 SFSResource* SFS::ManagerBase::CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap)
 {
     // if threads are running, stop them. they have state that depends on knowing the # of StreamingResources
-    Finish();
+    StopThreads(); // NOTE: leaves DataUploader threads running
 
     SFS::FileHandle* pFileHandle = m_dataUploader.OpenFile(in_filename);
     auto pRsrc = new SFS::ResourceBase(in_filename, pFileHandle, (SFS::ManagerSR*)this, (SFS::Heap*)in_pHeap);
