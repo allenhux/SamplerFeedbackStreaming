@@ -75,6 +75,8 @@ void SFS::ResourceDU::NotifyCopyComplete(const std::vector<D3D12_TILED_RESOURCE_
 
     SetResidencyChanged();
 }
+#if 0
+// NOTE: dead code. currently not un-mapping tiles
 
 //-----------------------------------------------------------------------------
 // DataUploader has completed updating a reserved texture tile
@@ -90,7 +92,7 @@ void SFS::ResourceDU::NotifyEvicted(const std::vector<D3D12_TILED_RESOURCE_COORD
 
     SetResidencyChanged();
 }
-
+#endif
 //-----------------------------------------------------------------------------
 // our packed mips have arrived!
 //-----------------------------------------------------------------------------

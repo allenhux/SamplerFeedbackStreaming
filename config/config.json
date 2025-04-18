@@ -49,7 +49,7 @@
   "numSpheres": 0, // number of objects besides the terrain
   "lightFromView": false, // light direction is look direction
 
-  "maxFeedbackTime": 0.75, // target milliseconds for GPU to resolve feedback
+  "maxFeedbackTime": 2, // target milliseconds for GPU to resolve feedback
 
   "visualizeMinMip": false, // color overlayed onto texture by PS corresponding to mip level
   "hideFeedback": false, // hide the terrain feedback windows

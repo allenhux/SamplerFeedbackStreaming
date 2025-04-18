@@ -403,6 +403,9 @@ void SFS::DataUploader::FenceMonitorThread()
         case UpdateList::State::STATE_MAP_PENDING:
             if (updateList.m_mappingFenceValue <= m_mappingFence->GetCompletedValue())
             {
+#if 0
+                // NOTE: dead code. currently not un-mapping tiles
+
                 // notify evictions
                 if (updateList.GetNumEvictions())
                 {
@@ -410,7 +413,7 @@ void SFS::DataUploader::FenceMonitorThread()
 
                     m_numTotalEvictions.fetch_add(updateList.GetNumEvictions(), std::memory_order_relaxed);
                 }
-
+#endif
                 // notify regular tiles
                 if (updateList.GetNumStandardUpdates())
                 {

@@ -226,9 +226,9 @@ namespace SFS
 
             UINT32& GetHeapIndex(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) { return m_heapIndices[in_coord.Subresource][in_coord.Y][in_coord.X]; }
 
-            // checks refcount of bottom-most non-packed tile(s). If none are in use, we know nothing is resident.
-            // used in UpdateMinMipMap()
-            bool GetAnyRefCount();
+            // searches refcount of bottom-most non-packed tile(s). If none are in use, we know nothing is resident.
+            // used in both UpdateMinMipMap() and ProcessFeedback()
+            bool GetAnyRefCount() const;
 
             // return true if all bottom layer standard tiles are resident
             // Can accelerate UpdateMinMipMap()
@@ -278,9 +278,14 @@ namespace SFS
             void Clear();
 
             // drop pending evictions for tiles that now have non-zero refcount
+            // return true if tiles were rescued
             void Rescue(const TileMappingState& in_tileMappingState);
+
+            // total # tiles being tracked
+            UINT Size() const { return m_totalPendingEvicitions; }
         private:
             std::list<MappingCoords> m_mappings;
+            UINT m_totalPendingEvicitions{ 0 }; // sum of sizes of all arrays
         };
         EvictionDelay m_pendingEvictions;
 
@@ -318,7 +323,7 @@ namespace SFS
         };
         std::vector<QueuedFeedback> m_queuedFeedback;
 
-        // update internal mapping and refcounts for each tile
+        // update internal refcounts based on the incoming minimum mip
         void SetMinMip(UINT8 in_current, UINT in_x, UINT in_y, UINT in_s);
 
         // AddRef, which requires allocation, might fail

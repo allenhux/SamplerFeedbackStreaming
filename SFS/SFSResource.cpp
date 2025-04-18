@@ -110,7 +110,10 @@ bool SFS::ResourceBase::GetPackedMipsResident() const
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::QueueEviction()
 {
-    m_setZeroRefCounts = true;
+    if (!m_refCountsZero)
+    {
+        m_setZeroRefCounts = true;
+    }
 }
 
 //-----------------------------------------------------------------------------

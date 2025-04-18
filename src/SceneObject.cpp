@@ -632,8 +632,9 @@ bool SceneObjects::Planet::IsVisible(const DirectX::XMMATRIX& in_projection)
 #endif
 
     // pull fov scales out of the projection matrix
-    float rx = 2 * radius * DirectX::XMVectorGetX(in_projection.r[0]); // (cot FOVwidth / 2)
-    float ry = 2 * radius * DirectX::XMVectorGetY(in_projection.r[1]); // (cot FOVheight / 2)
+    // add in a 10% margin. FIXME? y seems accurate with no margin, but x can have error.
+    float rx = 1.1f * radius * DirectX::XMVectorGetX(in_projection.r[0]); // (cot FOVwidth / 2)
+    float ry = 1.1f * radius * DirectX::XMVectorGetY(in_projection.r[1]); // (cot FOVheight / 2)
 
     float x = DirectX::XMVectorGetX(pos);
     float y = DirectX::XMVectorGetY(pos);
