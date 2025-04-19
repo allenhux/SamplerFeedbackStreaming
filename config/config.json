@@ -45,7 +45,7 @@
   "earthTexture": "earth", // when a texture containing this string is encountered, treat it as a mercator projection (no uv mirror)
   "terrainTexture": "4kTiles.xet", // use this texture only for the terrain, no planets
 
-  "maxNumObjects": 50, // maximum total number of objects in the scene
+  "maxNumObjects": 5000, // maximum total number of objects in the scene
   "numSpheres": 0, // number of objects besides the terrain
   "lightFromView": false, // light direction is look direction
 
