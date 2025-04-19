@@ -142,6 +142,10 @@ struct SFSManagerDesc
     // true: use Microsoft DirectStorage. false: use internal file streaming system
     // NOTE: internal file streaming system does not support DirectStorage compression
     bool m_useDirectStorage{ true };
+
+    // Remember things that are required for later trace file capture
+    // Start trace file capture by later calling CaptureTraceFile()
+    bool m_traceCaptureMode{ false };
 };
 
 //=============================================================================

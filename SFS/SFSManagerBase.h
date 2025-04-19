@@ -202,6 +202,7 @@ namespace SFS
         // statistics
         //-------------------------------------------
         std::atomic<UINT> m_numTotalSubmits{ 0 };
+        const bool m_traceCaptureMode{ false };
     };
 }
 /*

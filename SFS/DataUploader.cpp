@@ -140,7 +140,7 @@ void SFS::DataUploader::SubmitTextureLoadsFromMemory()
 // releases ownership of and returns the old streamer
 // calling function may need to delete some other resources before deleting the streamer
 //-----------------------------------------------------------------------------
-SFS::FileStreamer* SFS::DataUploader::SetStreamer(StreamerType in_streamerType)
+SFS::FileStreamer* SFS::DataUploader::SetStreamer(StreamerType in_streamerType, bool in_traceCaptureMode)
 {
     StopThreads();
 
@@ -159,7 +159,8 @@ SFS::FileStreamer* SFS::DataUploader::SetStreamer(StreamerType in_streamerType)
     }
     else
     {
-        m_pFileStreamer = std::make_unique<SFS::FileStreamerDS>(device.Get(), m_dsFactory.Get());
+        m_pFileStreamer = std::make_unique<SFS::FileStreamerDS>(device.Get(),
+            m_dsFactory.Get(), in_traceCaptureMode);
     }
 
     StartThreads();

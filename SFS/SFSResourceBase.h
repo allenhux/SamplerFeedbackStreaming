@@ -160,8 +160,6 @@ namespace SFS
         UINT GetNumTilesHeight() const { return m_tileReferencesHeight; }
 
     protected:
-        const std::wstring m_filename;
-
         // object that streams data from a file
         SFS::XeTexture m_textureFileInfo;
         std::unique_ptr<SFS::InternalResources> m_resources;

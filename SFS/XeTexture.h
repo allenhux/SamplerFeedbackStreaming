@@ -56,6 +56,7 @@ namespace SFS
 
         XeTexture(const std::wstring& in_filename);
         void LoadTileInfo();
+        const std::wstring& GetFileName() const { return m_fileName; }
     protected:
         XeTexture(const XeTexture&) = delete;
         XeTexture(XeTexture&&) = delete;
@@ -65,12 +66,12 @@ namespace SFS
         static const UINT MIN_STRIDE_BYTES{ 256 };
         static const UINT NUM_BYTES_PER_TILE{ D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES }; // tiles are always 64KB in size
 
+        const std::wstring m_fileName;
         XetFileHeader m_fileHeader;
 
         std::vector<XetFileHeader::SubresourceInfo> m_subresourceInfo;
         std::vector<XetFileHeader::TileData> m_tileOffsets;
 
         UINT GetLinearIndex(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) const;
-        std::wstring m_fileName;
     };
 }

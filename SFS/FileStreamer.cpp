@@ -71,7 +71,7 @@ BYTE SFS::FileStreamer::m_BC1[SFS::FileStreamer::m_lutSize][D3D12_TILED_RESOURCE
 //-----------------------------------------------------------------------------
 // constructor
 //-----------------------------------------------------------------------------
-SFS::FileStreamer::FileStreamer(ID3D12Device* in_pDevice)
+SFS::FileStreamer::FileStreamer(ID3D12Device* in_pDevice, bool in_traceCaptureMode) : m_traceCaptureMode(in_traceCaptureMode)
 {
     in_pDevice->CreateFence(m_copyFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_copyFence));
     m_copyFence->SetName(L"FileStreamer::m_copyFence");
@@ -93,6 +93,11 @@ SFS::FileStreamer::FileStreamer(ID3D12Device* in_pDevice)
         // FIXME? add more formats
         InitializeBC7();
         InitializeBC1();
+    }
+
+    if (m_traceCaptureMode)
+    {
+        m_traces.resize(1);
     }
 }
 
@@ -152,7 +157,7 @@ SFS::FileStreamer::~FileStreamer()
 //-----------------------------------------------------------------------------
 void SFS::FileStreamer::TraceRequest(
     ID3D12Resource* in_pDstResource, const D3D12_TILED_RESOURCE_COORDINATE& in_dstCoord,
-    const DSTORAGE_REQUEST& in_request, const std::wstring& in_fileName)
+    const DSTORAGE_REQUEST& in_request)
 {
     m_traces.back().push_back({ in_pDstResource, in_dstCoord,
         in_request.Source.File.Source, in_request.Source.File.Offset,
@@ -162,17 +167,6 @@ void SFS::FileStreamer::TraceRequest(
     if (!m_tracingResources.contains(in_pDstResource))
     {
         m_tracingResources[in_pDstResource] = in_pDstResource->GetDesc();
-    }
-
-    // find file it is reading from
-    if (!m_files.contains(in_request.Source.File.Source))
-    {
-        std::wstring path = std::filesystem::path(in_fileName).filename();
-        const wchar_t* pChars = path.c_str();
-        int buf_len = ::WideCharToMultiByte(CP_UTF8, 0, pChars, -1, NULL, 0, NULL, NULL);
-        std::string filename(buf_len, ' ');
-        ::WideCharToMultiByte(CP_UTF8, 0, pChars, -1, filename.data(), buf_len, NULL, NULL);
-        m_files[in_request.Source.File.Source] = filename;
     }
 }
 

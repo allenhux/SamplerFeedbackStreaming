@@ -42,9 +42,10 @@ SFS::FileStreamerDS::FileHandleDS::FileHandleDS(IDStorageFactory* in_pFactory, c
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-SFS::FileStreamerDS::FileStreamerDS(ID3D12Device* in_pDevice, IDStorageFactory* in_pDSfactory) :
+SFS::FileStreamerDS::FileStreamerDS(ID3D12Device* in_pDevice, IDStorageFactory* in_pDSfactory,
+    bool in_traceCaptureMode) :
     m_pFactory(in_pDSfactory),
-    SFS::FileStreamer(in_pDevice)
+    SFS::FileStreamer(in_pDevice, in_traceCaptureMode)
 {
     DSTORAGE_QUEUE_DESC queueDesc{};
     queueDesc.Capacity = DSTORAGE_MAX_QUEUE_CAPACITY;
@@ -73,7 +74,17 @@ IDStorageFile* SFS::FileStreamerDS::GetFileHandle(const SFS::FileHandle* in_pHan
 //-----------------------------------------------------------------------------
 SFS::FileHandle* SFS::FileStreamerDS::OpenFile(const std::wstring& in_path)
 {
-    return new FileHandleDS(m_pFactory, in_path);
+    auto h = new FileHandleDS(m_pFactory, in_path);
+    if (m_traceCaptureMode)
+    {
+        std::wstring fileName = std::filesystem::path(in_path).filename();
+        const wchar_t* pChars = fileName.c_str();
+        int buf_len = ::WideCharToMultiByte(CP_UTF8, 0, pChars, -1, NULL, 0, NULL, NULL);
+        std::string filename(buf_len, ' ');
+        ::WideCharToMultiByte(CP_UTF8, 0, pChars, -1, filename.data(), buf_len, NULL, NULL);
+        m_files[h->GetHandle()] = filename;
+    }
+    return h;
 }
 
 //-----------------------------------------------------------------------------
@@ -137,7 +148,7 @@ void SFS::FileStreamerDS::StreamTexture(SFS::UpdateList& in_updateList)
 
             if (m_captureTrace)
             {
-                TraceRequest(pAtlas, coord, request, in_updateList.m_pResource->GetFileName());
+                TraceRequest(pAtlas, coord, request);
             }
         }
     }

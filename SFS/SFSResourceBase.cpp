@@ -58,7 +58,6 @@ SFS::ResourceBase::ResourceBase(
     , m_pendingEvictions(in_pSFSManager->GetEvictionDelay())
     , m_pHeap(in_pHeap)
     , m_pFileHandle(in_pFileHandle)
-    , m_filename(in_filename)
     , m_textureFileInfo(in_filename)
 {
     m_resources = std::make_unique<SFS::InternalResources>(in_pSFSManager->GetDevice(), m_textureFileInfo, (UINT)m_queuedFeedback.size());
@@ -842,7 +841,7 @@ void SFS::ResourceBase::EvictionDelay::Rescue(const SFS::ResourceBase::TileMappi
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::SetFileHandle(const DataUploader* in_pDataUploader)
 {
-    m_pFileHandle.reset(in_pDataUploader->OpenFile(m_filename));
+    m_pFileHandle.reset(in_pDataUploader->OpenFile(m_textureFileInfo.GetFileName()));
 }
 
 //-----------------------------------------------------------------------------

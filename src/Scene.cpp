@@ -668,6 +668,7 @@ void Scene::StartStreamingLibrary()
     desc.m_useDirectStorage = m_args.m_useDirectStorage;
     desc.m_threadPriority = (SFSManagerDesc::ThreadPriority)m_args.m_threadPriority;
     desc.m_evictionDelay = m_args.m_evictionDelay;
+    desc.m_traceCaptureMode = m_args.m_captureTrace;
 
     m_pSFSManager = SFSManager::Create(desc);
 

@@ -35,7 +35,7 @@ namespace SFS
     class FileStreamerDS : public FileStreamer
     {
     public:
-        FileStreamerDS(ID3D12Device* in_pDevice, IDStorageFactory* in_pFactory);
+        FileStreamerDS(ID3D12Device* in_pDevice, IDStorageFactory* in_pFactory, bool in_traceCaptureMode);
         virtual ~FileStreamerDS();
 
         virtual FileHandle* OpenFile(const std::wstring& in_path) override;

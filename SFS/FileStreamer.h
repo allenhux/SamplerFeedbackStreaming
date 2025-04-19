@@ -46,7 +46,7 @@ namespace SFS
     class FileStreamer
     {
     public:
-        FileStreamer(ID3D12Device* in_pDevice);
+        FileStreamer(ID3D12Device* in_pDevice, bool in_traceCaptureMode = false);
         virtual ~FileStreamer();
 
         virtual FileHandle* OpenFile(const std::wstring& in_path) = 0;
@@ -70,6 +70,8 @@ namespace SFS
 
         void CaptureTraceFile(bool in_captureTrace) { m_captureTrace = in_captureTrace; } // enable/disable writing requests/submits to a trace file
     protected:
+        const bool m_traceCaptureMode{ false };
+
         // copy queue fence
         ComPtr<ID3D12Fence> m_copyFence;
 
@@ -93,18 +95,18 @@ namespace SFS
 
         // trace file
         bool m_captureTrace{ false };
+        // map file handles to path strings
+        std::unordered_map<const void*, std::string> m_files;
 
         void TraceRequest(
             ID3D12Resource* in_pDstResource, const D3D12_TILED_RESOURCE_COORDINATE& in_dstCoord,
-            const DSTORAGE_REQUEST& in_request, const std::wstring& in_fileName);
+            const DSTORAGE_REQUEST& in_request);
         void TraceSubmit();
     private:
         bool m_firstSubmit{ true };
         JsonParser m_trace; // array of submits, each submit is an array of requests
         // map textures to descriptions so they can be properly re-created during playback
         std::unordered_map<ID3D12Resource*, D3D12_RESOURCE_DESC> m_tracingResources;
-        // map file handles to path strings
-        std::unordered_map<const void*, std::string> m_files;
         struct Trace
         {
             ID3D12Resource* m_pDstResource;

@@ -92,7 +92,7 @@ void SFS::ManagerBase::UseDirectStorage(bool in_useDS)
         streamerType = SFS::DataUploader::StreamerType::DirectStorage;
     }
 
-    auto pOldStreamer = m_dataUploader.SetStreamer(streamerType);
+    auto pOldStreamer = m_dataUploader.SetStreamer(streamerType, m_traceCaptureMode);
 
     for (auto& s : m_streamingResources)
     {
@@ -162,6 +162,7 @@ void SFS::ManagerBase::SetVisualizationMode(UINT in_mode)
 
 void SFS::ManagerBase::CaptureTraceFile(bool in_captureTrace)
 {
+    ASSERT(m_traceCaptureMode); // must enable at creation time by setting SFSManagerDesc::m_traceCaptureMode
     m_dataUploader.CaptureTraceFile(in_captureTrace);
 }
 

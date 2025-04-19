@@ -51,7 +51,7 @@ namespace SFS
         ID3D12Resource* GetTiledResource() const { return m_resources->GetTiledResource(); }
 
         const FileHandle* GetFileHandle() const { return m_pFileHandle.get(); }
-        const std::wstring& GetFileName() const { return m_filename; }
+        const std::wstring& GetFileName() const { return m_textureFileInfo.GetFileName(); }
 
         // packed mips are treated differently from regular tiles: they aren't tracked by the data structure, and share heap indices
         void GetPackedMipInfo(UpdateList& out_updateList);

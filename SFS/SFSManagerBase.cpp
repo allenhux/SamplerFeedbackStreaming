@@ -52,6 +52,7 @@ m_numSwapBuffers(in_desc.m_swapChainBufferCount)
 , m_minNumUploadRequests(in_desc.m_minNumUploadRequests)
 , m_threadPriority((int)in_desc.m_threadPriority)
 , m_dataUploader(in_pDevice, in_desc.m_maxNumCopyBatches, in_desc.m_stagingBufferSizeMB, in_desc.m_maxTileMappingUpdatesPerApiCall, (int)in_desc.m_threadPriority)
+, m_traceCaptureMode{in_desc.m_traceCaptureMode}
 {
     ASSERT(D3D12_COMMAND_LIST_TYPE_DIRECT == m_directCommandQueue->GetDesc().Type);
 
@@ -89,7 +90,6 @@ SFS::ManagerBase::~ManagerBase()
     // force DataUploader to flush now, rather than waiting for its destructor
     Finish();
 }
-
 
 //-----------------------------------------------------------------------------
 // kick off threads that continuously streams tiles

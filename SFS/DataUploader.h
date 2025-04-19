@@ -77,7 +77,7 @@ namespace SFS
             Reference,
             DirectStorage
         };
-        SFS::FileStreamer* SetStreamer(StreamerType in_streamerType);
+        SFS::FileStreamer* SetStreamer(StreamerType in_streamerType, bool in_traceCaptureMode);
 
         //----------------------------------
         // statistics and visualization
