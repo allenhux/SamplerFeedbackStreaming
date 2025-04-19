@@ -55,6 +55,7 @@ namespace SFS
         UINT GetPackedMipFileOffset(UINT* out_pNumBytesTotal, UINT* out_pNumBytesUncompressed) const;
 
         XeTexture(const std::wstring& in_filename);
+        void LoadTileInfo();
     protected:
         XeTexture(const XeTexture&) = delete;
         XeTexture(XeTexture&&) = delete;
@@ -70,5 +71,6 @@ namespace SFS
         std::vector<XetFileHeader::TileData> m_tileOffsets;
 
         UINT GetLinearIndex(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) const;
+        std::wstring m_fileName;
     };
 }

@@ -107,18 +107,18 @@ void SFS::DataUploader::InitDirectStorage(ID3D12Device* in_pDevice)
 //-----------------------------------------------------------------------------
 // handle request to load a texture from cpu memory
 // used for packed mips, which don't participate in fine-grained streaming
+// FIXME: dead and busted.
 //-----------------------------------------------------------------------------
 void SFS::DataUploader::LoadTextureFromMemory(SFS::UpdateList& out_updateList)
 {
-    UINT uncompressedSize = 0;
-    auto& textureBytes = out_updateList.m_pResource->GetPaddedPackedMips(uncompressedSize);
+    UpdateList::PackedMip packedMip{ .m_coord = out_updateList.m_coords[0] };
 
     DSTORAGE_REQUEST request = {};
     request.Options.SourceType = DSTORAGE_REQUEST_SOURCE_MEMORY;
     request.Options.DestinationType = DSTORAGE_REQUEST_DESTINATION_MULTIPLE_SUBRESOURCES;
-    request.Source.Memory.Source = textureBytes.data();
-    request.Source.Memory.Size = (UINT32)textureBytes.size();
-    request.UncompressedSize = uncompressedSize;
+    request.Source.Memory.Source = 0; // FIXME
+    request.Source.Memory.Size = packedMip.m_mipInfo.numBytes;
+    request.UncompressedSize = packedMip.m_mipInfo.uncompressedSize;
     request.Destination.MultipleSubresources.Resource = out_updateList.m_pResource->GetTiledResource();
     request.Destination.MultipleSubresources.FirstSubresource = out_updateList.m_pResource->GetPackedMipInfo().NumStandardMips;
     request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)out_updateList.m_pResource->GetTextureFileInfo()->GetCompressionFormat();
@@ -368,18 +368,23 @@ void SFS::DataUploader::FenceMonitorThread()
             // wait for mapping complete before streaming packed tiles
             if (m_mappingFence->GetCompletedValue() >= updateList.m_mappingFenceValue)
             {
-                LoadTextureFromMemory(updateList);
+                updateList.m_pResource->GetPackedMipInfo(updateList);
+                m_pFileStreamer->StreamPackedMips(updateList);
 
-                loadPackedMips = true; // set flag to signal fence
+                loadPackedMips = true;
                 updateList.m_executionState = UpdateList::State::STATE_PACKED_COPY_PENDING;
             }
-            break;
+            else
+            {
+                break;
+            }
+            [[fallthrough]];
 
         case UpdateList::State::STATE_PACKED_COPY_PENDING:
-            ASSERT(0 == updateList.GetNumStandardUpdates());
+            ASSERT(1 == updateList.GetNumStandardUpdates());
             ASSERT(0 == updateList.GetNumEvictions());
 
-            if (m_memoryFence->GetCompletedValue() >= updateList.m_copyFenceValue)
+            if ((updateList.m_copyFenceValid) && m_pFileStreamer->GetCompleted(updateList.m_copyFenceValue))
             {
                 updateList.m_pResource->NotifyPackedMips();
                 freeUpdateList = true;
@@ -445,7 +450,8 @@ void SFS::DataUploader::FenceMonitorThread()
 
     if (loadPackedMips)
     {
-        SubmitTextureLoadsFromMemory();
+        // DS Filestreamer may need a nudge if small amounts of data to move
+        m_pFileStreamer->Signal();
     }
 }
 

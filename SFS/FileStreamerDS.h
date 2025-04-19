@@ -40,6 +40,7 @@ namespace SFS
 
         virtual FileHandle* OpenFile(const std::wstring& in_path) override;
         virtual void StreamTexture(SFS::UpdateList& in_updateList) override;
+        virtual void StreamPackedMips(SFS::UpdateList& in_updateList) override;
 
         // for DS, we don't have a way to batch batches
         // this allows the calling thread to periodically request Submit() vs. every enqueue

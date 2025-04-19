@@ -46,6 +46,8 @@ namespace SFS
 
         virtual void StreamTexture(SFS::UpdateList& in_updateList) override;
 
+        virtual void StreamPackedMips(SFS::UpdateList& in_updateList) override;
+
         virtual void Signal() override {} // reference auto-submits
 
         static const UINT MEDIA_SECTOR_SIZE = 4096; // see https://docs.microsoft.com/en-us/windows/win32/fileio/file-buffering
@@ -61,6 +63,7 @@ namespace SFS
             const HANDLE m_handle;
         };
 
+        std::wstring m_fileName; // only used for packed mips hack
         RawCpuTimer m_cpuTimer;
 
         ComPtr<ID3D12CommandQueue> m_copyCommandQueue;

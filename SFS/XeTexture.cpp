@@ -29,6 +29,7 @@
 #include "d3dx12.h"
 #include "DDS.h"
 #include "XeTexture.h"
+#include "DebugHelper.h"
 
 static void Error(std::wstring in_s)
 {
@@ -42,24 +43,37 @@ UINT32 magic number
 DDS_HEADER structure
 DDS_HEADER_DXT10 structure
 -----------------------------------------------------------------------------*/
-SFS::XeTexture::XeTexture(const std::wstring& in_fileName)
+SFS::XeTexture::XeTexture(const std::wstring& in_fileName) : m_fileName(in_fileName)
 {
     std::ifstream inFile(in_fileName.c_str(), std::ios::binary);
-    if (inFile.fail()) { Error(in_fileName + L" File doesn't exist (?)"); }
+    ASSERT(!inFile.fail()); // File doesn't exist?
 
     inFile.read((char*)&m_fileHeader, sizeof(m_fileHeader));
-    if (!inFile.good()) { Error(in_fileName + L" Unexpected Error reading header"); }
+    ASSERT(inFile.good()); // Unexpected Error reading header
 
-    if (m_fileHeader.m_magic != XetFileHeader::GetMagic()) { Error(in_fileName + L" Not a valid XET file"); }
-    if (m_fileHeader.m_version != XetFileHeader::GetVersion()) { Error(in_fileName + L" Incorrect XET version"); }
+    ASSERT(m_fileHeader.m_magic == XetFileHeader::GetMagic()); // valid XET file?
+    ASSERT(m_fileHeader.m_version = XetFileHeader::GetVersion()); // correct XET version?
+    inFile.close();
+}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void SFS::XeTexture::LoadTileInfo()
+{
+    std::ifstream inFile(m_fileName.c_str(), std::ios::binary);
+    ASSERT(!inFile.fail()); // File doesn't exist?
+
+    inFile.seekg(sizeof(m_fileHeader), std::ios::beg); // skip the header...
 
     m_subresourceInfo.resize(m_fileHeader.m_ddsHeader.mipMapCount);
     inFile.read((char*)m_subresourceInfo.data(), m_subresourceInfo.size() * sizeof(m_subresourceInfo[0]));
-    if (!inFile.good()) { Error(in_fileName + L" Unexpected Error reading subresource info"); }
+    ASSERT(inFile.good()); // Unexpected Error reading subresource info
 
     m_tileOffsets.resize(m_fileHeader.m_mipInfo.m_numTilesForStandardMips + 1); // plus 1 for the packed mips offset & size
     inFile.read((char*)m_tileOffsets.data(), m_tileOffsets.size() * sizeof(m_tileOffsets[0]));
-    if (!inFile.good()) { Error(in_fileName + L" Unexpected Error reading packed mip info"); }
+    ASSERT(inFile.good()); // Unexpected Error reading packed mip info
+
+    inFile.close();
 }
 
 //-----------------------------------------------------------------------------

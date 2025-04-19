@@ -78,6 +78,29 @@ SFS::FileHandle* SFS::FileStreamerDS::OpenFile(const std::wstring& in_path)
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
+void SFS::FileStreamerDS::StreamPackedMips(SFS::UpdateList& in_updateList)
+{
+    DSTORAGE_REQUEST request = {};
+    request.Options.SourceType = DSTORAGE_REQUEST_SOURCE_FILE;
+    request.Options.DestinationType = DSTORAGE_REQUEST_DESTINATION_MULTIPLE_SUBRESOURCES;
+    UpdateList::PackedMip packedMip;
+    packedMip.m_coord = in_updateList.m_coords[0];
+    request.Source.File.Source = GetFileHandle(in_updateList.m_pResource->GetFileHandle());
+    request.Source.File.Size = packedMip.m_mipInfo.numBytes;
+    request.Source.File.Offset = packedMip.m_mipInfo.offset;
+    request.UncompressedSize = packedMip.m_mipInfo.uncompressedSize;
+    request.Destination.MultipleSubresources.Resource = in_updateList.m_pResource->GetTiledResource();
+    request.Destination.MultipleSubresources.FirstSubresource = in_updateList.m_pResource->GetPackedMipInfo().NumStandardMips;
+    request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)in_updateList.m_pResource->GetTextureFileInfo()->GetCompressionFormat();
+
+    m_fileQueue->EnqueueRequest(&request);
+
+    in_updateList.m_copyFenceValue = m_copyFenceValue;
+    in_updateList.m_copyFenceValid = true;
+}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 void SFS::FileStreamerDS::StreamTexture(SFS::UpdateList& in_updateList)
 {
     ASSERT(in_updateList.GetNumStandardUpdates());

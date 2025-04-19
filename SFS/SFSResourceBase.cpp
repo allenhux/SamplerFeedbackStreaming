@@ -79,15 +79,10 @@ SFS::ResourceBase::ResourceBase(
     // make sure my heap has an atlas corresponding to my format
     m_pHeap->AllocateAtlas(in_pSFSManager->GetMappingQueue(), m_textureFileInfo.GetFormat());
 
-    // Load packed mips. packed mips are not streamed or evicted.
-    if (m_resources->GetPackedMipInfo().NumTilesForPackedMips)
+    // no packed mips? odd, but possible. no need to check/update this variable again.
+    // NOTE: in this case, for simplicity, initialize now (usually deferred)
+    if (0 == m_resources->GetPackedMipInfo().NumTilesForPackedMips)
     {
-        LoadPackedMips();
-    }
-    else
-    {
-        // no packed mips. odd, but possible. no need to check/update this variable again.
-        // NOTE: in this case, for simplicity, initialize now (usually deferred)
         m_packedMipStatus = PackedMipStatus::RESIDENT;
         m_resources->Initialize(m_pSFSManager->GetDevice());
     }
@@ -840,19 +835,6 @@ void SFS::ResourceBase::EvictionDelay::Rescue(const SFS::ResourceBase::TileMappi
             m_totalPendingEvicitions += numPending;
         }
     }
-}
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-void SFS::ResourceBase::LoadPackedMips()
-{
-    UINT numBytes = 0;
-    UINT offset = m_textureFileInfo.GetPackedMipFileOffset(&numBytes, &m_packedMipsUncompressedSize);
-    m_packedMips.resize(numBytes);
-    std::ifstream inFile(m_filename.c_str(), std::ios::binary);
-    inFile.seekg(offset);
-    inFile.read((char*)m_packedMips.data(), numBytes);
-    inFile.close();
 }
 
 //-----------------------------------------------------------------------------

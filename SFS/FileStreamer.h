@@ -53,6 +53,9 @@ namespace SFS
 
         virtual void StreamTexture(SFS::UpdateList& in_updateList) = 0;
 
+        virtual void StreamPackedMips(SFS::UpdateList& in_updateList) = 0;
+
+        // Signal must be thread safe because it is called from ProcessFeedbackThread and FenceMonitorThread
         virtual void Signal() = 0;
 
         enum class VisualizationMode
@@ -69,7 +72,9 @@ namespace SFS
     protected:
         // copy queue fence
         ComPtr<ID3D12Fence> m_copyFence;
-        UINT64 m_copyFenceValue{ 0 };
+
+        // fence value is atomic to make Signal() thread-safe
+        std::atomic<UINT64> m_copyFenceValue{ 0 };
 
         // Visualization
         VisualizationMode m_visualizationMode{ VisualizationMode::DATA_VIZ_NONE };

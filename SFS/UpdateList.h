@@ -75,5 +75,16 @@ namespace SFS
         void Reset(SFS::ResourceDU* in_pResource);
 
         INT64 m_copyLatencyTimer{ 0 }; // used only to get an approximate latency for tile copies
+
+        union PackedMip
+        {
+            struct
+            {
+                UINT offset;
+                UINT numBytes;
+                UINT uncompressedSize;
+            } m_mipInfo;
+            D3D12_TILED_RESOURCE_COORDINATE m_coord;
+        };
     };
 }

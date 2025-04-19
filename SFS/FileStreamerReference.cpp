@@ -108,6 +108,8 @@ void SFS::FileStreamerReference::CopyBatch::Init(ID3D12Device* in_pDevice)
 //-----------------------------------------------------------------------------
 SFS::FileHandle* SFS::FileStreamerReference::OpenFile(const std::wstring& in_path)
 {
+    m_fileName = in_path;
+
     // open the file
     HANDLE fileHandle = CreateFile(in_path.c_str(), GENERIC_READ,
         FILE_SHARE_READ,
@@ -126,6 +128,27 @@ SFS::FileHandle* SFS::FileStreamerReference::OpenFile(const std::wstring& in_pat
     FileHandleReference* pFileHandle = new FileHandleReference(fileHandle);
 
     return pFileHandle;
+}
+
+//-----------------------------------------------------------------------------
+// FIXME: currently broken. mips aren't uploaded (black packed mip textures)
+//-----------------------------------------------------------------------------
+void SFS::FileStreamerReference::StreamPackedMips(SFS::UpdateList& in_updateList)
+{
+    UpdateList::PackedMip packedMip{ .m_coord = in_updateList.m_coords[0] };
+
+    //UINT numBytes = 0;
+    //UINT offset = m_textureFileInfo.GetPackedMipFileOffset(&numBytes, &m_packedMipsUncompressedSize);
+    std::vector<UINT8> packedMips(packedMip.m_mipInfo.numBytes);
+    std::ifstream inFile(m_fileName.c_str(), std::ios::binary);
+    inFile.seekg(packedMip.m_mipInfo.offset);
+    inFile.read((char*)packedMips.data(), packedMip.m_mipInfo.numBytes);
+    inFile.close();
+
+    // FIXME: need copytextureregion(s) for packed mips
+
+    in_updateList.m_copyFenceValue = m_copyFenceValue - 1; // HACK to force completion
+    in_updateList.m_copyFenceValid = true;
 }
 
 //-----------------------------------------------------------------------------

@@ -30,6 +30,19 @@
 #include "SFSManagerSR.h"
 
 //-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void SFS::ResourceDU::GetPackedMipInfo(UpdateList& out_updateList)
+{
+    m_textureFileInfo.LoadTileInfo();
+
+    UpdateList::PackedMip packedMip;
+    packedMip.m_mipInfo.offset = m_textureFileInfo.GetPackedMipFileOffset(&packedMip.m_mipInfo.numBytes,
+        &packedMip.m_mipInfo.uncompressedSize);
+
+    out_updateList.m_coords.push_back(packedMip.m_coord);
+}
+
+//-----------------------------------------------------------------------------
 // can map the packed mips as soon as we have heap indices
 //-----------------------------------------------------------------------------
 void SFS::ResourceDU::MapPackedMips(ID3D12CommandQueue* in_pCommandQueue)
@@ -108,14 +121,6 @@ void SFS::ResourceDU::NotifyPackedMips()
     //SetResidencyChanged();
 
     // don't need to hold on to packed mips any longer.
-    std::vector<BYTE> empty;
-    m_packedMips.swap(empty);
-}
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-std::vector<BYTE>& SFS::ResourceDU::GetPaddedPackedMips(UINT& out_uncompressedSize)
-{
-    out_uncompressedSize = m_packedMipsUncompressedSize;
-    return m_packedMips;
+    //std::vector<BYTE> empty;
+    //m_packedMips.swap(empty);
 }

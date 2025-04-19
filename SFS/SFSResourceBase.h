@@ -163,7 +163,7 @@ namespace SFS
         const std::wstring m_filename;
 
         // object that streams data from a file
-        const SFS::XeTexture m_textureFileInfo;
+        SFS::XeTexture m_textureFileInfo;
         std::unique_ptr<SFS::InternalResources> m_resources;
         std::unique_ptr<SFS::FileHandle> m_pFileHandle;
         SFS::Heap* m_pHeap{ nullptr };
@@ -179,10 +179,7 @@ namespace SFS
         };
         PackedMipStatus m_packedMipStatus{ PackedMipStatus::UNINITIALIZED };
 
-        UINT m_packedMipsUncompressedSize{ 0 };
-
-        // bytes for packed mips
-        std::vector<BYTE> m_packedMips;
+        // heap indices for packed mips only
         std::vector<UINT> m_packedMipHeapIndices;
 
         SFS::ManagerSR* const m_pSFSManager;
@@ -333,8 +330,6 @@ namespace SFS
         void DecTileRef(UINT in_x, UINT in_y, UINT in_s);
 
         void QueuePendingTileLoads(SFS::UpdateList* out_pUpdateList); // returns # tiles queued
-
-        void LoadPackedMips();
 
         // used by QueueEviction()
         bool m_refCountsZero{ true };
