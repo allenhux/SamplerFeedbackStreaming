@@ -33,11 +33,17 @@
 template<typename T> class BitVector
 {
 public:
-    BitVector(size_t in_size, uint32_t in_initialValue = 0) : m_size(in_size), m_bits((in_size + BIT_MASK) >> BIT_SHIFT, in_initialValue ? T(-1) : 0) {}
+    BitVector(size_t in_size, uint32_t in_initialValue = 0) : m_size(in_size),
+        m_bits(ComputeArraySize(in_size), in_initialValue ? T(-1) : 0) {}
     uint32_t Get(uint32_t i) { return uint32_t(1) & (GetVector(i) >> (i & BIT_MASK)); }
     void Set(uint32_t i) { GetVector(i) |= GetBit(i); }
     void Clear(uint32_t i) { GetVector(i) &= ~GetBit(i); }
     size_t size() const { return m_size; }
+    void resize(size_t in_size)
+    {
+        m_bits.resize(ComputeArraySize(in_size));
+        m_size = in_size;
+    }
 
     class Accessor // helper class so we can replace std::vector<>
     {
@@ -52,7 +58,8 @@ public:
     };
     Accessor operator[](uint32_t i) { return Accessor(*this, i); }
 private:
-    const size_t m_size{ 0 };
+    static size_t ComputeArraySize(size_t in_size) { return (in_size + BIT_MASK) >> BIT_SHIFT; }
+    size_t m_size{ 0 };
     // use the upper bits of the incoming index to get the array index (shift by log2, e.g. byte type is 3 bits)
     static constexpr uint32_t BIT_SHIFT = (8 == sizeof(T)) ? 6 : (4 == sizeof(T)) ? 5 : (2 == sizeof(T)) ? 4 : 3;
     static constexpr uint32_t BIT_MASK = (T(1) << BIT_SHIFT) - 1;

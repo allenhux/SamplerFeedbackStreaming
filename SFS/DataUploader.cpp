@@ -111,6 +111,7 @@ void SFS::DataUploader::InitDirectStorage(ID3D12Device* in_pDevice)
 //-----------------------------------------------------------------------------
 void SFS::DataUploader::LoadTextureFromMemory(SFS::UpdateList& out_updateList)
 {
+    ASSERT(0);
     UpdateList::PackedMip packedMip{ .m_coord = out_updateList.m_coords[0] };
 
     DSTORAGE_REQUEST request = {};
@@ -369,10 +370,10 @@ void SFS::DataUploader::FenceMonitorThread()
             // wait for mapping complete before streaming packed tiles
             if (m_mappingFence->GetCompletedValue() >= updateList.m_mappingFenceValue)
             {
-                updateList.m_pResource->GetPackedMipInfo(updateList);
+                updateList.m_pResource->LoadPackedMipInfo(updateList);
                 m_pFileStreamer->StreamPackedMips(updateList);
 
-                loadPackedMips = true;
+                loadPackedMips = true;  // set flag so we signal fence below
                 updateList.m_executionState = UpdateList::State::STATE_PACKED_COPY_PENDING;
             }
             else

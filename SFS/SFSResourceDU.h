@@ -54,7 +54,7 @@ namespace SFS
         const std::wstring& GetFileName() const { return m_textureFileInfo.GetFileName(); }
 
         // packed mips are treated differently from regular tiles: they aren't tracked by the data structure, and share heap indices
-        void GetPackedMipInfo(UpdateList& out_updateList);
+        void LoadPackedMipInfo(UpdateList& out_updateList);
         void MapPackedMips(ID3D12CommandQueue* in_pCommandQueue);
     };
 }

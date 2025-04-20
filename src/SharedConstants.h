@@ -39,5 +39,5 @@ namespace SharedConstants
     static constexpr UINT MAX_SPHERE_SCALE = 10; // spheres can be up to this * sphere_scale in size
 
     static constexpr UINT NUM_SPHERE_LEVELS_OF_DETAIL = 6;
-    static constexpr UINT SPHERE_LOD_BIAS = 25;
+    static constexpr UINT SPHERE_LOD_BIAS = 10; // pixels per triangle
 };

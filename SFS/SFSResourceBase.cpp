@@ -96,7 +96,7 @@ SFS::ResourceBase::~ResourceBase()
     // do not delete SFSResource between BeginFrame() and EndFrame(). It's complicated.
     ASSERT(!m_pSFSManager->GetWithinFrame());
 
-    // other threads are manipulating the eviction and load arrays. stop them.
+    // stop other threads from accessing the resource 
     m_pSFSManager->Finish();
 
     // remove this object's allocations from the heap, which might be shared

@@ -151,7 +151,7 @@ private:
     float m_aspectRatio{ 0 };
     const float m_fieldOfView{ DirectX::XM_PI / 2.0f }; // 90 degrees
     const float m_zNear{ 1.f };
-    const float m_zFar{ 50000.f };
+    const float m_zFar{ 100000.f };
 
     CD3DX12_VIEWPORT m_viewport;
     CD3DX12_RECT m_scissorRect;

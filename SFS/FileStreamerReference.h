@@ -43,9 +43,7 @@ namespace SFS
         virtual ~FileStreamerReference();
 
         virtual FileHandle* OpenFile(const std::wstring& in_path) override;
-
         virtual void StreamTexture(SFS::UpdateList& in_updateList) override;
-
         virtual void StreamPackedMips(SFS::UpdateList& in_updateList) override;
 
         virtual void Signal() override {} // reference auto-submits

@@ -110,10 +110,17 @@ namespace SFS
 
         SFS::SynchronizationFlag m_residencyChangedFlag;
 
-        // allocating/deallocating StreamingResources requires reallocation of shared resources
-        bool m_numStreamingResourcesChanged{ false };
-
         std::atomic<bool> m_packedMipTransition{ false }; // flag that we need to transition a resource due to packed mips
+
+        std::vector<ResourceBase*> m_newResources; // list of newly created resources
+
+        std::vector<ResourceBase*> m_newResourcesSharePFT; // n resources to be shared with ProcessFeedbackThread
+        Lock m_newResourcesLockPFT;   // lock between ProcessFeedbackThread and main thread
+
+        // save old residency maps. Let the residency thread release them.
+        std::vector<ID3D12Resource*> m_oldResidencyMapRT; // if set, ResidencyThread should delete
+        std::vector<ResourceBase*> m_newResourcesShareRT; // n resources to be shared with ResidencyThread
+        Lock m_newResourcesLockRT; // lock between ResidencyThread and main thread
 
     private:
         // direct queue is used to monitor progress of render frames so we know when feedback buffers are ready to be used
@@ -133,8 +140,6 @@ namespace SFS
         ComPtr<ID3D12Resource> m_residencyMapLocal; // GPU copy of residency state
 
         SFS::SynchronizationFlag m_processFeedbackFlag;
-
-        std::atomic<bool> m_havePackedMipsToLoad{ false };
 
         void StartThreads();
         void ProcessFeedbackThread();
@@ -167,7 +172,8 @@ namespace SFS
         // are we between BeginFrame and EndFrame? useful for debugging
         std::atomic<bool> m_withinFrame{ false };
 
-        void AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle);
+        // returns old resource if a new resource was created
+        ID3D12Resource* AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle);
 
         struct CommandList
         {

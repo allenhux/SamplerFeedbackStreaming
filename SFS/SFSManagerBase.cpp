@@ -113,11 +113,25 @@ void SFS::ManagerBase::StartThreads()
     // modify residency maps as a result of gpu completion events
     m_updateResidencyThread = std::thread([&]
         {
+            std::vector<ResourceBase*> streamingResources;
+
             while (m_threadsRunning)
             {
                 m_residencyChangedFlag.Wait();
 
-                for (auto p : m_streamingResources)
+                if (m_newResourcesShareRT.size() && m_newResourcesLockRT.TryAcquire())
+                {
+                    std::vector<ResourceBase*> newResources;
+                    std::vector<ID3D12Resource*> oldResidencyMaps;
+                    newResources.swap(m_newResourcesShareRT);
+                    oldResidencyMaps.swap(m_oldResidencyMapRT);
+                    m_newResourcesLockRT.Release();
+
+                    streamingResources.insert(streamingResources.end(), newResources.begin(), newResources.end());
+                    for (auto p : oldResidencyMaps) { p->Release(); }
+                }
+
+                for (auto p : streamingResources)
                 {
                     p->UpdateMinMipMap();
                 }
@@ -139,32 +153,49 @@ void SFS::ManagerBase::SignalFileStreamer()
 }
 void SFS::ManagerBase::ProcessFeedbackThread()
 {
+    // copy of resource list within this thread
+    std::vector<ResourceBase*> streamingResources;
+
     // array of indices to resources that need tiles loaded/evicted
     std::vector<UINT> staleResources;
-    staleResources.reserve(m_streamingResources.size());
+    staleResources.reserve(streamingResources.size());
 
     // flags to prevent duplicates in the staleResources array
-    BitVector<UINT32> pending(m_streamingResources.size(), 0);
+    BitVector<UINT32> pending(streamingResources.size(), 0);
 
     UINT uploadsRequested = 0; // remember if any work was queued so we can signal afterwards
     UINT64 previousFrameFenceValue = m_frameFenceValue;
+
+    // streamingResources should be size 0, but in case of a race...
+    bool havePackedMipsToLoad = (0 != streamingResources.size());
+
     while (m_threadsRunning)
     {
-        // DEBUG: verify that no streaming resources have been added/removed during thread lifetime
-        ASSERT(m_streamingResources.size() == pending.size());
+        // check for change in # resources
+        if (m_newResourcesSharePFT.size() && m_newResourcesLockPFT.TryAcquire())
+        {
+            std::vector<ResourceBase*> newResources;
+            newResources.swap(m_newResourcesSharePFT);
+            m_newResourcesLockPFT.Release();
+            streamingResources.insert(streamingResources.end(), newResources.begin(), newResources.end());
+
+            havePackedMipsToLoad = true;
+            staleResources.resize(streamingResources.size());
+            pending.resize(streamingResources.size());
+        }
 
         // prioritize loading packed mips, as objects shouldn't be displayed until packed mips load
-        bool expected = true;
-        if (m_havePackedMipsToLoad.compare_exchange_weak(expected, false))
+        if (havePackedMipsToLoad)
         {
-            for (auto p : m_streamingResources)
+            havePackedMipsToLoad = false;
+            for (auto p : streamingResources)
             {
-                if (!p->InitPackedMips())
+                if (!p->InitPackedMips()) // must call on every resource that needs to load packed mips
                 {
-                    m_havePackedMipsToLoad = true; // did not finish uploading packed mips, keep trying
+                    havePackedMipsToLoad = true; // did not finish uploading packed mips, keep trying
                 }
             }
-            if (m_havePackedMipsToLoad)
+            if (havePackedMipsToLoad)
             {
                 continue; // still working on loading packed mips. don't move on to other streaming tasks yet.
             }
@@ -183,10 +214,10 @@ void SFS::ManagerBase::ProcessFeedbackThread()
                 if (uploadsRequested) { flushPendingUploadRequests = true; }
 
                 auto startTime = m_cpuTimer.GetTime();
-                for (UINT i = 0; i < m_streamingResources.size(); i++)
+                for (UINT i = 0; i < streamingResources.size(); i++)
                 {
-                    m_streamingResources[i]->ProcessFeedback(frameFenceValue);
-                    if (m_streamingResources[i]->IsStale() && (0 == pending[i]))
+                    streamingResources[i]->ProcessFeedback(frameFenceValue);
+                    if (streamingResources[i]->IsStale() && (0 == pending[i]))
                     {
                         staleResources.push_back(i);
                         pending[i] = 1;
@@ -212,14 +243,14 @@ void SFS::ManagerBase::ProcessFeedbackThread()
                     && (m_frameFence->GetCompletedValue() == previousFrameFenceValue)
                     && m_threadsRunning) // don't add work while exiting
                 {
-                    uploadsRequested += m_streamingResources[resourceIndex]->QueueTiles();
+                    uploadsRequested += streamingResources[resourceIndex]->QueueTiles();
                 }
 
                 // tiles that are "loading" can't be evicted. as soon as they arrive, they can be.
                 // note: since we aren't unmapping evicted tiles, we can evict even if no UpdateLists are available
-                numEvictions += m_streamingResources[resourceIndex]->QueuePendingTileEvictions();
+                numEvictions += streamingResources[resourceIndex]->QueuePendingTileEvictions();
 
-                if (m_streamingResources[resourceIndex]->IsStale()) // still have work to do?
+                if (streamingResources[resourceIndex]->IsStale()) // still have work to do?
                 {
                     // keep stale resource in compacted array while retaining oldest-first ordering
                     staleResources[newStaleSize] = resourceIndex;
@@ -309,8 +340,10 @@ void SFS::ManagerBase::Finish()
 // SFSResource::SetResidencyMapOffsetBase() will populate the residency map with latest
 // descriptor handle required to update the assoiated shader resource view
 //-----------------------------------------------------------------------------
-void SFS::ManagerBase::AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle)
+ID3D12Resource* SFS::ManagerBase::AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle)
 {
+    ID3D12Resource* pOldResource = nullptr; // return old resource if a new one was allocated
+
     static const UINT alignment = 32; // these are bytes, so align by 32 corresponds to SIMD32
     static const UINT minBufferSize = 64 * 1024; // multiple of 64KB page
 
@@ -352,7 +385,11 @@ void SFS::ManagerBase::AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descr
 
         }
 
-        UINT bufferSize = std::max(offset, minBufferSize);
+        UINT bufferSize = std::max(2 * offset, minBufferSize);
+
+        // let thread de-allocate the old resource.
+        pOldResource = m_residencyMap.Detach();
+
         m_residencyMap.Allocate(m_device.Get(), bufferSize, uploadHeapProperties);
 
         CreateMinMipMapView(in_descriptorHandle);
@@ -363,6 +400,8 @@ void SFS::ManagerBase::AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descr
     {
         m_streamingResources[i]->SetResidencyMapOffsetBase(m_residencyMapOffsets[i]);
     }
+
+    return pOldResource;
 }
 
 //-----------------------------------------------------------------------------

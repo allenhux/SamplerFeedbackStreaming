@@ -320,7 +320,7 @@ UINT SceneObjects::BaseObject::ComputeLod(const SceneObjects::DrawParams& in_dra
 {
     const float radius = GetBoundingSphereRadius();
 
-    float z = DirectX::XMVectorGetZ(GetCombinedMatrix().r[2]);
+    float z = DirectX::XMVectorGetZ(GetCombinedMatrix().r[3]);
     float w = DirectX::XMVectorGetW(GetCombinedMatrix().r[3]);
 
     // within sphere?

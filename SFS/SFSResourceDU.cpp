@@ -31,7 +31,7 @@
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-void SFS::ResourceDU::GetPackedMipInfo(UpdateList& out_updateList)
+void SFS::ResourceDU::LoadPackedMipInfo(UpdateList& out_updateList)
 {
     m_textureFileInfo.LoadTileInfo();
 

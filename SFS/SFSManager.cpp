@@ -66,15 +66,11 @@ SFSHeap* SFS::ManagerBase::CreateHeap(UINT in_maxNumTilesHeap)
 //--------------------------------------------
 SFSResource* SFS::ManagerBase::CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap)
 {
-    // if threads are running, stop them. they have state that depends on knowing the # of StreamingResources
-    StopThreads(); // NOTE: leaves DataUploader threads running
-
     SFS::FileHandle* pFileHandle = m_dataUploader.OpenFile(in_filename);
     auto pRsrc = new SFS::ResourceBase(in_filename, pFileHandle, (SFS::ManagerSR*)this, (SFS::Heap*)in_pHeap);
-    m_streamingResources.push_back(pRsrc);
-    m_numStreamingResourcesChanged = true;
 
-    m_havePackedMipsToLoad = true;
+    m_streamingResources.push_back(pRsrc);
+    m_newResources.push_back(pRsrc);
 
     return (SFSResource*)pRsrc;
 }
@@ -176,17 +172,39 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     ASSERT(!GetWithinFrame());
     m_withinFrame = true;
 
-    StartThreads();
-
-    m_processFeedbackFlag.Set();
+    // only need to StartThreads() if resources were deleted
+    // if the threads have been stopped, treat all the resources as "new"
+    if (!m_threadsRunning)
+    {
+        m_newResources = m_streamingResources;
+        m_newResourcesSharePFT.clear();
+        m_newResourcesShareRT.clear();
+        StartThreads();
+    }
 
     // if new StreamingResources have been created...
-    if (m_numStreamingResourcesChanged)
+    if (m_newResources.size())
     {
-        m_numStreamingResourcesChanged = false;
-        AllocateResidencyMap(in_minmipmapDescriptorHandle);
+        ID3D12Resource* pOldResidencyMapRT = AllocateResidencyMap(in_minmipmapDescriptorHandle);
         AllocateSharedClearUavHeap();
+
+        // share new resources with running threads
+        {
+            m_newResourcesLockPFT.Acquire();
+            m_newResourcesSharePFT.insert(m_newResourcesSharePFT.end(), m_newResources.begin(), m_newResources.end());
+            m_newResourcesLockPFT.Release();
+
+            m_newResourcesLockRT.Acquire();
+            if (pOldResidencyMapRT) { m_oldResidencyMapRT.push_back(pOldResidencyMapRT); }
+            m_newResourcesShareRT.insert(m_newResourcesShareRT.end(), m_newResources.begin(), m_newResources.end());
+            m_newResourcesLockRT.Release();
+
+            m_newResources.clear();
+            m_residencyChangedFlag.Set();
+        }
     }
+
+    m_processFeedbackFlag.Set(); // every frame, process feedback
 
     // the frame fence is used to optimize readback of feedback
     // only read back the feedback after the frame that writes to it has completed

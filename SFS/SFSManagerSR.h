@@ -61,7 +61,6 @@ namespace SFS
         {
             ASSERT(!GetWithinFrame());
             m_streamingResources.erase(std::remove(m_streamingResources.begin(), m_streamingResources.end(), in_pResource), m_streamingResources.end());
-            m_numStreamingResourcesChanged = true;
         }
 
         UploadBuffer& GetResidencyMap() { return m_residencyMap; }
