@@ -1410,7 +1410,10 @@ void Scene::GatherStatistics()
 
     if (m_frameNumber == m_args.m_timingStartFrame)
     {
-        m_pSFSManager->CaptureTraceFile(m_args.m_captureTrace);
+        if (m_args.m_captureTrace)
+        {
+            m_pSFSManager->CaptureTraceFile(true); // start recording
+        }
 
         // start timing and gathering uploads from the very beginning of the timed region
         if (m_args.m_timingFrameFileName.size())
