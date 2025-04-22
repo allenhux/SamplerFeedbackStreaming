@@ -68,7 +68,6 @@ namespace SFS
         virtual void QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor) override;
         virtual CommandLists EndFrame() override;
         virtual void UseDirectStorage(bool in_useDS) override;
-        virtual bool GetWithinFrame() const  override { return m_withinFrame; }
         virtual float GetGpuTime() const override;
         virtual void SetVisualizationMode(UINT in_mode) override;
         virtual void CaptureTraceFile(bool in_captureTrace) override;
@@ -81,6 +80,9 @@ namespace SFS
         // end external APIs
         //-----------------------------------------------------------------
     public:
+        // external api, but also used internally
+        virtual bool GetWithinFrame() const override { return m_withinFrame; }
+
         //--------------------------------------------
         // force all outstanding commands to complete.
         // used by ~ManagerBase() and to delete an SFSResource
