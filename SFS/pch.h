@@ -47,5 +47,6 @@
 #include <algorithm>
 #include <thread>
 #include <filesystem>
+#include <set>
 
 #include "d3dx12.h"

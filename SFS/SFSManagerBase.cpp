@@ -153,17 +153,11 @@ void SFS::ManagerBase::SignalFileStreamer()
 }
 void SFS::ManagerBase::ProcessFeedbackThread()
 {
-    // copy of resource list within this thread
-    std::vector<ResourceBase*> streamingResources;
     // new resources are prioritized until packed mips are in-flight
     std::list<ResourceBase*> newResources;
 
-    // array of indices to resources that need tiles loaded/evicted
-    std::vector<UINT> staleResources;
-    staleResources.reserve(streamingResources.size());
-
-    // flags to prevent duplicates in the staleResources array
-    BitVector<UINT32> pending(streamingResources.size(), 0);
+    // resources that need tiles loaded/evicted
+    std::set<ResourceBase*> pendingResources;
 
     UINT uploadsRequested = 0; // remember if any work was queued so we can signal afterwards
     UINT64 previousFrameFenceValue = m_frameFenceValue;
@@ -179,11 +173,9 @@ void SFS::ManagerBase::ProcessFeedbackThread()
             m_newResourcesLockPFT.Release();
 
             newResources.insert(newResources.end(), tmpResources.begin(), tmpResources.end());
-            streamingResources.insert(streamingResources.end(), tmpResources.begin(), tmpResources.end());
-
-            staleResources.resize(streamingResources.size());
-            pending.resize(streamingResources.size());
         }
+
+        // FIXME: TODO while packed mips are loading, process evictions on stale resources
 
         // prioritize loading packed mips, as objects shouldn't be displayed until packed mips load
         if (newResources.size())
@@ -206,6 +198,17 @@ void SFS::ManagerBase::ProcessFeedbackThread()
             }
         }
 
+        // check for existing resources that have feedback
+        if (m_pendingSharePFT.size() && m_pendingLockPFT.TryAcquire())
+        {
+            // grab them and release the lock quickly
+            std::vector<ResourceBase*> tmpResources;
+            tmpResources.swap(m_pendingSharePFT);
+            m_pendingLockPFT.Release();
+
+            pendingResources.insert(tmpResources.begin(), tmpResources.end());
+        }
+
         bool flushPendingUploadRequests = false;
 
         // process feedback buffers once per frame
@@ -219,14 +222,9 @@ void SFS::ManagerBase::ProcessFeedbackThread()
                 if (uploadsRequested) { flushPendingUploadRequests = true; }
 
                 auto startTime = m_cpuTimer.GetTime();
-                for (UINT i = 0; i < streamingResources.size(); i++)
+                for (auto pResource : pendingResources)
                 {
-                    streamingResources[i]->ProcessFeedback(frameFenceValue);
-                    if (streamingResources[i]->IsStale() && (0 == pending[i]))
-                    {
-                        staleResources.push_back(i);
-                        pending[i] = 1;
-                    }
+                    pResource->ProcessFeedback(frameFenceValue);
                 }
                 // add the amount of time we just spent processing feedback for a single frame
                 m_processFeedbackTime += UINT64(m_cpuTimer.GetTime() - startTime);
@@ -236,9 +234,9 @@ void SFS::ManagerBase::ProcessFeedbackThread()
         // push uploads and evictions for stale resources
         {
             UINT numEvictions = 0;
-            UINT newStaleSize = 0; // track number of stale resources, then resize the array to the updated number
-            for (auto resourceIndex : staleResources)
+            for (auto i = pendingResources.begin(); i != pendingResources.end();)
             {
+                ResourceBase* pResource = *i;
                 if (m_dataUploader.GetNumUpdateListsAvailable()
                     // with DirectStorage Queue::EnqueueRequest() can block.
                     // when there are many pending uploads, there can be multiple frames of waiting.
@@ -248,25 +246,22 @@ void SFS::ManagerBase::ProcessFeedbackThread()
                     && (m_frameFence->GetCompletedValue() == previousFrameFenceValue)
                     && m_threadsRunning) // don't add work while exiting
                 {
-                    uploadsRequested += streamingResources[resourceIndex]->QueueTiles();
+                    uploadsRequested += pResource->QueueTiles();
                 }
 
                 // tiles that are "loading" can't be evicted. as soon as they arrive, they can be.
                 // note: since we aren't unmapping evicted tiles, we can evict even if no UpdateLists are available
-                numEvictions += streamingResources[resourceIndex]->QueuePendingTileEvictions();
+                numEvictions += pResource->QueuePendingTileEvictions();
 
-                if (streamingResources[resourceIndex]->IsStale()) // still have work to do?
+                if (!pResource->IsStale()) // still have work to do?
                 {
-                    // keep stale resource in compacted array while retaining oldest-first ordering
-                    staleResources[newStaleSize] = resourceIndex;
-                    newStaleSize++;
+                    i = pendingResources.erase(i);
                 }
                 else
                 {
-                    pending[resourceIndex] = 0; // clear the flag that prevents duplicates
+                    i++;
                 }
             }
-            staleResources.resize(newStaleSize); // compact array
             if (numEvictions) { m_dataUploader.AddEvictions(numEvictions); }
         }
 
@@ -275,7 +270,7 @@ void SFS::ManagerBase::ProcessFeedbackThread()
         {
             // tell the file streamer to signal the corresponding fence
             if ((flushPendingUploadRequests) || // flush requests from previous frame
-                (0 == staleResources.size()) || // flush because there's no more work to be done (no stale resources, all feedback has been processed)
+                (0 == pendingResources.size()) || // flush because there's no more work to be done (no stale resources, all feedback has been processed)
                 // if we need updatelists and there is a minimum amount of pending work, go ahead and submit
                 // this minimum heuristic prevents "storms" of submits with too few tiles to sustain good throughput
                 ((0 == m_dataUploader.GetNumUpdateListsAvailable()) && (uploadsRequested > m_minNumUploadRequests)))
@@ -287,12 +282,13 @@ void SFS::ManagerBase::ProcessFeedbackThread()
 
         // nothing to do? wait for next frame
         // development note: do not Wait() if uploadsRequested != 0. safe because uploadsRequested was cleared above.
-        if (0 == staleResources.size())
+        if (0 == pendingResources.size())
         {
             ASSERT(0 == uploadsRequested);
             m_processFeedbackFlag.Wait();
         }
     }
+
     // if thread exits, flush any pending uploads
     if (uploadsRequested) { SignalFileStreamer(); }
 }

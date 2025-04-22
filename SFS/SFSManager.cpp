@@ -203,6 +203,15 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
         }
     }
 
+    // if feedback or eviction queued
+    if (m_pendingResources.size())
+    {
+        m_pendingLockPFT.Acquire();
+        m_pendingSharePFT.insert(m_pendingSharePFT.end(), m_pendingResources.begin(), m_pendingResources.end());
+        m_pendingLockPFT.Release();
+        m_pendingResources.clear();
+    }
+
     m_processFeedbackFlag.Set(); // every frame, process feedback
 
     // the frame fence is used to optimize readback of feedback

@@ -924,6 +924,9 @@ void SFS::ResourceBase::ClearFeedback(ID3D12GraphicsCommandList* in_pCmdList, co
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList)
 {
+    // call to resolve feedback means this resource is now stale
+    m_pSFSManager->SetPending(this);
+
     // move to next readback index
     m_readbackIndex = (m_readbackIndex + 1) % m_queuedFeedback.size();
 

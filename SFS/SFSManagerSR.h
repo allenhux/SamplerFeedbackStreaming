@@ -61,6 +61,7 @@ namespace SFS
         {
             ASSERT(!GetWithinFrame());
             m_streamingResources.erase(std::remove(m_streamingResources.begin(), m_streamingResources.end(), in_pResource), m_streamingResources.end());
+            m_pendingResources.erase(std::remove(m_pendingResources.begin(), m_pendingResources.end(), in_pResource), m_pendingResources.end());
         }
 
         UploadBuffer& GetResidencyMap() { return m_residencyMap; }
@@ -88,5 +89,7 @@ namespace SFS
         void SetResidencyChanged() { m_residencyChangedFlag.Set(); }
 
         FileHandle* OpenFile(const std::wstring& in_filename) { return m_dataUploader.OpenFile(in_filename); }
+
+        void SetPending(ResourceBase* in_pResource) { m_pendingResources.push_back(in_pResource); }
     };
 }

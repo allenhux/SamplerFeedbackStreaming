@@ -115,13 +115,16 @@ namespace SFS
         std::atomic<bool> m_packedMipTransition{ false }; // flag that we need to transition a resource due to packed mips
 
         std::vector<ResourceBase*> m_newResources; // list of newly created resources
-
-        std::vector<ResourceBase*> m_newResourcesSharePFT; // n resources to be shared with ProcessFeedbackThread
+        std::vector<ResourceBase*> m_newResourcesSharePFT; // resources to be shared with ProcessFeedbackThread
         Lock m_newResourcesLockPFT;   // lock between ProcessFeedbackThread and main thread
+
+        std::vector<ResourceBase*> m_pendingResources; // resources where feedback or eviction requested
+        std::vector<ResourceBase*> m_pendingSharePFT; // resources to be shared with ProcessFeedbackThread
+        Lock m_pendingLockPFT;   // lock between ProcessFeedbackThread and main thread
 
         // save old residency maps. Let the residency thread release them.
         std::vector<ID3D12Resource*> m_oldResidencyMapRT; // if set, ResidencyThread should delete
-        std::vector<ResourceBase*> m_newResourcesShareRT; // n resources to be shared with ResidencyThread
+        std::vector<ResourceBase*> m_newResourcesShareRT; // resources to be shared with ResidencyThread
         Lock m_newResourcesLockRT; // lock between ResidencyThread and main thread
 
     private:
