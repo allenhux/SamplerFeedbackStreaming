@@ -155,6 +155,8 @@ void SFS::ManagerBase::ProcessFeedbackThread()
 {
     // copy of resource list within this thread
     std::vector<ResourceBase*> streamingResources;
+    // new resources are prioritized until packed mips are in-flight
+    std::list<ResourceBase*> newResources;
 
     // array of indices to resources that need tiles loaded/evicted
     std::vector<UINT> staleResources;
@@ -166,36 +168,39 @@ void SFS::ManagerBase::ProcessFeedbackThread()
     UINT uploadsRequested = 0; // remember if any work was queued so we can signal afterwards
     UINT64 previousFrameFenceValue = m_frameFenceValue;
 
-    // streamingResources should be size 0, but in case of a race...
-    bool havePackedMipsToLoad = (0 != streamingResources.size());
-
     while (m_threadsRunning)
     {
-        // check for change in # resources
+        // check for new resources
         if (m_newResourcesSharePFT.size() && m_newResourcesLockPFT.TryAcquire())
         {
-            std::vector<ResourceBase*> newResources;
-            newResources.swap(m_newResourcesSharePFT);
+            // grab them and release the lock quickly
+            std::vector<ResourceBase*> tmpResources;
+            tmpResources.swap(m_newResourcesSharePFT);
             m_newResourcesLockPFT.Release();
-            streamingResources.insert(streamingResources.end(), newResources.begin(), newResources.end());
 
-            havePackedMipsToLoad = true;
+            newResources.insert(newResources.end(), tmpResources.begin(), tmpResources.end());
+            streamingResources.insert(streamingResources.end(), tmpResources.begin(), tmpResources.end());
+
             staleResources.resize(streamingResources.size());
             pending.resize(streamingResources.size());
         }
 
         // prioritize loading packed mips, as objects shouldn't be displayed until packed mips load
-        if (havePackedMipsToLoad)
+        if (newResources.size())
         {
-            havePackedMipsToLoad = false;
-            for (auto p : streamingResources)
+            for (auto i = newResources.begin(); i != newResources.end();)
             {
-                if (!p->InitPackedMips()) // must call on every resource that needs to load packed mips
+                // must call on every resource that needs to load packed mips
+                if ((*i)->InitPackedMips())
                 {
-                    havePackedMipsToLoad = true; // did not finish uploading packed mips, keep trying
+                    i = newResources.erase(i);
+                }
+                else
+                {
+                    i++;
                 }
             }
-            if (havePackedMipsToLoad)
+            if (newResources.size())
             {
                 continue; // still working on loading packed mips. don't move on to other streaming tasks yet.
             }
