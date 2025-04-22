@@ -33,8 +33,6 @@
 //-----------------------------------------------------------------------------
 void SFS::ResourceDU::LoadPackedMipInfo(UpdateList& out_updateList)
 {
-    m_textureFileInfo.LoadTileInfo();
-
     UpdateList::PackedMip packedMip;
     packedMip.m_mipInfo.offset = m_textureFileInfo.GetPackedMipFileOffset(&packedMip.m_mipInfo.numBytes,
         &packedMip.m_mipInfo.uncompressedSize);
@@ -111,16 +109,11 @@ void SFS::ResourceDU::NotifyEvicted(const std::vector<D3D12_TILED_RESOURCE_COORD
 //-----------------------------------------------------------------------------
 void SFS::ResourceDU::NotifyPackedMips()
 {
-    // finish creating/initializing internal resources
-    m_resources->Initialize(m_pSFSManager->GetDevice());
+    DeferredInitialize2();
 
     m_packedMipStatus = PackedMipStatus::NEEDS_TRANSITION;
     m_pSFSManager->NotifyPackedMips();
 
     // MinMipMap already set to packed mip values, don't need to go through UpdateMinMipMap
     //SetResidencyChanged();
-
-    // don't need to hold on to packed mips any longer.
-    //std::vector<BYTE> empty;
-    //m_packedMips.swap(empty);
 }

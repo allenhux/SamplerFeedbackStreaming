@@ -57,7 +57,7 @@ namespace SFS
 
     class ManagerBase : public ::SFSManager
     {
-    public:
+    private:
         //-----------------------------------------------------------------
         // external APIs
         //-----------------------------------------------------------------
@@ -80,10 +80,10 @@ namespace SFS
         //-----------------------------------------------------------------
         // end external APIs
         //-----------------------------------------------------------------
-
+    public:
         //--------------------------------------------
         // force all outstanding commands to complete.
-        // used internally when everthing must drain, e.g. to delete or create a SFSResource
+        // used by ~ManagerBase() and to delete an SFSResource
         //--------------------------------------------
         void Finish();
 
@@ -143,7 +143,7 @@ namespace SFS
 
         void StartThreads();
         void ProcessFeedbackThread();
-        void StopThreads(); // stop only SFSManager threads. Used by Finish() and CreateResource()
+        void StopThreads(); // stop only SFSManager threads. Used by Finish()
 
         //---------------------------------------------------------------------------
         // SFSM creates 2 command lists to be executed Before & After application draw

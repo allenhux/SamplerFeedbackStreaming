@@ -66,8 +66,7 @@ SFSHeap* SFS::ManagerBase::CreateHeap(UINT in_maxNumTilesHeap)
 //--------------------------------------------
 SFSResource* SFS::ManagerBase::CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap)
 {
-    SFS::FileHandle* pFileHandle = m_dataUploader.OpenFile(in_filename);
-    auto pRsrc = new SFS::ResourceBase(in_filename, pFileHandle, (SFS::ManagerSR*)this, (SFS::Heap*)in_pHeap);
+    auto pRsrc = new SFS::ResourceBase(in_filename, (SFS::ManagerSR*)this, (SFS::Heap*)in_pHeap);
 
     m_streamingResources.push_back(pRsrc);
     m_newResources.push_back(pRsrc);
@@ -172,7 +171,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     ASSERT(!GetWithinFrame());
     m_withinFrame = true;
 
-    // only need to StartThreads() if resources were deleted
+    // need to (re) StartThreads() if resources were deleted
     // if the threads have been stopped, treat all the resources as "new"
     if (!m_threadsRunning)
     {

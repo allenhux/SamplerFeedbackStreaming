@@ -293,7 +293,7 @@ void SFS::ManagerBase::ProcessFeedbackThread()
 }
 
 //-----------------------------------------------------------------------------
-// stop only SFSManager threads. Used by Finish() and CreateResource()
+// stop only SFSManager threads. Used by Finish()
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::StopThreads()
 {

@@ -86,5 +86,7 @@ namespace SFS
         }
 
         void SetResidencyChanged() { m_residencyChangedFlag.Set(); }
+
+        FileHandle* OpenFile(const std::wstring& in_filename) { return m_dataUploader.OpenFile(in_filename); }
     };
 }

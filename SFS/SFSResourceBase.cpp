@@ -47,7 +47,6 @@
 SFS::ResourceBase::ResourceBase(
     // method that will fill a tile-worth of bits, for streaming
     const std::wstring& in_filename,
-    SFS::FileHandle* in_pFileHandle,
     // share upload buffers with other InternalResources
     SFS::ManagerSR* in_pSFSManager,
     // share heap with other StreamingResources
@@ -57,7 +56,6 @@ SFS::ResourceBase::ResourceBase(
     , m_queuedFeedback(in_pSFSManager->GetNumSwapBuffers())
     , m_pendingEvictions(in_pSFSManager->GetEvictionDelay())
     , m_pHeap(in_pHeap)
-    , m_pFileHandle(in_pFileHandle)
     , m_textureFileInfo(in_filename)
 {
     m_resources = std::make_unique<SFS::InternalResources>(in_pSFSManager->GetDevice(), m_textureFileInfo, (UINT)m_queuedFeedback.size());
@@ -71,20 +69,26 @@ SFS::ResourceBase::ResourceBase(
 
     // there had better be standard mips, otherwise, why stream?
     ASSERT(m_maxMip);
+}
 
+void SFS::ResourceBase::DeferredInitialize1()
+{
+    m_textureFileInfo.LoadTileInfo();
+    m_pFileHandle.reset(m_pSFSManager->OpenFile(m_textureFileInfo.GetFileName()));
+}
+
+//-----------------------------------------------------------------------------
+// finish creating/initializing internal resources
+//-----------------------------------------------------------------------------
+void SFS::ResourceBase::DeferredInitialize2()
+{
     m_tileReferences.resize(m_tileReferencesWidth * m_tileReferencesHeight, m_maxMip);
     m_minMipMap.resize(m_tileReferences.size(), m_maxMip);
 
     // make sure my heap has an atlas corresponding to my format
-    m_pHeap->AllocateAtlas(in_pSFSManager->GetMappingQueue(), m_textureFileInfo.GetFormat());
+    m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), m_textureFileInfo.GetFormat());
 
-    // no packed mips? odd, but possible. no need to check/update this variable again.
-    // NOTE: in this case, for simplicity, initialize now (usually deferred)
-    if (0 == m_resources->GetPackedMipInfo().NumTilesForPackedMips)
-    {
-        m_packedMipStatus = PackedMipStatus::RESIDENT;
-        m_resources->Initialize(m_pSFSManager->GetDevice());
-    }
+    m_resources->Initialize(m_pSFSManager->GetDevice());
 }
 
 //-----------------------------------------------------------------------------
@@ -854,6 +858,19 @@ bool SFS::ResourceBase::InitPackedMips()
     if ((UINT)m_packedMipStatus >= (UINT)PackedMipStatus::REQUESTED)
     {
         return true;
+    }
+
+    if (nullptr == m_pFileHandle)
+    {
+        DeferredInitialize1();
+
+        // no packed mips? odd, but possible. no need to check/update this variable again.
+        // NOTE: in this case, for simplicity, initialize now (usually deferred)
+        if (0 == m_resources->GetPackedMipInfo().NumTilesForPackedMips)
+        {
+            m_packedMipStatus = PackedMipStatus::RESIDENT;
+            DeferredInitialize2();
+        }
     }
 
     // allocate heap space

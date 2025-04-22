@@ -73,7 +73,6 @@ namespace SFS
         ResourceBase(
             // method that will fill a tile-worth of bits, for streaming
             const std::wstring& in_filename,
-            SFS::FileHandle* in_pFileHandle,
             // share heap and upload buffers with other InternalResources
             SFS::ManagerSR* in_pSFSManager,
             Heap* in_pHeap);
@@ -257,6 +256,8 @@ namespace SFS
         // used by QueueEviction()
         std::atomic<bool> m_setZeroRefCounts{ false };
 
+        void DeferredInitialize1(); // before requesting packed mips (in ProcessFeedbackThread)
+        void DeferredInitialize2(); // after packed mips arrive (FenceMonitorThread -> NotifyPackedMips)
     private:
         // do not immediately decmap:
         // need to withhold until in-flight command buffers have completed
