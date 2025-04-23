@@ -1268,10 +1268,10 @@ void Scene::DrawObjects()
 
             bool isVisible = o->IsVisible(m_projection, m_zFar); // draw or evict?
             // FIXME: magic number. idea is, no need to stream texture data to tiny objects
-            bool isLarge = o->GetScreenAreaPixels(m_windowHeight, m_fieldOfView) > (50 * 50);
+            bool isTiny = o->GetScreenAreaPixels(m_windowHeight, m_fieldOfView) < 50;
             // get sampler feedback for this object?
-            bool queueFeedback = isVisible && isLarge && (numFeedbackObjects < maxNumFeedbackResolves);
-            bool evict = !isVisible;
+            bool queueFeedback = isVisible && (!isTiny) && (numFeedbackObjects < maxNumFeedbackResolves);
+            bool evict = !isVisible || isTiny;
 
             if (isVisible)
             {

@@ -318,10 +318,7 @@ void SceneObjects::BaseObject::SetCommonGraphicsState(ID3D12GraphicsCommandList1
 //-------------------------------------------------------------------------
 UINT SceneObjects::BaseObject::ComputeLod(const SceneObjects::DrawParams& in_drawParams)
 {
-    const float radius = GetBoundingSphereRadius();
-
     float z = DirectX::XMVectorGetZ(GetCombinedMatrix().r[3]);
-    float w = DirectX::XMVectorGetW(GetCombinedMatrix().r[3]);
 
     // within sphere?
     if (z < 0)
@@ -329,11 +326,7 @@ UINT SceneObjects::BaseObject::ComputeLod(const SceneObjects::DrawParams& in_dra
         return 0;
     }
 
-    // rough estimate of the projected radius in pixels:
-    const float cotWdiv2 = 1.f / std::tanf(in_drawParams.m_fov / 2);
-    const float radiusScreen = radius / w * cotWdiv2;
-    const float radiusPixels = in_drawParams.m_windowHeight * radiusScreen;
-    float areaPixels = DirectX::XM_PI * radiusPixels * radiusPixels;
+    const float areaPixels = GetScreenAreaPixels(in_drawParams.m_windowHeight, in_drawParams.m_fov);
 
     UINT lod = (UINT)m_lods.size() - 1; // least triangles
     while (lod > 0)
@@ -399,16 +392,13 @@ void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList,
 //-----------------------------------------------------------------------------
 float SceneObjects::BaseObject::GetScreenAreaPixels(UINT in_windowHeight, float in_fov)
 {
-    float pixelScale = in_windowHeight / std::tanf(in_fov / 2.f);
-    float radius = GetBoundingSphereRadius();
-    float z = DirectX::XMVectorGetW(m_combinedMatrix.r[3]);
-    if (z > radius)
-    {
-        radius /= z;
-    }
-    radius *= pixelScale;
-    float area =  DirectX::XM_PI * radius * radius;
-    return area;
+    // rough estimate of the projected radius in pixels:
+    const float cotWdiv2 = 1.f / std::tanf(in_fov / 2);
+    const float radiusScreen = GetBoundingSphereRadius() / DirectX::XMVectorGetW(m_combinedMatrix.r[3]) * cotWdiv2;
+    const float radiusPixels = in_windowHeight * radiusScreen;
+    float areaPixels = DirectX::XM_PI * radiusPixels * radiusPixels;
+
+    return areaPixels;
 }
 
 //-----------------------------------------------------------------------------
