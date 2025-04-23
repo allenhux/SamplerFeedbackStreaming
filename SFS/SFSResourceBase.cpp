@@ -319,6 +319,8 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
     {
         m_setZeroRefCounts = false;
 
+        m_pendingEvictions.MoveAllToPending();
+
         // has this resource already been zeroed? don't clear again, early exit
         // this is set to false if "changed" due to feedback below
         if (m_refCountsZero)
@@ -801,7 +803,16 @@ void SFS::ResourceBase::EvictionDelay::Clear()
     {
         i.clear();
     }
-    m_totalPendingEvicitions = 0;
+}
+
+void SFS::ResourceBase::EvictionDelay::MoveAllToPending()
+{
+    auto end = --m_mappings.end();
+    for (auto i = m_mappings.begin(); i != end; i++)
+    {
+        m_mappings.back().insert(m_mappings.back().end(), (*i).begin(),(*i).end());
+        (*i).clear();
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -809,8 +820,6 @@ void SFS::ResourceBase::EvictionDelay::Clear()
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::EvictionDelay::Rescue(const SFS::ResourceBase::TileMappingState& in_tileMappingState)
 {
-    m_totalPendingEvicitions = 0;
-
     // note: it is possible even for the most recent evictions to have refcount > 0
     // because a tile can be evicted then loaded again within a single ProcessFeedback() call
     for (auto& evictions : m_mappings)
@@ -835,7 +844,6 @@ void SFS::ResourceBase::EvictionDelay::Rescue(const SFS::ResourceBase::TileMappi
                 }
             }
             evictions.resize(numPending);
-            m_totalPendingEvicitions += numPending;
         }
     }
 }

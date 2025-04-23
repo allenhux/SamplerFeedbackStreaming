@@ -156,7 +156,10 @@ void SFS::ManagerBase::ProcessFeedbackThread()
     // new resources are prioritized until packed mips are in-flight
     std::list<ResourceBase*> newResources;
 
-    // resources that need tiles loaded/evicted
+    // resources with any pending work, including evictions scheduled multiple frames later
+    std::set<ResourceBase*> activeResources;
+
+    // resources that need tiles loaded/evicted asap
     std::set<ResourceBase*> pendingResources;
 
     UINT uploadsRequested = 0; // remember if any work was queued so we can signal afterwards
@@ -206,12 +209,12 @@ void SFS::ManagerBase::ProcessFeedbackThread()
             tmpResources.swap(m_pendingSharePFT);
             m_pendingLockPFT.Release();
 
-            pendingResources.insert(tmpResources.begin(), tmpResources.end());
+            activeResources.insert(tmpResources.begin(), tmpResources.end());
         }
 
         bool flushPendingUploadRequests = false;
 
-        // process feedback buffers once per frame
+        // Once per frame: process feedback buffers
         {
             UINT64 frameFenceValue = m_frameFence->GetCompletedValue();
             if (previousFrameFenceValue != frameFenceValue)
@@ -222,9 +225,19 @@ void SFS::ManagerBase::ProcessFeedbackThread()
                 if (uploadsRequested) { flushPendingUploadRequests = true; }
 
                 auto startTime = m_cpuTimer.GetTime();
-                for (auto pResource : pendingResources)
+                for (auto i = activeResources.begin(); i != activeResources.end();)
                 {
+                    auto pResource = *i;
                     pResource->ProcessFeedback(frameFenceValue);
+                    if (pResource->HasAnyWork())
+                    {
+                        pendingResources.insert(pResource);
+                        i++;
+                    }
+                    else
+                    {
+                        i = activeResources.erase(i);
+                    }
                 }
                 // add the amount of time we just spent processing feedback for a single frame
                 m_processFeedbackTime += UINT64(m_cpuTimer.GetTime() - startTime);
@@ -282,7 +295,7 @@ void SFS::ManagerBase::ProcessFeedbackThread()
 
         // nothing to do? wait for next frame
         // development note: do not Wait() if uploadsRequested != 0. safe because uploadsRequested was cleared above.
-        if (0 == pendingResources.size())
+        if (0 == activeResources.size())
         {
             ASSERT(0 == uploadsRequested);
             m_processFeedbackFlag.Wait();

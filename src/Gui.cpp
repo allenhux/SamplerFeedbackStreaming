@@ -352,7 +352,7 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     // heap statistics
     //---------------------------------------------------------------------
     ImGui::Separator();
-    ImGui::Text("Reserved KB: %d", (in_drawParams.m_numTilesVirtual * 64));
+    ImGui::Text("Reserved GB: %f", (in_drawParams.m_numTilesVirtual * 64) / 1000000.f);
     ImGui::Text("Committed KB: %d (%.2f %%)", (in_drawParams.m_numTilesCommitted * 64), 100.f * float(in_drawParams.m_numTilesCommitted) / float(in_drawParams.m_numTilesVirtual));
 
     ImGui::Text("Heap Occupancy KB: %.2f%% of %d",

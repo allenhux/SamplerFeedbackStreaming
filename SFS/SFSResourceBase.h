@@ -140,7 +140,12 @@ namespace SFS
         // returns # tiles evicted
         UINT QueuePendingTileEvictions();
 
-        bool IsStale()
+        bool HasAnyWork() // tiles to load / evict now or later
+        {
+            return (m_pendingTileLoads.size() || m_pendingEvictions.Size());
+        }
+
+        bool IsStale() // wants to load / evict tiles this frame
         {
             return (m_pendingTileLoads.size() || m_pendingEvictions.GetReadyToEvict().size());
         }
@@ -264,24 +269,30 @@ namespace SFS
         class EvictionDelay
         {
         public:
+            using MappingCoords = std::vector<D3D12_TILED_RESOURCE_COORDINATE>;
+
             EvictionDelay(UINT in_numSwapBuffers);
 
-            using MappingCoords = std::vector<D3D12_TILED_RESOURCE_COORDINATE>;
             void Append(D3D12_TILED_RESOURCE_COORDINATE in_coord) { m_mappings.front().push_back(in_coord); }
             MappingCoords& GetReadyToEvict() { return m_mappings.back(); }
 
             void NextFrame();
             void Clear();
+            void MoveAllToPending();
 
             // drop pending evictions for tiles that now have non-zero refcount
             // return true if tiles were rescued
             void Rescue(const TileMappingState& in_tileMappingState);
 
             // total # tiles being tracked
-            UINT Size() const { return m_totalPendingEvicitions; }
+            UINT Size() const
+            {
+                UINT s = 0;
+                for (auto& e : m_mappings) { s += (UINT)e.size(); }
+                return s;
+            }
         private:
             std::list<MappingCoords> m_mappings;
-            UINT m_totalPendingEvicitions{ 0 }; // sum of sizes of all arrays
         };
         EvictionDelay m_pendingEvictions;
 
