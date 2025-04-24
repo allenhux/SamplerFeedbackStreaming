@@ -244,8 +244,8 @@ private:
     float m_universeSize{ 0 };
     void PrepareScene();
 
-    bool TryFit(DirectX::XMMATRIX& out_matrix, float in_radius, float in_universe, float in_gap,
-        float in_minDistance, bool in_max = false);
+    void TryFit(DirectX::XMMATRIX& out_matrix, float in_radius, float in_gap,
+        float in_minDistance, UINT in_numTries);
     void SetSphereMatrix(float in_minDistance);
     void LoadSpheres(); // progressively over multiple frames
 

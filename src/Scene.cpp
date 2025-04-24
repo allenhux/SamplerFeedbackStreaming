@@ -683,43 +683,44 @@ void Scene::StartStreamingLibrary()
 // generate a random pose
 // return true if the pose does not intersect anything in the universe
 //-----------------------------------------------------------------------------
-bool Scene::TryFit(XMMATRIX& out_matrix, float in_radius, float in_universe, float in_gap,
-    float in_minDistance, bool in_max)
+void Scene::TryFit(XMMATRIX& out_matrix, float in_radius, float in_gap,
+    float in_minDistance, UINT in_numTries)
 {
     static std::uniform_real_distribution<float> dis(0, 1);
 
-    float x;
-    if (in_max)
+    XMMATRIX rtate = XMMatrixIdentity();
+    XMMATRIX xlate = XMMatrixIdentity();
+
+    while (in_numTries)
     {
-        x = in_universe;
-    }
-    else
-    {
-        x = std::max(in_universe * dis(m_gen), in_minDistance);
+        rtate = XMMatrixRotationRollPitchYaw((XM_2PI)*dis(m_gen), (XM_2PI)*dis(m_gen), (XM_2PI)*dis(m_gen));
+        float x = std::max(m_universeSize * dis(m_gen), in_minDistance);
+        xlate.r[3] = XMVectorSet(0, 0, x, 1.f);
+        out_matrix = xlate * rtate;
 
-    }
-    XMMATRIX xlate = XMMatrixTranslation(0, 0, x);
-    XMMATRIX rtate = XMMatrixRotationRollPitchYaw((XM_2PI)*dis(m_gen), (XM_2PI)*dis(m_gen), (XM_2PI)*dis(m_gen));
-    XMMATRIX scale = XMMatrixScaling(in_radius, in_radius, in_radius);
-
-    out_matrix = scale * xlate * rtate;
-
-    if (in_max) { return true; }
-
-    XMVECTOR p0 = out_matrix.r[3];
-    for (const auto& o : m_objectPoses)
-    {
-        XMVECTOR p1 = o.m_matrix.r[3];
-        float dist = XMVectorGetX(XMVector3LengthEst(p1 - p0));
-        float radius2 = o.m_radius;
-
-        // leave a minimum spacing between planets
-        if (dist - (in_radius + radius2) < in_gap)
+        bool fits = true;
+        XMVECTOR p0 = out_matrix.r[3];
+        for (const auto& o : m_objectPoses)
         {
-            return false;
+            XMVECTOR p1 = o.m_matrix.r[3];
+            float dist = XMVectorGetX(XMVector3LengthEst(p1 - p0));
+
+            // leave a minimum spacing between planets
+            if (dist < (in_radius + o.m_radius + in_gap))
+            {
+                fits = false;
+                break;
+            }
         }
+        if (fits) return;
+        in_numTries--;
     }
-    return true;
+    // doesn't fit? grow the universe, then put this object on the edge
+    {
+        m_universeSize += in_radius + in_gap;
+        xlate.r[3] = XMVectorSet(0, 0, m_universeSize, 1.f);
+        out_matrix = xlate * rtate;
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -736,29 +737,15 @@ void Scene::SetSphereMatrix(float in_minDistance)
 
     in_minDistance += MAX_SPHERE_SIZE + SPHERE_SPACING;
 
-    UINT maxTries = MAX_TRIES;
-
     XMMATRIX matrix = XMMatrixIdentity();
 
     float sphereScale = scaleDis(m_gen);
 
-    bool tryAgain = true;
-    bool useMaxRadius = false;
-    while (tryAgain)
-    {
-        if (maxTries)
-        {
-            maxTries--;
-        }
-        else
-        {
-            // grow the universe enough that this sphere should fit
-            m_universeSize += sphereScale + SPHERE_SPACING;
-            useMaxRadius = true;
-        }
+    TryFit(matrix, sphereScale, SPHERE_SPACING, in_minDistance, MAX_TRIES);
 
-        tryAgain = !TryFit(matrix, sphereScale, m_universeSize, SPHERE_SPACING, in_minDistance, useMaxRadius);
-    }
+    const XMMATRIX scale = XMMatrixScaling(sphereScale, sphereScale, sphereScale);
+    matrix = scale * matrix;
+    
     m_objectPoses.push_back({ matrix, sphereScale });
 }
 
@@ -976,10 +963,10 @@ void Scene::PrepareScene()
     // precompute poses
     m_gen.seed(42);
 
-    // start with a tiny universe
-    m_universeSize = SharedConstants::SPHERE_SCALE * SharedConstants::MAX_SPHERE_SCALE * 2;
-
     float minRadius = (float)m_args.m_terrainParams.m_terrainSideSize;
+
+    // start with a tiny universe
+    m_universeSize = (2 * (minRadius + SharedConstants::SPHERE_SCALE)) * SharedConstants::MAX_SPHERE_SCALE;
 
     m_objects.reserve(m_args.m_maxNumObjects);
     m_objectPoses.reserve(m_args.m_maxNumObjects);
