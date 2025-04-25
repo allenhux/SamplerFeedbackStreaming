@@ -441,7 +441,7 @@ void SFS::ManagerBase::AllocateSharedClearUavHeap()
     {
         CD3DX12_CPU_DESCRIPTOR_HANDLE clearHandle(m_sharedClearUavHeap->GetCPUDescriptorHandleForHeapStart(), sharedClearUavHeapIndex, srvUavCbvDescriptorSize);
         sharedClearUavHeapIndex++;
-        r->CreateFeedbackView(m_device.Get(), clearHandle);
+        r->CreateFeedbackView(clearHandle);
         r->SetClearUavDescriptor(clearHandle);
     }
 }

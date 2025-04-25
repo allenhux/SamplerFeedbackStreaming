@@ -58,7 +58,7 @@ SFS::ResourceBase::ResourceBase(
     , m_pHeap(in_pHeap)
     , m_textureFileInfo(in_filename)
 {
-    m_resources = std::make_unique<SFS::InternalResources>(in_pSFSManager->GetDevice(), m_textureFileInfo, (UINT)m_queuedFeedback.size());
+    m_resources = std::make_unique<SFS::InternalResources>(m_pSFSManager->GetDevice(), m_textureFileInfo, (UINT)m_queuedFeedback.size());
     m_tileMappingState.Init(m_resources->GetPackedMipInfo().NumStandardMips, m_resources->GetTiling());
 
     // initialize a structure that holds ref counts with dimensions equal to min-mip-map

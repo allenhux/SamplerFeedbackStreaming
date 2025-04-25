@@ -49,126 +49,132 @@ SceneObjects::BaseObject::BaseObject(
     const std::wstring& in_filename,
     SFSManager* in_pSFSManager,
     SFSHeap* in_pStreamingHeap,
-    ID3D12Device* in_pDevice,
-    D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
     BaseObject* in_pSharedObject) : m_pSFSManager(in_pSFSManager)
+{
+    m_rootSignature = in_pSharedObject->m_rootSignature;
+    m_rootSignatureFB = in_pSharedObject->m_rootSignatureFB;
+    m_pipelineState = in_pSharedObject->m_pipelineState;
+    m_pipelineStateFB = in_pSharedObject->m_pipelineStateFB;
+
+    m_pStreamingResource = in_pSFSManager->CreateResource(in_filename, in_pStreamingHeap);
+}
+
+SceneObjects::BaseObject::BaseObject(
+    const std::wstring& in_filename,
+    SFSManager* in_pSFSManager,
+    SFSHeap* in_pStreamingHeap,
+    ID3D12Device* in_pDevice) : m_pSFSManager(in_pSFSManager)
 {
     //---------------------------------------
     // create root signature
     //---------------------------------------
-    if (in_pSharedObject)
+
+    //--------------------------------------------
+    // uav and srvs for streaming texture
+    //--------------------------------------------
+    std::vector<CD3DX12_DESCRIPTOR_RANGE1> ranges;
+
+    // these three descriptors are expected to be consecutive in the descriptor heap:
+    // t0: streaming/reserved/paired texture
+    // t1: min mip map
+    // u0: feedback map
+
+    // t0: streaming/reserved/paired texture
+    ranges.push_back(CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE,
+        UINT(Descriptors::HeapOffsetTexture)));
+
+    // t1: min mip map
+    // the min mip view descriptor is "volatile" because it changes if the # of objects changes.
+    std::vector<CD3DX12_DESCRIPTOR_RANGE1> sharedRanges;
+    sharedRanges.push_back(CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE, 0));
+
+    // b0: constant buffers
+    std::vector<CD3DX12_DESCRIPTOR_RANGE1> cbvRanges;
+    cbvRanges.push_back(CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE, 0));
+
+    // s0: sampler
+    std::vector<CD3DX12_DESCRIPTOR_RANGE1> samplerRanges;
+    samplerRanges.push_back(CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE, 0));
+
+    std::vector<CD3DX12_ROOT_PARAMETER1> rootParameters;
+    rootParameters.resize((UINT)RootSigParams::NumParams);
+
+    //-----------------------------
+    // Root Signature Descriptor Tables & 32-bit constants
+    //-----------------------------
+
+    // per-object textures & UAVs
+    CD3DX12_ROOT_PARAMETER1 rootParam;
+    rootParam.InitAsDescriptorTable((UINT)ranges.size(), ranges.data(), D3D12_SHADER_VISIBILITY_PIXEL);
+    rootParameters[(UINT)RootSigParams::ParamObjectTextures] = rootParam;
+
+    // shared textures
+    rootParam.InitAsDescriptorTable((UINT)sharedRanges.size(), sharedRanges.data(), D3D12_SHADER_VISIBILITY_PIXEL);
+    rootParameters[(UINT)RootSigParams::ParamSharedTextures] = rootParam;
+
+    // constant buffers used by both vertex & pixel shaders
+    rootParam.InitAsDescriptorTable((UINT)cbvRanges.size(), cbvRanges.data(), D3D12_SHADER_VISIBILITY_ALL);
+    rootParameters[(UINT)RootSigParams::ParamConstantBuffers] = rootParam;
+
+    // samplers
+    rootParam.InitAsDescriptorTable((UINT)samplerRanges.size(), samplerRanges.data(), D3D12_SHADER_VISIBILITY_PIXEL);
+    rootParameters[(UINT)RootSigParams::ParamSamplers] = rootParam;
+
+    UINT num32BitValues = sizeof(ModelConstantData) / sizeof(UINT32);
+    rootParam.InitAsConstants(num32BitValues, 1, 0, D3D12_SHADER_VISIBILITY_ALL);
+    rootParameters[(UINT)RootSigParams::Param32BitConstants] = rootParam;
+
+    // root sig without feedback map bound
     {
-        m_rootSignature = in_pSharedObject->m_rootSignature;
-        m_rootSignatureFB = in_pSharedObject->m_rootSignatureFB;
-        m_pipelineState = in_pSharedObject->m_pipelineState;
-        m_pipelineStateFB = in_pSharedObject->m_pipelineStateFB;
+        CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
+        rootSignatureDesc.Init_1_1((UINT)rootParameters.size(), rootParameters.data(), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+        ComPtr<ID3DBlob> signature;
+        ComPtr<ID3DBlob> error;
+        ThrowIfFailed(D3D12SerializeVersionedRootSignature(&rootSignatureDesc, &signature, &error));
+        ThrowIfFailed(in_pDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignature)));
     }
-    else
+
+    // root sig with feedback map bound
     {
-        //--------------------------------------------
-        // uav and srvs for streaming texture
-        //--------------------------------------------
-        std::vector<CD3DX12_DESCRIPTOR_RANGE1> ranges;
+        // add a UAV for the feedback map
+        ranges.push_back(CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE,
+            UINT(Descriptors::HeapOffsetFeedback)));
 
-        // these three descriptors are expected to be consecutive in the descriptor heap:
-        // t0: streaming/reserved/paired texture
-        // t1: min mip map
-        // u0: feedback map
-
-        // t0: streaming/reserved/paired texture
-        ranges.push_back(CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE,
-            UINT(Descriptors::HeapOffsetTexture)));
-
-        // t1: min mip map
-        // the min mip view descriptor is "volatile" because it changes if the # of objects changes.
-        std::vector<CD3DX12_DESCRIPTOR_RANGE1> sharedRanges;
-        sharedRanges.push_back(CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE, 0));
-
-        // b0: constant buffers
-        std::vector<CD3DX12_DESCRIPTOR_RANGE1> cbvRanges;
-        cbvRanges.push_back(CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE, 0));
-
-        // s0: sampler
-        std::vector<CD3DX12_DESCRIPTOR_RANGE1> samplerRanges;
-        samplerRanges.push_back(CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE, 0));
-
-        std::vector<CD3DX12_ROOT_PARAMETER1> rootParameters;
-        rootParameters.resize((UINT)RootSigParams::NumParams);
-
-        //-----------------------------
-        // Root Signature Descriptor Tables & 32-bit constants
-        //-----------------------------
-
-        // per-object textures & UAVs
-        CD3DX12_ROOT_PARAMETER1 rootParam;
+        // add uav range to previous root param
         rootParam.InitAsDescriptorTable((UINT)ranges.size(), ranges.data(), D3D12_SHADER_VISIBILITY_PIXEL);
         rootParameters[(UINT)RootSigParams::ParamObjectTextures] = rootParam;
 
-        // shared textures
-        rootParam.InitAsDescriptorTable((UINT)sharedRanges.size(), sharedRanges.data(), D3D12_SHADER_VISIBILITY_PIXEL);
-        rootParameters[(UINT)RootSigParams::ParamSharedTextures] = rootParam;
+        // re-serialize
+        CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
+        rootSignatureDesc.Init_1_1((UINT)rootParameters.size(), rootParameters.data(), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
-        // constant buffers used by both vertex & pixel shaders
-        rootParam.InitAsDescriptorTable((UINT)cbvRanges.size(), cbvRanges.data(), D3D12_SHADER_VISIBILITY_ALL);
-        rootParameters[(UINT)RootSigParams::ParamConstantBuffers] = rootParam;
-
-        // samplers
-        rootParam.InitAsDescriptorTable((UINT)samplerRanges.size(), samplerRanges.data(), D3D12_SHADER_VISIBILITY_PIXEL);
-        rootParameters[(UINT)RootSigParams::ParamSamplers] = rootParam;
-
-        UINT num32BitValues = sizeof(ModelConstantData) / sizeof(UINT32);
-        rootParam.InitAsConstants(num32BitValues, 1, 0, D3D12_SHADER_VISIBILITY_ALL);
-        rootParameters[(UINT)RootSigParams::Param32BitConstants] = rootParam;
-
-        // root sig without feedback map bound
-        {
-            CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
-            rootSignatureDesc.Init_1_1((UINT)rootParameters.size(), rootParameters.data(), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-            ComPtr<ID3DBlob> signature;
-            ComPtr<ID3DBlob> error;
-            ThrowIfFailed(D3D12SerializeVersionedRootSignature(&rootSignatureDesc, &signature, &error));
-            ThrowIfFailed(in_pDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignature)));
-        }
-
-        // root sig with feedback map bound
-        {
-            // add a UAV for the feedback map
-            ranges.push_back(CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE,
-                UINT(Descriptors::HeapOffsetFeedback)));
-
-            // add uav range to previous root param
-            rootParam.InitAsDescriptorTable((UINT)ranges.size(), ranges.data(), D3D12_SHADER_VISIBILITY_PIXEL);
-            rootParameters[(UINT)RootSigParams::ParamObjectTextures] = rootParam;
-
-            // re-serialize
-            CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
-            rootSignatureDesc.Init_1_1((UINT)rootParameters.size(), rootParameters.data(), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-
-            ComPtr<ID3DBlob> signature;
-            ComPtr<ID3DBlob> error;
-            ThrowIfFailed(D3D12SerializeVersionedRootSignature(&rootSignatureDesc, &signature, &error));
-            ThrowIfFailed(in_pDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignatureFB)));
-        }
+        ComPtr<ID3DBlob> signature;
+        ComPtr<ID3DBlob> error;
+        ThrowIfFailed(D3D12SerializeVersionedRootSignature(&rootSignatureDesc, &signature, &error));
+        ThrowIfFailed(in_pDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignatureFB)));
     }
 
     //---------------------------------------
     // create streaming resources
     //---------------------------------------
     {
-        UINT srvUavCbvDescriptorSize = in_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
         // The tile update manager queries the streaming texture for its tile dimensions
         // The feedback resource will be allocated with a mip region size matching the tile size
         m_pStreamingResource = in_pSFSManager->CreateResource(in_filename, in_pStreamingHeap);
-
-        // sampler feedback view
-        CD3DX12_CPU_DESCRIPTOR_HANDLE feedbackHandle(in_srvBaseCPU, (UINT)Descriptors::HeapOffsetFeedback, srvUavCbvDescriptorSize);
-        m_pStreamingResource->CreateFeedbackView(in_pDevice, feedbackHandle);
-
-        // texture view
-        CD3DX12_CPU_DESCRIPTOR_HANDLE textureHandle(in_srvBaseCPU, (UINT)Descriptors::HeapOffsetTexture, srvUavCbvDescriptorSize);
-        m_pStreamingResource->CreateShaderResourceView(in_pDevice, textureHandle);
     }
+}
+
+//-------------------------------------------------------------------------
+//-------------------------------------------------------------------------
+void SceneObjects::BaseObject::CreateResourceViews(D3D12_CPU_DESCRIPTOR_HANDLE in_baseDescriptorHandle, UINT in_srvUavCbvDescriptorSize)
+{
+    // sampler feedback view
+    CD3DX12_CPU_DESCRIPTOR_HANDLE feedbackHandle(in_baseDescriptorHandle, (UINT)Descriptors::HeapOffsetFeedback, in_srvUavCbvDescriptorSize);
+    m_pStreamingResource->CreateFeedbackView(feedbackHandle);
+
+    // texture view
+    CD3DX12_CPU_DESCRIPTOR_HANDLE textureHandle(in_baseDescriptorHandle, (UINT)Descriptors::HeapOffsetTexture, in_srvUavCbvDescriptorSize);
+    m_pStreamingResource->CreateShaderResourceView(textureHandle);
 }
 
 //-------------------------------------------------------------------------
@@ -353,34 +359,49 @@ bool SceneObjects::BaseObject::Drawable() const
 }
 
 //-------------------------------------------------------------------------
+// draw object
 //-------------------------------------------------------------------------
 void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList, const SceneObjects::DrawParams& in_drawParams)
 {
     ASSERT(Drawable());
 
-    //-------------------------------------------
-    // draw object to multi-sampled rendertarget
-    //-------------------------------------------
-        // choose LoD if applicable
+    if (m_createResourceViews) // only do once. modifying in-use descriptors is a perf issue.
+    {
+        m_createResourceViews = false;
+        D3D12_CPU_DESCRIPTOR_HANDLE descriptorHeapBaseCpu = in_drawParams.m_descriptorHeapBaseCpu;
+        descriptorHeapBaseCpu.ptr += in_drawParams.m_srvUavCbvDescriptorSize * in_drawParams.m_descriptorHeapOffset;
+        CreateResourceViews(descriptorHeapBaseCpu, in_drawParams.m_srvUavCbvDescriptorSize);
+    }
+
+    D3D12_GPU_DESCRIPTOR_HANDLE descriptorHeapBaseGpu = in_drawParams.m_descriptorHeapBaseGpu;
+    descriptorHeapBaseGpu.ptr += in_drawParams.m_srvUavCbvDescriptorSize * in_drawParams.m_descriptorHeapOffset;
+
+    if (m_feedbackEnabled)
+    {
+        D3D12_GPU_DESCRIPTOR_HANDLE h = descriptorHeapBaseGpu;
+        h.ptr += in_drawParams.m_srvUavCbvDescriptorSize * (UINT)SceneObjects::Descriptors::HeapOffsetFeedback;
+        m_pSFSManager->QueueFeedback(GetStreamingResource(), h);
+    }
+
+    // uavs and srvs
+    {
+        D3D12_GPU_DESCRIPTOR_HANDLE h = descriptorHeapBaseGpu;
+        h.ptr += in_drawParams.m_srvUavCbvDescriptorSize * (UINT)SceneObjects::Descriptors::HeapOffsetTexture;
+        in_pCommandList->SetGraphicsRootDescriptorTable((UINT)RootSigParams::ParamObjectTextures, h);
+    }
+
+    ModelConstantData modelConstantData{};
+    SetModelConstants(modelConstantData, in_drawParams.m_projection, in_drawParams.m_view);
+    UINT num32BitValues = sizeof(ModelConstantData) / sizeof(UINT32);
+    in_pCommandList->SetGraphicsRoot32BitConstants((UINT)RootSigParams::Param32BitConstants, num32BitValues, &modelConstantData, 0);
+
+    // choose LoD if applicable
     UINT lod = 0;
     if (m_lods.size() > 1)
     {
         lod = ComputeLod(in_drawParams);
     }
     const auto& geometry = m_lods[lod];
-
-    if (m_feedbackEnabled)
-    {
-        m_pSFSManager->QueueFeedback(GetStreamingResource(), in_drawParams.m_feedback);
-    }
-
-    // uavs and srvs
-    in_pCommandList->SetGraphicsRootDescriptorTable((UINT)RootSigParams::ParamObjectTextures, in_drawParams.m_texture);
-
-    ModelConstantData modelConstantData{};
-    SetModelConstants(modelConstantData, in_drawParams.m_projection, in_drawParams.m_view);
-    UINT num32BitValues = sizeof(ModelConstantData) / sizeof(UINT32);
-    in_pCommandList->SetGraphicsRoot32BitConstants((UINT)RootSigParams::Param32BitConstants, num32BitValues, &modelConstantData, 0);
 
     in_pCommandList->IASetIndexBuffer(&geometry.m_indexBufferView);
     in_pCommandList->IASetVertexBuffers(0, 1, &geometry.m_vertexBufferView);
@@ -482,11 +503,9 @@ SceneObjects::Terrain::Terrain(const std::wstring& in_filename,
     SFSHeap* in_pStreamingHeap,
     ID3D12Device* in_pDevice,
     UINT in_sampleCount,
-    D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
     const CommandLineArgs& in_args,
     AssetUploader& in_assetUploader) :
-    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap,
-        in_pDevice, in_srvBaseCPU, nullptr)
+    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap, in_pDevice)
 {
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
@@ -543,15 +562,6 @@ SceneObjects::Terrain::Terrain(const std::wstring& in_filename,
 }
 
 //-------------------------------------------------------------------------
-//-------------------------------------------------------------------------
-ID3D12Device* SceneObjects::BaseObject::GetDevice()
-{
-    ComPtr<ID3D12Device> device;
-    m_pStreamingResource->GetTiledResource()->GetDevice(IID_PPV_ARGS(&device));
-    return device.Get();
-}
-
-//-------------------------------------------------------------------------
 // rotate object around a custom axis.
 //-------------------------------------------------------------------------
 void SceneObjects::BaseObject::Spin(float in_radians)
@@ -568,10 +578,8 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
     SFSHeap* in_pStreamingHeap,
     ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
     UINT in_sampleCount,
-    D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
     const SphereGen::Properties& in_sphereProperties) :
-    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap,
-        in_pDevice, in_srvBaseCPU, nullptr)
+    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap, in_pDevice)
 {
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
@@ -585,10 +593,8 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
 //-------------------------------------------------------------------------
 SceneObjects::Planet::Planet(const std::wstring& in_filename,
     SFSHeap* in_pStreamingHeap,
-    D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
     Planet* in_pSharedObject) :
-    BaseObject(in_filename, in_pSharedObject->m_pSFSManager, in_pStreamingHeap,
-        in_pSharedObject->GetDevice(), in_srvBaseCPU, in_pSharedObject)
+    BaseObject(in_filename, in_pSharedObject->m_pSFSManager, in_pStreamingHeap, in_pSharedObject)
 {
     CopyGeometry(in_pSharedObject);
 }
@@ -665,10 +671,8 @@ SceneObjects::Sky::Sky(const std::wstring& in_filename,
     SFSManager* in_pSFSManager,
     SFSHeap* in_pStreamingHeap,
     ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
-    UINT in_sampleCount,
-    D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU) :
-    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap,
-        in_pDevice, in_srvBaseCPU, nullptr)
+    UINT in_sampleCount) :
+    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap, in_pDevice)
 {
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     rasterizerDesc.CullMode = D3D12_CULL_MODE_FRONT;

@@ -758,10 +758,6 @@ void Scene::LoadSpheres()
     UINT numObjectsAdded = 0;
     if (m_objects.size() < (UINT)m_args.m_numSpheres)
     {
-        // offset by all the objects that have been loaded so far
-        UINT descriptorOffset = (UINT)DescriptorHeapOffsets::NumEntries + UINT(m_objects.size()) * (UINT)SceneObjects::Descriptors::NumEntries;
-        CD3DX12_CPU_DESCRIPTOR_HANDLE descCPU = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), descriptorOffset, m_srvUavCbvDescriptorSize);
-
         UINT textureIndex = (UINT)m_objects.size();
         while (m_objects.size() < (UINT)m_args.m_numSpheres)
         {
@@ -791,14 +787,14 @@ void Scene::LoadSpheres()
             // FIXME? material sorting broke ordering
             if ((nullptr == m_pSky) && (m_args.m_skyTexture.size()))
             {
-                m_pSky = new SceneObjects::Sky(m_args.m_skyTexture, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU);
+                m_pSky = new SceneObjects::Sky(m_args.m_skyTexture, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount);
                 o = m_pSky;
                 float scale = m_universeSize * 2; // NOTE: expects universe size to not change
                 o->GetModelMatrix() = DirectX::XMMatrixScaling(scale, scale, scale);
             }
             else if (nullptr == m_pTerrainSceneObject)
             {
-                m_pTerrainSceneObject = new SceneObjects::Terrain(m_args.m_terrainTexture, m_pSFSManager, pHeap, m_device.Get(), m_args.m_sampleCount, descCPU, m_args, m_assetUploader);
+                m_pTerrainSceneObject = new SceneObjects::Terrain(m_args.m_terrainTexture, m_pSFSManager, pHeap, m_device.Get(), m_args.m_sampleCount, m_args, m_assetUploader);
                 m_terrainObjectIndex = objectIndex;
                 o = m_pTerrainSceneObject;
             }
@@ -810,12 +806,12 @@ void Scene::LoadSpheres()
                 {
                     sphereProperties.m_mirrorU = false;
                     sphereProperties.m_topBottom = false;
-                    m_pEarth = new SceneObjects::Planet(m_args.m_earthTexture, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU, sphereProperties);
+                    m_pEarth = new SceneObjects::Planet(m_args.m_earthTexture, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, sphereProperties);
                     o = m_pEarth;
                 }
                 else
                 {
-                    o = new SceneObjects::Planet(m_args.m_earthTexture, pHeap, descCPU, m_pEarth);
+                    o = new SceneObjects::Planet(m_args.m_earthTexture, pHeap, m_pEarth);
                 }
                 o->SetAxis(XMVectorSet(0, 0, 1, 0));
                 o->GetModelMatrix() = m_objectPoses[m_objects.size()].m_matrix;
@@ -826,21 +822,18 @@ void Scene::LoadSpheres()
                 if (nullptr == m_pFirstSphere)
                 {
                     // use different sphere generator
-                    m_pFirstSphere = new SceneObjects::Planet(textureFilename, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, descCPU);
+                    m_pFirstSphere = new SceneObjects::Planet(textureFilename, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount);
                     o = m_pFirstSphere;
                 }
                 else
                 {
-                    o = new SceneObjects::Planet(textureFilename, pHeap, descCPU, m_pFirstSphere);
+                    o = new SceneObjects::Planet(textureFilename, pHeap, m_pFirstSphere);
                 }
                 static std::uniform_real_distribution<float> dis(-1.f, 1.f);
                 o->SetAxis(DirectX::XMVector3NormalizeEst(DirectX::XMVectorSet(dis(m_gen), dis(m_gen), dis(m_gen), 0)));
                 o->GetModelMatrix() = m_objectPoses[m_objects.size()].m_matrix;
             }
             m_objects.push_back(o);
-
-            // offset to the next sphere
-            descCPU.Offset((UINT)SceneObjects::Descriptors::NumEntries, m_srvUavCbvDescriptorSize);
 
             numObjectsAdded++;
             if (maxNewObjectsPerFrame <= numObjectsAdded)
@@ -1161,6 +1154,7 @@ UINT Scene::DetermineMaxNumFeedbackResolves()
             feedbackTimes.Update(avgTimePerObject);
 
             // # objects to meet target time
+            // FIXME: assumes all textures are the same dimensions
             maxNumFeedbackResolves = std::max(UINT(1), UINT(m_args.m_maxGpuFeedbackTimeMs / feedbackTimes.Get()));
         }
     }
@@ -1175,17 +1169,23 @@ void Scene::DrawObjectSets(ID3D12GraphicsCommandList1* out_pCommandList)
 {
     // set common draw state
     SceneObjects::DrawParams drawParams;
-    drawParams.m_sharedMinMipMap = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
-    drawParams.m_constantBuffers = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), m_frameIndex + (UINT)DescriptorHeapOffsets::FRAME_CBV0, m_srvUavCbvDescriptorSize);
-    drawParams.m_samplers = m_samplerHeap->GetGPUDescriptorHandleForHeapStart();
     drawParams.m_projection = m_projection;
     drawParams.m_view = m_viewMatrix;
     drawParams.m_viewInverse = m_viewMatrixInverse;
+    drawParams.m_sharedMinMipMap = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
+    drawParams.m_constantBuffers = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), m_frameIndex + (UINT)DescriptorHeapOffsets::FRAME_CBV0, m_srvUavCbvDescriptorSize);
+    drawParams.m_samplers = m_samplerHeap->GetGPUDescriptorHandleForHeapStart();
+    drawParams.m_srvUavCbvDescriptorSize = m_srvUavCbvDescriptorSize;
     drawParams.m_windowWidth = m_windowWidth;
     drawParams.m_windowHeight = m_windowHeight;
     drawParams.m_fov = m_fieldOfView;
 
-    const D3D12_GPU_DESCRIPTOR_HANDLE srvBaseGPU = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::NumEntries, m_srvUavCbvDescriptorSize);
+    drawParams.m_descriptorHeapBaseGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(
+        m_srvHeap->GetGPUDescriptorHandleForHeapStart(),
+        (UINT)DescriptorHeapOffsets::NumEntries, m_srvUavCbvDescriptorSize);
+    drawParams.m_descriptorHeapBaseCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(
+        m_srvHeap->GetCPUDescriptorHandleForHeapStart(),
+        (UINT)DescriptorHeapOffsets::NumEntries, m_srvUavCbvDescriptorSize);
 
     for (auto& set : m_frameObjectSets)
     {
@@ -1206,9 +1206,7 @@ void Scene::DrawObjectSets(ID3D12GraphicsCommandList1* out_pCommandList)
 
             for (auto& o : objects)
             {
-                D3D12_GPU_DESCRIPTOR_HANDLE srvGPU = CD3DX12_GPU_DESCRIPTOR_HANDLE(srvBaseGPU, (INT)(o.index * (INT)SceneObjects::Descriptors::NumEntries), m_srvUavCbvDescriptorSize);
-                drawParams.m_texture.ptr = srvGPU.ptr + ((UINT)SceneObjects::Descriptors::HeapOffsetTexture * m_srvUavCbvDescriptorSize);
-                drawParams.m_feedback.ptr = srvGPU.ptr + ((UINT)SceneObjects::Descriptors::HeapOffsetFeedback * m_srvUavCbvDescriptorSize);
+                drawParams.m_descriptorHeapOffset = (o.index * (INT)SceneObjects::Descriptors::NumEntries);
                 o.pObject->Draw(out_pCommandList, drawParams);
             }
         }

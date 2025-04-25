@@ -42,9 +42,9 @@ void SFS::ResourceBase::Destroy()
 //-----------------------------------------------------------------------------
 // create views of resources used directly by the application
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::CreateFeedbackView(ID3D12Device* in_pDevice, D3D12_CPU_DESCRIPTOR_HANDLE out_descriptorHandle)
+void SFS::ResourceBase::CreateFeedbackView(D3D12_CPU_DESCRIPTOR_HANDLE out_descriptorHandle)
 {
-    ((ID3D12Device8*)in_pDevice)->CreateSamplerFeedbackUnorderedAccessView(
+    m_pSFSManager->GetDevice()->CreateSamplerFeedbackUnorderedAccessView(
         m_resources->GetTiledResource(),
         m_resources->GetOpaqueFeedback(),
         out_descriptorHandle);
@@ -56,7 +56,7 @@ void SFS::ResourceBase::CreateFeedbackView(ID3D12Device* in_pDevice, D3D12_CPU_D
 #endif
 }
 
-void SFS::ResourceBase::CreateShaderResourceView(ID3D12Device* in_pDevice, D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle)
+void SFS::ResourceBase::CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle)
 {
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
     srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
@@ -64,7 +64,7 @@ void SFS::ResourceBase::CreateShaderResourceView(ID3D12Device* in_pDevice, D3D12
     srvDesc.Format = m_resources->GetTiledResource()->GetDesc().Format;
     srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
-    in_pDevice->CreateShaderResourceView(m_resources->GetTiledResource(), &srvDesc, in_descriptorHandle);
+    m_pSFSManager->GetDevice()->CreateShaderResourceView(m_resources->GetTiledResource(), &srvDesc, in_descriptorHandle);
 }
 
 //-----------------------------------------------------------------------------

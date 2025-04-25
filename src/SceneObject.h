@@ -54,14 +54,16 @@ namespace SceneObjects
 
     struct DrawParams
     {
-        D3D12_GPU_DESCRIPTOR_HANDLE m_texture;
-        D3D12_GPU_DESCRIPTOR_HANDLE m_feedback;
-        D3D12_GPU_DESCRIPTOR_HANDLE m_sharedMinMipMap;
-        D3D12_GPU_DESCRIPTOR_HANDLE m_constantBuffers;
-        D3D12_GPU_DESCRIPTOR_HANDLE m_samplers;
         DirectX::XMMATRIX m_projection;
         DirectX::XMMATRIX m_view;
         DirectX::XMMATRIX m_viewInverse;
+        D3D12_GPU_DESCRIPTOR_HANDLE m_sharedMinMipMap;
+        D3D12_GPU_DESCRIPTOR_HANDLE m_constantBuffers;
+        D3D12_GPU_DESCRIPTOR_HANDLE m_samplers;
+        D3D12_GPU_DESCRIPTOR_HANDLE m_descriptorHeapBaseGpu;
+        D3D12_CPU_DESCRIPTOR_HANDLE m_descriptorHeapBaseCpu;
+        UINT m_srvUavCbvDescriptorSize;
+        UINT m_descriptorHeapOffset; // before multiplying by descriptor size
         UINT m_windowWidth{ 0 };
         UINT m_windowHeight{ 0 };
         float m_fov;
@@ -74,9 +76,6 @@ namespace SceneObjects
         {
             m_pStreamingResource->Destroy();
         }
-
-        // do not draw until minimal assets have been created/uploaded
-        bool Drawable() const;
 
         // state re-used by a number of objects
         void SetCommonGraphicsState(ID3D12GraphicsCommandList1* in_pCommandList, const SceneObjects::DrawParams& in_drawParams);
@@ -91,8 +90,15 @@ namespace SceneObjects
             return m_feedbackEnabled ? m_pipelineStateFB.Get() : m_pipelineState.Get();
         }
 
+        void CreateResourceViews(D3D12_CPU_DESCRIPTOR_HANDLE in_baseDescriptorHandle, UINT in_srvUavCbvDescriptorSize);
+
+        // within view frustum?
         virtual bool IsVisible([[maybe_unused]] const DirectX::XMMATRIX& in_projection, [[maybe_unused]]const float in_zFar ) { return true; }
-        virtual void Draw(ID3D12GraphicsCommandList1* in_pCommandList, const DrawParams& in_drawParams);
+
+        // do not draw until minimal assets have been created/uploaded
+        bool Drawable() const;
+
+        void Draw(ID3D12GraphicsCommandList1* in_pCommandList, const DrawParams& in_drawParams);
 
         DirectX::XMMATRIX& GetModelMatrix() { return m_matrix; }
         DirectX::XMMATRIX& GetCombinedMatrix() { return m_combinedMatrix; }
@@ -127,8 +133,12 @@ namespace SceneObjects
             const std::wstring& in_filename, // this class takes ownership and deletes in destructor
             SFSManager* in_pSFSManager,
             SFSHeap* in_pStreamingHeap,
-            ID3D12Device* in_pDevice,
-            D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
+            ID3D12Device* in_pDevice);
+
+        BaseObject(
+            const std::wstring& in_filename, // this class takes ownership and deletes in destructor
+            SFSManager* in_pSFSManager,
+            SFSHeap* in_pStreamingHeap,
             BaseObject* in_pSharedObject);  // to share root sig, etc.
 
         template<typename T> using ComPtr = Microsoft::WRL::ComPtr<T>;
@@ -178,13 +188,14 @@ namespace SceneObjects
             in_pCommandList->SetPipelineState(m_pipelineStateFB.Get());
         }
 
-        ID3D12Device* GetDevice();
         DirectX::XMVECTORF32 m_axis{ { { 0.0f, 1.0f, 0.0f, 0.0f } } };
 
         // cache bounding sphere radius
         float m_radius{ 0.0f };
 
     private:
+        bool m_createResourceViews{ true };
+
         struct Geometry
         {
             UINT m_numIndices{ 0 };
@@ -201,10 +212,6 @@ namespace SceneObjects
 
         ComPtr<ID3D12RootSignature> m_rootSignatureFB;
         ComPtr<ID3D12PipelineState> m_pipelineStateFB;
-
-        //-----------------------------------
-        // tile memory management
-        //-----------------------------------
 
         std::wstring GetAssetFullPath(const std::wstring& in_filename);
     };
@@ -225,7 +232,6 @@ namespace SceneObjects
             SFSHeap* in_pStreamingHeap,
             ID3D12Device* in_pDevice,
             UINT in_sampleCount,
-            D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
             const CommandLineArgs& in_args,
             AssetUploader& in_assetUploader);
     };
@@ -238,20 +244,17 @@ namespace SceneObjects
             SFSHeap* in_pStreamingHeap,
             ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
             UINT in_sampleCount,
-            D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
             const SphereGen::Properties& in_properties);
 
         Planet(const std::wstring& in_filename,
             SFSHeap* in_pStreamingHeap,
-            D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU,
             Planet* in_pSharedObject);
 
         Planet(const std::wstring& in_filename,
             SFSManager* in_pSFSManager,
             SFSHeap* in_pStreamingHeap,
             ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
-            UINT in_sampleCount,
-            D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU);
+            UINT in_sampleCount);
 
         bool IsVisible(const DirectX::XMMATRIX& in_projection, const float in_zFar) override;
         float GetBoundingSphereRadius() override;
@@ -266,8 +269,7 @@ namespace SceneObjects
             SFSManager* in_pSFSManager,
             SFSHeap* in_pStreamingHeap,
             ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
-            UINT in_sampleCount,
-            D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU);
+            UINT in_sampleCount);
 
         virtual void SetModelConstants(ModelConstantData& out_modelConstantData,
             const DirectX::XMMATRIX& in_projection,

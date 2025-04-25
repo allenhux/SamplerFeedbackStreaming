@@ -97,10 +97,8 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
     SFSManager* in_pSFSManager,
     SFSHeap* in_pStreamingHeap,
     ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
-    UINT in_sampleCount,
-    D3D12_CPU_DESCRIPTOR_HANDLE in_srvBaseCPU) :
-    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap,
-        in_pDevice, in_srvBaseCPU, nullptr)
+    UINT in_sampleCount) :
+    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap, in_pDevice)
 {
     SetAxis(DirectX::XMVectorSet(0, 0, 1, 0));
 
