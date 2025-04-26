@@ -93,12 +93,11 @@ static ID3D12Resource* CreatePlanetVertexBuffer(
 // planets have multiple LoDs
 // Texture Coordinates may optionally be mirrored in U
 //=========================================================================
-SceneObjects::Planet::Planet(const std::wstring& in_filename,
+SceneObjects::Planet::Planet(
     SFSManager* in_pSFSManager,
-    SFSHeap* in_pStreamingHeap,
     ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
     UINT in_sampleCount) :
-    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap, in_pDevice)
+    BaseObject(in_pSFSManager, in_pDevice)
 {
     SetAxis(DirectX::XMVectorSet(0, 0, 1, 0));
 

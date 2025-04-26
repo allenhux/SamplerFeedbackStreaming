@@ -90,6 +90,8 @@ namespace SceneObjects
             return m_feedbackEnabled ? m_pipelineStateFB.Get() : m_pipelineState.Get();
         }
 
+        void CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap,
+            const struct XetFileHeader* in_pFileHeader = nullptr);
         void CreateResourceViews(D3D12_CPU_DESCRIPTOR_HANDLE in_baseDescriptorHandle, UINT in_srvUavCbvDescriptorSize);
 
         // within view frustum?
@@ -130,15 +132,11 @@ namespace SceneObjects
     protected:
         // pass in a location in a descriptor heap where this can write 3 descriptors
         BaseObject(
-            const std::wstring& in_filename, // this class takes ownership and deletes in destructor
             SFSManager* in_pSFSManager,
-            SFSHeap* in_pStreamingHeap,
             ID3D12Device* in_pDevice);
 
         BaseObject(
-            const std::wstring& in_filename, // this class takes ownership and deletes in destructor
             SFSManager* in_pSFSManager,
-            SFSHeap* in_pStreamingHeap,
             BaseObject* in_pSharedObject);  // to share root sig, etc.
 
         template<typename T> using ComPtr = Microsoft::WRL::ComPtr<T>;
@@ -227,9 +225,7 @@ namespace SceneObjects
     class Terrain : public BaseObject
     {
     public:
-        Terrain(const std::wstring& in_filename,
-            SFSManager* in_pSFSManager,
-            SFSHeap* in_pStreamingHeap,
+        Terrain(SFSManager* in_pSFSManager,
             ID3D12Device* in_pDevice,
             UINT in_sampleCount,
             const CommandLineArgs& in_args,
@@ -239,20 +235,14 @@ namespace SceneObjects
     class Planet : public BaseObject
     {
     public:
-        Planet(const std::wstring& in_filename,
-            SFSManager* in_pSFSManager,
-            SFSHeap* in_pStreamingHeap,
+        Planet(SFSManager* in_pSFSManager,
             ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
             UINT in_sampleCount,
             const SphereGen::Properties& in_properties);
 
-        Planet(const std::wstring& in_filename,
-            SFSHeap* in_pStreamingHeap,
-            Planet* in_pSharedObject);
+        Planet(Planet* in_pSharedObject);
 
-        Planet(const std::wstring& in_filename,
-            SFSManager* in_pSFSManager,
-            SFSHeap* in_pStreamingHeap,
+        Planet(SFSManager* in_pSFSManager,
             ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
             UINT in_sampleCount);
 
@@ -265,9 +255,7 @@ namespace SceneObjects
     class Sky : public BaseObject
     {
     public:
-        Sky(const std::wstring& in_filename,
-            SFSManager* in_pSFSManager,
-            SFSHeap* in_pStreamingHeap,
+        Sky(SFSManager* in_pSFSManager,
             ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
             UINT in_sampleCount);
 

@@ -64,9 +64,12 @@ SFSHeap* SFS::ManagerBase::CreateHeap(UINT in_maxNumTilesHeap)
 //--------------------------------------------
 // Create SFS Resources using a common SFSManager
 //--------------------------------------------
-SFSResource* SFS::ManagerBase::CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap)
+SFSResource* SFS::ManagerBase::CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap,
+    const XetFileHeader* in_pFileHeader)
 {
-    auto pRsrc = new SFS::ResourceBase(in_filename, (SFS::ManagerSR*)this, (SFS::Heap*)in_pHeap);
+    ASSERT(!m_withinFrame);
+
+    auto pRsrc = new SFS::ResourceBase(in_filename, in_pFileHeader, (SFS::ManagerSR*)this, (SFS::Heap*)in_pHeap);
 
     m_streamingResources.push_back(pRsrc);
     m_newResources.push_back(pRsrc);
@@ -172,21 +175,56 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     m_withinFrame = true;
 
     // need to (re) StartThreads() if resources were deleted
-    // if the threads have been stopped, treat all the resources as "new"
     if (!m_threadsRunning)
     {
-        m_newResources = m_streamingResources;
-        m_newResourcesSharePFT.clear();
-        m_newResourcesShareRT.clear();
+        ASSERT(0 == m_newResources.size());
+        ASSERT(false == m_processFeedbackThreadRunning);
+        ASSERT(false == m_residencyThreadRunning);
+
+        // no need to lock
+        // treat all the resources as "new"
+        m_newResourcesShareRT = m_streamingResources;
+        m_newResourcesSharePFT = m_newResourcesShareRT;
+        // also treat all the resources as potentially having pending loads/evictions
+        m_pendingSharePFT = m_newResourcesShareRT;
+
         StartThreads();
     }
+
+    ID3D12Resource* pOldResidencyMapRT = nullptr;
+    if (m_packedMipTransitionResources.size())
+    {
+        std::vector<ResourceBase*> tmpResources;
+        for (UINT i = 0; i < m_packedMipTransitionResources.size();)
+        {
+            auto p = m_packedMipTransitionResources[i];
+            if (p->GetPackedMipsNeedTransition())
+            {
+                D3D12_RESOURCE_BARRIER b = CD3DX12_RESOURCE_BARRIER::Transition(
+                    p->GetTiledResource(),
+                    D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                m_packedMipTransitionBarriers.push_back(b);
+                tmpResources.push_back(p);
+                m_packedMipTransitionResources[i] = m_packedMipTransitionResources.back();
+                m_packedMipTransitionResources.resize(m_packedMipTransitionResources.size() - 1);
+                //m_streamingResources.push_back(p);
+            }
+            else
+            {
+                i++;
+            }
+        }
+        if (m_packedMipTransitionBarriers.size())
+        {
+            pOldResidencyMapRT = AllocateResidencyMap(in_minmipmapDescriptorHandle, tmpResources);
+            AllocateSharedClearUavHeap();
+        }
+    }
+
 
     // if new StreamingResources have been created...
     if (m_newResources.size())
     {
-        ID3D12Resource* pOldResidencyMapRT = AllocateResidencyMap(in_minmipmapDescriptorHandle);
-        AllocateSharedClearUavHeap();
-
         // share new resources with running threads
         {
             m_newResourcesLockPFT.Acquire();
@@ -198,8 +236,8 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
             m_newResourcesShareRT.insert(m_newResourcesShareRT.end(), m_newResources.begin(), m_newResources.end());
             m_newResourcesLockRT.Release();
 
+            m_packedMipTransitionResources.insert(m_packedMipTransitionResources.end(), m_newResources.begin(), m_newResources.end());
             m_newResources.clear();
-            m_residencyChangedFlag.Set();
         }
     }
 
@@ -234,7 +272,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
 
     // capture cpu time spent processing feedback
     {
-        INT64 processFeedbackTime = m_processFeedbackTime; // snapshot of total time spent
+        INT64 processFeedbackTime = m_processFeedbackTime; // snapshot of live counter
         m_processFeedbackFrameTime = m_cpuTimer.GetSecondsFromDelta(processFeedbackTime - m_previousFeedbackTime);
         m_previousFeedbackTime = processFeedbackTime; // remember current time for next call
     }
@@ -268,19 +306,8 @@ SFSManager::CommandLists SFS::ManagerBase::EndFrame()
         // NOTE: the debug layer may complain about CopyTextureRegion() if the resource state is not state_copy_dest (or common)
         //       despite the fact the copy queue doesn't really care about resource state
         //       CopyTiles() won't complain because this library always targets an atlas that is always state_copy_dest
-        if (m_packedMipTransition)
+        if (m_packedMipTransitionBarriers.size())
         {
-            m_packedMipTransition = false;
-            for (auto o : m_streamingResources)
-            {
-                if (o->GetPackedMipsNeedTransition())
-                {
-                    D3D12_RESOURCE_BARRIER b = CD3DX12_RESOURCE_BARRIER::Transition(
-                        o->GetTiledResource(),
-                        D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-                    m_packedMipTransitionBarriers.push_back(b);
-                }
-            }
             pCommandList->ResourceBarrier((UINT)m_packedMipTransitionBarriers.size(), m_packedMipTransitionBarriers.data());
             m_packedMipTransitionBarriers.clear();
         }

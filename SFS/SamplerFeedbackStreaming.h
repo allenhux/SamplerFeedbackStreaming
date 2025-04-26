@@ -83,8 +83,8 @@ struct SFSResource
     // NOTE: all min mip maps are stored in a single buffer. offset into the buffer.
     virtual UINT GetMinMipMapOffset() const = 0;
 
-    // check if the packed mips are loaded. application likely will not want to use this texture before they have loaded
-    virtual bool GetPackedMipsResident() const = 0;
+    // application should not use this texture before it is ready
+    virtual bool Drawable() const = 0;
 
     // if a resource isn't visible, evict associated data
     // call any time
@@ -165,8 +165,10 @@ struct SFSManager
 
     //--------------------------------------------
     // Create StreamingResources using a common SFSManager
+    // Optionally provide a file header (e.g. if app opens many files or uses a custom file format)
     //--------------------------------------------
-    virtual SFSResource* CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap) = 0;
+    virtual SFSResource* CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap,
+        const struct XetFileHeader* in_pFileHeader = nullptr) = 0;
 
     //--------------------------------------------
     // Call BeginFrame() first,

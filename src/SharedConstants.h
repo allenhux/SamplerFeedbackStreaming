@@ -34,9 +34,9 @@ namespace SharedConstants
     static constexpr UINT SWAP_CHAIN_BUFFER_COUNT = 2;
 
     // scene properties
-    static constexpr UINT SPHERE_SCALE = 100;
+    static constexpr UINT SPHERE_RADIUS = 50;
     static constexpr UINT SPHERE_SPACING = 1; // percent, min gap size between planets
-    static constexpr UINT MAX_SPHERE_SCALE = 10; // spheres can be up to this * sphere_scale in size
+    static constexpr UINT MAX_SPHERE_SCALE = 15; // spheres can be up to this * sphere_scale in size
 
     static constexpr UINT NUM_SPHERE_LEVELS_OF_DETAIL = 6;
     static constexpr UINT SPHERE_LOD_BIAS = 10; // pixels per triangle

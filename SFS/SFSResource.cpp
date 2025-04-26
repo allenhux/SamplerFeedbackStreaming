@@ -99,9 +99,10 @@ UINT SFS::ResourceBase::GetMinMipMapOffset() const
 //-----------------------------------------------------------------------------
 // // check if the packed mips are loaded. application should not use this texture before they have loaded
 //-----------------------------------------------------------------------------
-bool SFS::ResourceBase::GetPackedMipsResident() const
+bool SFS::ResourceBase::Drawable() const
 {
-    return (PackedMipStatus::RESIDENT == m_packedMipStatus);// || (PackedMipStatus::NEEDS_TRANSITION == m_packedMipStatus);
+    bool drawable = (UINT(-1) != m_residencyMapOffsetBase) && (PackedMipStatus::RESIDENT == m_packedMipStatus);
+    return drawable;
 }
 
 //-----------------------------------------------------------------------------

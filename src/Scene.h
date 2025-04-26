@@ -34,6 +34,7 @@
 #include "FrameEventTracing.h"
 #include "AssetUploader.h"
 #include "Gui.h"
+#include "XetFileHeader.h"
 
 class Scene
 {
@@ -237,16 +238,27 @@ private:
 
     struct ObjectPose
     {
-        DirectX::XMMATRIX m_matrix;
-        float m_radius;
+        void reserve(UINT in_size) { m_matrix.reserve(in_size); m_radius.reserve(in_size); }
+        size_t size() const { return m_matrix.size(); }
+        void push_back(const DirectX::XMMATRIX& m, float r)
+        {
+            m_matrix.push_back(m);
+            m_radius.push_back(r);
+        }
+        std::vector<DirectX::XMMATRIX> m_matrix;
+        std::vector<float> m_radius;
     };
-    std::vector<ObjectPose> m_objectPoses;
+    ObjectPose m_objectPoses;
     float m_universeSize{ 0 };
     void PrepareScene();
 
-    void TryFit(DirectX::XMMATRIX& out_matrix, float in_radius, float in_gap,
-        float in_minDistance, UINT in_numTries);
+    void TryFit(DirectX::XMMATRIX& out_matrix, float in_radius, float in_gap, float in_minDistance);
     void SetSphereMatrix(float in_minDistance);
+
+    // optimize file open/read for many files
+    // corresponds to m_args.m_textures
+    std::vector<XetFileHeader> m_textureFileHeaders;
+
     void LoadSpheres(); // progressively over multiple frames
 
     // each frame, update objects until timeout reached

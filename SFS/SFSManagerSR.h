@@ -60,8 +60,14 @@ namespace SFS
         void Remove(ResourceBase* in_pResource)
         {
             ASSERT(!GetWithinFrame());
-            m_streamingResources.erase(std::remove(m_streamingResources.begin(), m_streamingResources.end(), in_pResource), m_streamingResources.end());
-            m_pendingResources.erase(std::remove(m_pendingResources.begin(), m_pendingResources.end(), in_pResource), m_pendingResources.end());
+
+            // stop other threads from accessing the resource
+            Finish();
+
+            ContainerRemove(m_streamingResources, in_pResource);
+            ContainerRemove(m_pendingResources, in_pResource);
+            ContainerRemove(m_packedMipTransitionResources, in_pResource);
+            ASSERT(0 == m_newResources.size());
         }
 
         UploadBuffer& GetResidencyMap() { return m_residencyMap; }
@@ -78,8 +84,6 @@ namespace SFS
 
         // a fence on the render (direct) queue used to determine when feedback has been written & resolved
         UINT64 GetFrameFenceValue() const { return m_frameFenceValue; }
-
-        void NotifyPackedMips() { m_packedMipTransition = true; } // called when a SFSResource has recieved its packed mips
 
         ID3D12CommandQueue* GetMappingQueue() const
         {

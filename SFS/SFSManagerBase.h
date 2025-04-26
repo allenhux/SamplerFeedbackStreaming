@@ -63,7 +63,8 @@ namespace SFS
         //-----------------------------------------------------------------
         virtual void Destroy() override;
         virtual SFSHeap* CreateHeap(UINT in_maxNumTilesHeap) override;
-        virtual SFSResource* CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap) override;
+        virtual SFSResource* CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap,
+            const XetFileHeader* in_pFileHeader) override;
         virtual void BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap, D3D12_CPU_DESCRIPTOR_HANDLE in_minmipmapDescriptorHandle) override;
         virtual void QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor) override;
         virtual CommandLists EndFrame() override;
@@ -108,11 +109,15 @@ namespace SFS
 
         // each SFSResource writes current uploaded tile state to min mip map, separate data for each frame
         // internally, use a single buffer containing all the residency maps
-        SFS::UploadBuffer m_residencyMap;
+        struct ResidencyMap : SFS::UploadBuffer
+        {
+            UINT m_bytesUsed{ 0 };
+        } m_residencyMap;
 
         SFS::SynchronizationFlag m_residencyChangedFlag;
 
-        std::atomic<bool> m_packedMipTransition{ false }; // flag that we need to transition a resource due to packed mips
+        // after initialized, call AllocateResidencyMap() and AllocateSharedClearUavHeap()
+        std::vector<ResourceBase*> m_packedMipTransitionResources;
 
         std::vector<ResourceBase*> m_newResources; // list of newly created resources
         std::vector<ResourceBase*> m_newResourcesSharePFT; // resources to be shared with ProcessFeedbackThread
@@ -123,11 +128,16 @@ namespace SFS
         Lock m_pendingLockPFT;   // lock between ProcessFeedbackThread and main thread
 
         // save old residency maps. Let the residency thread release them.
-        std::vector<ID3D12Resource*> m_oldResidencyMapRT; // if set, ResidencyThread should delete
+        std::vector<ID3D12Resource*> m_oldResidencyMapRT; // if non-empty, ResidencyThread should release all
         std::vector<ResourceBase*> m_newResourcesShareRT; // resources to be shared with ResidencyThread
         Lock m_newResourcesLockRT; // lock between ResidencyThread and main thread
 
     private:
+#ifdef _DEBUG
+        std::atomic<bool> m_processFeedbackThreadRunning{ false };
+        std::atomic<bool> m_residencyThreadRunning{ false };
+#endif
+
         // direct queue is used to monitor progress of render frames so we know when feedback buffers are ready to be used
         ComPtr<ID3D12CommandQueue> m_directCommandQueue;
 
@@ -178,7 +188,8 @@ namespace SFS
         std::atomic<bool> m_withinFrame{ false };
 
         // returns old resource if a new resource was created
-        ID3D12Resource* AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle);
+        ID3D12Resource* AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle,
+            std::vector<ResourceBase*>& in_newResources);
 
         struct CommandList
         {
@@ -203,8 +214,6 @@ namespace SFS
 
         // the min mip map is shared. it must be created (at least) every time a SFSResource is created/destroyed
         void CreateMinMipMapView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor);
-
-        std::vector<UINT> m_residencyMapOffsets; // one min mip map for each SFSResource
 
         ComPtr<ID3D12DescriptorHeap> m_sharedClearUavHeap; // CPU heap to clear feedback resources, shared by all
         void AllocateSharedClearUavHeap();

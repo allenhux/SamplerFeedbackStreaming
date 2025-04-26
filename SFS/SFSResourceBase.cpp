@@ -45,8 +45,10 @@
 // data structure to manage reserved resource
 //=============================================================================
 SFS::ResourceBase::ResourceBase(
-    // method that will fill a tile-worth of bits, for streaming
+    // file containing streaming texture and tile offsets
     const std::wstring& in_filename,
+    // texture file header with dimension, format, etc.
+    const XetFileHeader* in_pFileHeader,
     // share upload buffers with other InternalResources
     SFS::ManagerSR* in_pSFSManager,
     // share heap with other StreamingResources
@@ -56,7 +58,7 @@ SFS::ResourceBase::ResourceBase(
     , m_queuedFeedback(in_pSFSManager->GetNumSwapBuffers())
     , m_pendingEvictions(in_pSFSManager->GetEvictionDelay())
     , m_pHeap(in_pHeap)
-    , m_textureFileInfo(in_filename)
+    , m_textureFileInfo(in_filename, in_pFileHeader)
 {
     m_resources = std::make_unique<SFS::InternalResources>(m_pSFSManager->GetDevice(), m_textureFileInfo, (UINT)m_queuedFeedback.size());
     m_tileMappingState.Init(m_resources->GetPackedMipInfo().NumStandardMips, m_resources->GetTiling());
@@ -100,13 +102,13 @@ SFS::ResourceBase::~ResourceBase()
     // do not delete SFSResource between BeginFrame() and EndFrame(). It's complicated.
     ASSERT(!m_pSFSManager->GetWithinFrame());
 
-    // stop other threads from accessing the resource 
-    m_pSFSManager->Finish();
+    // tell SFSManager to stop tracking
+    m_pSFSManager->Remove(this);
 
-    // remove this object's allocations from the heap, which might be shared
+    // remove tile allocations from the heap
     m_tileMappingState.FreeHeapAllocations(m_pHeap);
 
-    // debug message workaround if exit before packed mips load, or no mips
+    // remove packed mip allocations from the heap
     if (m_packedMipHeapIndices.size())
     {
         m_pHeap->GetAllocator().Free(m_packedMipHeapIndices);
@@ -114,16 +116,13 @@ SFS::ResourceBase::~ResourceBase()
 
     m_pendingEvictions.Clear();
     m_pendingTileLoads.clear();
-
-    // tell SFSManager to stop tracking
-    m_pSFSManager->Remove(this);
 }
 
 //-----------------------------------------------------------------------------
 // when the SFSResource gets an offset into the shared ResidencyMap,
 // it can be initialized to the current minmipmap state
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::SetResidencyMapOffsetBase(UINT in_residencyMapOffsetBase)
+void SFS::ResourceBase::SetResidencyMapOffset(UINT in_residencyMapOffsetBase)
 {
     m_residencyMapOffsetBase = in_residencyMapOffsetBase;
 
@@ -707,7 +706,7 @@ void SFS::ResourceBase::UpdateMinMipMap()
     m_tileResidencyChanged = false;
 
     // NOTE: packed mips status is not atomic, but m_tileResidencyChanged is sufficient
-    ASSERT(GetPackedMipsResident());
+    ASSERT(Drawable());
 
     auto& outBuffer = m_pSFSManager->GetResidencyMap();
     UINT8* pResidencyMap = m_residencyMapOffsetBase + (UINT8*)outBuffer.GetData();
@@ -876,8 +875,8 @@ bool SFS::ResourceBase::InitPackedMips()
         // NOTE: in this case, for simplicity, initialize now (usually deferred)
         if (0 == m_resources->GetPackedMipInfo().NumTilesForPackedMips)
         {
-            m_packedMipStatus = PackedMipStatus::RESIDENT;
             DeferredInitialize2();
+            m_packedMipStatus = PackedMipStatus::RESIDENT;
         }
     }
 

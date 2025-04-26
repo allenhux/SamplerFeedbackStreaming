@@ -43,17 +43,25 @@ UINT32 magic number
 DDS_HEADER structure
 DDS_HEADER_DXT10 structure
 -----------------------------------------------------------------------------*/
-SFS::XeTexture::XeTexture(const std::wstring& in_fileName) : m_fileName(in_fileName)
+SFS::XeTexture::XeTexture(const std::wstring& in_fileName, const XetFileHeader* in_pFileHeader)
+    : m_fileName(in_fileName)
 {
-    std::ifstream inFile(in_fileName.c_str(), std::ios::binary);
-    ASSERT(!inFile.fail()); // File doesn't exist?
+    if (in_pFileHeader)
+    {
+        m_fileHeader = *in_pFileHeader;
+    }
+    else
+    {
+        std::ifstream inFile(in_fileName.c_str(), std::ios::binary);
+        ASSERT(!inFile.fail()); // File doesn't exist?
 
-    inFile.read((char*)&m_fileHeader, sizeof(m_fileHeader));
-    ASSERT(inFile.good()); // Unexpected Error reading header
+        inFile.read((char*)&m_fileHeader, sizeof(m_fileHeader));
+        ASSERT(inFile.good()); // Unexpected Error reading header
+        inFile.close();
+    }
 
     ASSERT(m_fileHeader.m_magic == XetFileHeader::GetMagic()); // valid XET file?
     ASSERT(m_fileHeader.m_version = XetFileHeader::GetVersion()); // correct XET version?
-    inFile.close();
 }
 
 //-----------------------------------------------------------------------------

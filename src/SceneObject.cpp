@@ -46,23 +46,17 @@
 // constructor
 //-------------------------------------------------------------------------
 SceneObjects::BaseObject::BaseObject(
-    const std::wstring& in_filename,
     SFSManager* in_pSFSManager,
-    SFSHeap* in_pStreamingHeap,
     BaseObject* in_pSharedObject) : m_pSFSManager(in_pSFSManager)
 {
     m_rootSignature = in_pSharedObject->m_rootSignature;
     m_rootSignatureFB = in_pSharedObject->m_rootSignatureFB;
     m_pipelineState = in_pSharedObject->m_pipelineState;
     m_pipelineStateFB = in_pSharedObject->m_pipelineStateFB;
-
-    m_pStreamingResource = in_pSFSManager->CreateResource(in_filename, in_pStreamingHeap);
 }
 
 SceneObjects::BaseObject::BaseObject(
-    const std::wstring& in_filename,
     SFSManager* in_pSFSManager,
-    SFSHeap* in_pStreamingHeap,
     ID3D12Device* in_pDevice) : m_pSFSManager(in_pSFSManager)
 {
     //---------------------------------------
@@ -153,15 +147,16 @@ SceneObjects::BaseObject::BaseObject(
         ThrowIfFailed(D3D12SerializeVersionedRootSignature(&rootSignatureDesc, &signature, &error));
         ThrowIfFailed(in_pDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignatureFB)));
     }
+}
 
-    //---------------------------------------
-    // create streaming resources
-    //---------------------------------------
-    {
-        // The tile update manager queries the streaming texture for its tile dimensions
-        // The feedback resource will be allocated with a mip region size matching the tile size
-        m_pStreamingResource = in_pSFSManager->CreateResource(in_filename, in_pStreamingHeap);
-    }
+//-------------------------------------------------------------------------
+// create streaming resources
+// optionally provide file header
+//-------------------------------------------------------------------------
+void SceneObjects::BaseObject::CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap,
+    const struct XetFileHeader* in_pFileHeader)
+{
+    m_pStreamingResource = m_pSFSManager->CreateResource(in_filename, in_pHeap, in_pFileHeader);
 }
 
 //-------------------------------------------------------------------------
@@ -355,7 +350,7 @@ UINT SceneObjects::BaseObject::ComputeLod(const SceneObjects::DrawParams& in_dra
 //-------------------------------------------------------------------------
 bool SceneObjects::BaseObject::Drawable() const
 {
-    return m_pStreamingResource->GetPackedMipsResident();
+    return m_pStreamingResource->Drawable();
 }
 
 //-------------------------------------------------------------------------
@@ -498,14 +493,13 @@ void SceneObjects::CreateSphere(SceneObjects::BaseObject* out_pObject,
 
 //=========================================================================
 //=========================================================================
-SceneObjects::Terrain::Terrain(const std::wstring& in_filename,
+SceneObjects::Terrain::Terrain(
     SFSManager* in_pSFSManager,
-    SFSHeap* in_pStreamingHeap,
     ID3D12Device* in_pDevice,
     UINT in_sampleCount,
     const CommandLineArgs& in_args,
     AssetUploader& in_assetUploader) :
-    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap, in_pDevice)
+    BaseObject(in_pSFSManager, in_pDevice)
 {
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
@@ -573,13 +567,12 @@ void SceneObjects::BaseObject::Spin(float in_radians)
 // planets have multiple LoDs
 // Texture Coordinates may optionally be mirrored in U
 //=========================================================================
-SceneObjects::Planet::Planet(const std::wstring& in_filename,
+SceneObjects::Planet::Planet(
     SFSManager* in_pSFSManager,
-    SFSHeap* in_pStreamingHeap,
     ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
     UINT in_sampleCount,
     const SphereGen::Properties& in_sphereProperties) :
-    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap, in_pDevice)
+    BaseObject(in_pSFSManager, in_pDevice)
 {
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
@@ -591,10 +584,8 @@ SceneObjects::Planet::Planet(const std::wstring& in_filename,
 
 //-------------------------------------------------------------------------
 //-------------------------------------------------------------------------
-SceneObjects::Planet::Planet(const std::wstring& in_filename,
-    SFSHeap* in_pStreamingHeap,
-    Planet* in_pSharedObject) :
-    BaseObject(in_filename, in_pSharedObject->m_pSFSManager, in_pStreamingHeap, in_pSharedObject)
+SceneObjects::Planet::Planet(Planet* in_pSharedObject) :
+    BaseObject(in_pSharedObject->m_pSFSManager, in_pSharedObject)
 {
     CopyGeometry(in_pSharedObject);
 }
@@ -667,12 +658,11 @@ float SceneObjects::Planet::GetBoundingSphereRadius()
 // it has only 1 LoD
 // shading is much simpler: no lighting
 //=============================================================================
-SceneObjects::Sky::Sky(const std::wstring& in_filename,
+SceneObjects::Sky::Sky(
     SFSManager* in_pSFSManager,
-    SFSHeap* in_pStreamingHeap,
     ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
     UINT in_sampleCount) :
-    BaseObject(in_filename, in_pSFSManager, in_pStreamingHeap, in_pDevice)
+    BaseObject(in_pSFSManager, in_pDevice)
 {
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     rasterizerDesc.CullMode = D3D12_CULL_MODE_FRONT;

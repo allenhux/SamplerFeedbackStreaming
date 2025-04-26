@@ -112,8 +112,4 @@ void SFS::ResourceDU::NotifyPackedMips()
     DeferredInitialize2();
 
     m_packedMipStatus = PackedMipStatus::NEEDS_TRANSITION;
-    m_pSFSManager->NotifyPackedMips();
-
-    // MinMipMap already set to packed mip values, don't need to go through UpdateMinMipMap
-    //SetResidencyChanged();
 }

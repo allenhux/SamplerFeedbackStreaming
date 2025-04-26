@@ -62,7 +62,7 @@ namespace SFS
         virtual UINT GetMinMipMapWidth() const override;
         virtual UINT GetMinMipMapHeight() const override;
         virtual UINT GetMinMipMapOffset() const override;
-        virtual bool GetPackedMipsResident() const override;
+        virtual bool Drawable() const override;
         virtual void QueueEviction() override;
         virtual ID3D12Resource* GetMinMipMap() const override;
         virtual UINT GetNumTilesVirtual() const override;
@@ -73,6 +73,8 @@ namespace SFS
         ResourceBase(
             // method that will fill a tile-worth of bits, for streaming
             const std::wstring& in_filename,
+            // texture file header with dimension, format, etc.
+            const XetFileHeader* in_pFileHeader,
             // share heap and upload buffers with other InternalResources
             SFS::ManagerSR* in_pSFSManager,
             Heap* in_pHeap);
@@ -80,7 +82,7 @@ namespace SFS
         virtual ~ResourceBase();
 
         // called whenever a new SFSResource is created - even one other than "this"
-        void SetResidencyMapOffsetBase(UINT in_residencyMapOffsetBase);
+        void SetResidencyMapOffset(UINT in_residencyMapOffsetBase);
 
         // called when creating/changing FileStreamer
         void SetFileHandle(const class DataUploader* in_pDataUploader);
@@ -256,7 +258,7 @@ namespace SFS
         //--------------------------------------------------------
         // for public interface
         //--------------------------------------------------------
-        UINT m_residencyMapOffsetBase{ 0 };
+        UINT m_residencyMapOffsetBase{ UINT(-1) };
 
         // used by QueueEviction()
         std::atomic<bool> m_setZeroRefCounts{ false };

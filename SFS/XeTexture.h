@@ -54,7 +54,7 @@ namespace SFS
 
         UINT GetPackedMipFileOffset(UINT* out_pNumBytesTotal, UINT* out_pNumBytesUncompressed) const;
 
-        XeTexture(const std::wstring& in_filename);
+        XeTexture(const std::wstring& in_filename, const XetFileHeader* in_pFileHeader);
         void LoadTileInfo();
         const std::wstring& GetFileName() const { return m_fileName; }
     protected:

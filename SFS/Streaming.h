@@ -171,4 +171,15 @@ namespace SFS
     private:
         std::atomic<uint32_t> m_lock{ 0 };
     };
+
+    // quick remove from container: find element, overwrite with last value, then shrink the container
+    template<typename C, typename V> void ContainerRemove(C& container, V value)
+    {
+        auto i = std::find(container.begin(), container.end(), value);
+        if (i != container.end())
+        {
+            *i = container.back();
+            container.resize(container.size() - 1);
+        }
+    }
 }

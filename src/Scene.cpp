@@ -249,6 +249,8 @@ Scene::~Scene()
 
     delete m_pFrustumViewer;
 
+    // FIXME: The best (fastest) way to shut down is to Destroy SFS Manager first
+
     for (auto o : m_objects)
     {
         delete o;
@@ -684,40 +686,43 @@ void Scene::StartStreamingLibrary()
 // return true if the pose does not intersect anything in the universe
 //-----------------------------------------------------------------------------
 void Scene::TryFit(XMMATRIX& out_matrix, float in_radius, float in_gap,
-    float in_minDistance, UINT in_numTries)
+    float in_minDistance)
 {
-    static std::uniform_real_distribution<float> dis(0, 1);
+    std::uniform_real_distribution<float> rDis(0, 1);
+    std::uniform_real_distribution<float> xDis(in_minDistance, m_universeSize);
 
     XMMATRIX rtate = XMMatrixIdentity();
     XMMATRIX xlate = XMMatrixIdentity();
 
-    while (in_numTries)
+    UINT numTries = 200;
+    while (numTries)
     {
-        rtate = XMMatrixRotationRollPitchYaw((XM_2PI)*dis(m_gen), (XM_2PI)*dis(m_gen), (XM_2PI)*dis(m_gen));
-        float x = std::max(m_universeSize * dis(m_gen), in_minDistance);
+        rtate = XMMatrixRotationRollPitchYaw(
+            (XM_2PI)*xDis(m_gen), (XM_2PI)*xDis(m_gen), (XM_2PI)*xDis(m_gen));
+        float x = xDis(m_gen);
         xlate.r[3] = XMVectorSet(0, 0, x, 1.f);
         out_matrix = xlate * rtate;
 
         bool fits = true;
         XMVECTOR p0 = out_matrix.r[3];
-        for (const auto& o : m_objectPoses)
+        for (UINT i = 0; i < m_objectPoses.size(); i++)
         {
-            XMVECTOR p1 = o.m_matrix.r[3];
+            XMVECTOR p1 = m_objectPoses.m_matrix[i].r[3];
             float dist = XMVectorGetX(XMVector3LengthEst(p1 - p0));
 
             // leave a minimum spacing between planets
-            if (dist < (in_radius + o.m_radius + in_gap))
+            if (dist < (in_radius + m_objectPoses.m_radius[i] + in_gap))
             {
                 fits = false;
                 break;
             }
         }
         if (fits) return;
-        in_numTries--;
+        numTries--;
     }
     // doesn't fit? grow the universe, then put this object on the edge
     {
-        m_universeSize += in_radius + in_gap;
+        m_universeSize += in_radius + in_gap + SharedConstants::SPHERE_RADIUS * SharedConstants::MAX_SPHERE_SCALE;
         xlate.r[3] = XMVectorSet(0, 0, m_universeSize, 1.f);
         out_matrix = xlate * rtate;
     }
@@ -725,28 +730,31 @@ void Scene::TryFit(XMMATRIX& out_matrix, float in_radius, float in_gap,
 
 //-----------------------------------------------------------------------------
 // generate a random scale, position, and rotation
-// also space the spheres so they do not touch
+// space the spheres so they do not touch
+// leave a hole in the middle with radius = in_minDistance
 //-----------------------------------------------------------------------------
 void Scene::SetSphereMatrix(float in_minDistance)
 {
-    constexpr float MIN_SPHERE_SIZE = SharedConstants::SPHERE_SCALE;
-    constexpr float MAX_SPHERE_SIZE = SharedConstants::MAX_SPHERE_SCALE * MIN_SPHERE_SIZE;
-    constexpr float SPHERE_SPACING = float(MIN_SPHERE_SIZE) * .5f;
-    static std::uniform_real_distribution<float> scaleDis(MIN_SPHERE_SIZE, MAX_SPHERE_SIZE);
-    constexpr UINT MAX_TRIES = 100;
+    constexpr float SPHERE_SPACING = SharedConstants::SPHERE_RADIUS * .5f;
 
-    in_minDistance += MAX_SPHERE_SIZE + SPHERE_SPACING;
+    float range = SharedConstants::SPHERE_RADIUS * SharedConstants::MAX_SPHERE_SCALE;
+    float midPoint = .5f * range;
+    float stdDev = range / 4.f;
+    std::normal_distribution<float>scaleDis(midPoint, stdDev);
+
+    in_minDistance += SPHERE_SPACING + SharedConstants::SPHERE_RADIUS * SharedConstants::MAX_SPHERE_SCALE;
+    m_universeSize = std::max(m_universeSize, in_minDistance * 1.25f);
 
     XMMATRIX matrix = XMMatrixIdentity();
 
-    float sphereScale = scaleDis(m_gen);
+    float sphereScale = std::clamp(scaleDis(m_gen), (float)SharedConstants::SPHERE_RADIUS, range);
 
-    TryFit(matrix, sphereScale, SPHERE_SPACING, in_minDistance, MAX_TRIES);
+    TryFit(matrix, sphereScale, SPHERE_SPACING, in_minDistance);
 
     const XMMATRIX scale = XMMatrixScaling(sphereScale, sphereScale, sphereScale);
     matrix = scale * matrix;
     
-    m_objectPoses.push_back({ matrix, sphereScale });
+    m_objectPoses.push_back(matrix, sphereScale);
 }
 
 //-----------------------------------------------------------------------------
@@ -754,7 +762,7 @@ void Scene::SetSphereMatrix(float in_minDistance)
 //-----------------------------------------------------------------------------
 void Scene::LoadSpheres()
 {
-    const UINT maxNewObjectsPerFrame = 100;
+    const UINT maxNewObjectsPerFrame = 200;
     UINT numObjectsAdded = 0;
     if (m_objects.size() < (UINT)m_args.m_numSpheres)
     {
@@ -787,16 +795,18 @@ void Scene::LoadSpheres()
             // FIXME? material sorting broke ordering
             if ((nullptr == m_pSky) && (m_args.m_skyTexture.size()))
             {
-                m_pSky = new SceneObjects::Sky(m_args.m_skyTexture, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount);
+                m_pSky = new SceneObjects::Sky(m_pSFSManager, m_device.Get(), m_assetUploader, m_args.m_sampleCount);
                 o = m_pSky;
+                o->CreateResource(m_args.m_skyTexture, pHeap);
                 float scale = m_universeSize * 2; // NOTE: expects universe size to not change
                 o->GetModelMatrix() = DirectX::XMMatrixScaling(scale, scale, scale);
             }
             else if (nullptr == m_pTerrainSceneObject)
             {
-                m_pTerrainSceneObject = new SceneObjects::Terrain(m_args.m_terrainTexture, m_pSFSManager, pHeap, m_device.Get(), m_args.m_sampleCount, m_args, m_assetUploader);
+                m_pTerrainSceneObject = new SceneObjects::Terrain(m_pSFSManager, m_device.Get(), m_args.m_sampleCount, m_args, m_assetUploader);
                 m_terrainObjectIndex = objectIndex;
                 o = m_pTerrainSceneObject;
+                o->CreateResource(m_args.m_terrainTexture, pHeap);
             }
             // earth
             else if (m_args.m_earthTexture.size() && (0 == fileIndex))
@@ -806,15 +816,16 @@ void Scene::LoadSpheres()
                 {
                     sphereProperties.m_mirrorU = false;
                     sphereProperties.m_topBottom = false;
-                    m_pEarth = new SceneObjects::Planet(m_args.m_earthTexture, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount, sphereProperties);
+                    m_pEarth = new SceneObjects::Planet(m_pSFSManager, m_device.Get(), m_assetUploader, m_args.m_sampleCount, sphereProperties);
                     o = m_pEarth;
                 }
                 else
                 {
-                    o = new SceneObjects::Planet(m_args.m_earthTexture, pHeap, m_pEarth);
+                    o = new SceneObjects::Planet(m_pEarth);
                 }
+                o->CreateResource(m_args.m_earthTexture, pHeap);
                 o->SetAxis(XMVectorSet(0, 0, 1, 0));
-                o->GetModelMatrix() = m_objectPoses[m_objects.size()].m_matrix;
+                o->GetModelMatrix() = m_objectPoses.m_matrix[m_objects.size()];
             }
             // planet
             else
@@ -822,16 +833,17 @@ void Scene::LoadSpheres()
                 if (nullptr == m_pFirstSphere)
                 {
                     // use different sphere generator
-                    m_pFirstSphere = new SceneObjects::Planet(textureFilename, m_pSFSManager, pHeap, m_device.Get(), m_assetUploader, m_args.m_sampleCount);
+                    m_pFirstSphere = new SceneObjects::Planet(m_pSFSManager, m_device.Get(), m_assetUploader, m_args.m_sampleCount);
                     o = m_pFirstSphere;
                 }
                 else
                 {
-                    o = new SceneObjects::Planet(textureFilename, pHeap, m_pFirstSphere);
+                    o = new SceneObjects::Planet(m_pFirstSphere);
                 }
+                o->CreateResource(textureFilename, pHeap, &m_textureFileHeaders[fileIndex]);
                 static std::uniform_real_distribution<float> dis(-1.f, 1.f);
                 o->SetAxis(DirectX::XMVector3NormalizeEst(DirectX::XMVectorSet(dis(m_gen), dis(m_gen), dis(m_gen), 0)));
-                o->GetModelMatrix() = m_objectPoses[m_objects.size()].m_matrix;
+                o->GetModelMatrix() = m_objectPoses.m_matrix[m_objects.size()];
             }
             m_objects.push_back(o);
 
@@ -959,13 +971,31 @@ void Scene::PrepareScene()
     float minRadius = (float)m_args.m_terrainParams.m_terrainSideSize;
 
     // start with a tiny universe
-    m_universeSize = (2 * (minRadius + SharedConstants::SPHERE_SCALE)) * SharedConstants::MAX_SPHERE_SCALE;
+    m_universeSize = 2 * minRadius;// +(SharedConstants::SPHERE_RADIUS)*SharedConstants::MAX_SPHERE_SCALE;
 
     m_objects.reserve(m_args.m_maxNumObjects);
     m_objectPoses.reserve(m_args.m_maxNumObjects);
     for(UINT i = 0; i < m_args.m_maxNumObjects; i++)
     {
         SetSphereMatrix(minRadius);
+    }
+
+    // load texture file headers
+    m_textureFileHeaders.reserve(m_args.m_textures.size());
+    for (auto s : m_args.m_textures)
+    {
+        std::ifstream inFile(s.c_str(), std::ios::binary);
+        ASSERT(!inFile.fail()); // File doesn't exist?
+
+        XetFileHeader fileHeader;
+        inFile.read((char*)&fileHeader, sizeof(fileHeader));
+        ASSERT(inFile.good()); // Unexpected Error reading header
+        inFile.close();
+
+        ASSERT(fileHeader.m_magic == XetFileHeader::GetMagic()); // valid XET file?
+        ASSERT(fileHeader.m_version = XetFileHeader::GetVersion()); // correct XET version?
+
+        m_textureFileHeaders.push_back(fileHeader);
     }
 }
 
@@ -1710,7 +1740,7 @@ void Scene::HandleUiToggleFrustum()
         XMVECTOR pos = m_viewMatrixInverse.r[3];
 
         // scale to something within universe scale
-        float scale = SharedConstants::SPHERE_SCALE * 2.5;
+        float scale = SharedConstants::SPHERE_RADIUS * 2.5;
 
         m_pFrustumViewer->SetView(m_viewMatrixInverse, scale);
 
@@ -1817,6 +1847,11 @@ bool Scene::Draw()
     // handle any changes to window dimensions or enter/exit full screen
     Resize();
 
+#if 0
+    // TEST: creation/deletion and thread safety
+    m_args.m_numSpheres = 2 + (rand() * m_args.m_maxNumObjects) / RAND_MAX;
+#endif
+
     // load more spheres?
     // SceneResource destruction/creation must be done outside of BeginFrame/EndFrame
     LoadSpheres();
@@ -1830,15 +1865,6 @@ bool Scene::Draw()
     // prepare for new commands (need an open command list for LoadSpheres)
     m_commandAllocators[m_frameIndex]->Reset();
     m_commandList->Reset((ID3D12CommandAllocator*)m_commandAllocators[m_frameIndex].Get(), nullptr);
-
-    // Aliasing barriers are unnecessary, as draw commands only access modified resources after a fence has signaled on the copy queue
-    // Note it is also theoretically possible for tiles to be re-assigned while a draw command is executing
-    // However, performance analysis tools like to know about changes to resources
-    if (m_aliasingBarriers.size())
-    {
-        m_commandList->ResourceBarrier((UINT)m_aliasingBarriers.size(), m_aliasingBarriers.data());
-        m_aliasingBarriers.clear();
-    }
 
     // check the non-streaming uploader to see if anything needs to be uploaded or any memory can be freed
     m_assetUploader.WaitForUploads(m_commandQueue.Get(), m_commandList.Get());
@@ -1884,6 +1910,16 @@ bool Scene::Draw()
             D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
         m_commandList->ResourceBarrier(1, &barrier);
     }
+
+    // Aliasing barriers are unnecessary, as draw commands only access modified resources after a fence has signaled on the copy queue
+    // Note it is also theoretically possible for tiles to be re-assigned while a draw command is executing
+    // However, performance analysis tools like to know about changes to resources
+    if (m_aliasingBarriers.size())
+    {
+        m_commandList->ResourceBarrier((UINT)m_aliasingBarriers.size(), m_aliasingBarriers.data());
+        m_aliasingBarriers.clear();
+    }
+
     m_pGpuTimer->ResolveAllTimers(m_commandList.Get());
     m_commandList->Close();
 

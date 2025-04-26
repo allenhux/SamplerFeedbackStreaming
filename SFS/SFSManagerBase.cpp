@@ -83,6 +83,8 @@ m_numSwapBuffers(in_desc.m_swapChainBufferCount)
     m_frameFenceValue++;
 
     UseDirectStorage(in_desc.m_useDirectStorage);
+
+    StartThreads(); // have to, or hit assert in debug mode
 }
 
 SFS::ManagerBase::~ManagerBase()
@@ -107,12 +109,22 @@ void SFS::ManagerBase::StartThreads()
     // process sampler feedback buffers, generate upload and eviction commands
     m_processFeedbackThread = std::thread([&]
         {
+#ifdef _DEBUG
+            m_processFeedbackThreadRunning = true;
+#endif
             ProcessFeedbackThread();
+#ifdef _DEBUG
+            m_processFeedbackThreadRunning = false;
+#endif
         });
 
     // modify residency maps as a result of gpu completion events
     m_updateResidencyThread = std::thread([&]
         {
+#ifdef _DEBUG
+            m_residencyThreadRunning = true;
+#endif
+
             std::vector<ResourceBase*> streamingResources;
 
             while (m_threadsRunning)
@@ -136,6 +148,9 @@ void SFS::ManagerBase::StartThreads()
                     p->UpdateMinMipMap();
                 }
             }
+#ifdef _DEBUG
+            m_residencyThreadRunning = false;
+#endif
         });
 
     SFS::SetThreadPriority(m_processFeedbackThread, m_threadPriority);
@@ -331,6 +346,8 @@ void SFS::ManagerBase::StopThreads()
         {
             m_updateResidencyThread.join();
         }
+        ASSERT(false == m_processFeedbackThreadRunning);
+        ASSERT(false == m_residencyThreadRunning);
     }
 }
 
@@ -351,37 +368,36 @@ void SFS::ManagerBase::Finish()
 
 //-----------------------------------------------------------------------------
 // allocate residency map buffer large enough for numswapbuffers * min mip map buffers for each SFSResource
-// SFSResource::SetResidencyMapOffsetBase() will populate the residency map with latest
+// assign offsets to new resources and update all resources on resource allocation
 // descriptor handle required to update the assoiated shader resource view
 //-----------------------------------------------------------------------------
-ID3D12Resource* SFS::ManagerBase::AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle)
+ID3D12Resource* SFS::ManagerBase::AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle,
+    std::vector<ResourceBase*>& in_newResources)
 {
     ID3D12Resource* pOldResource = nullptr; // return old resource if a new one was allocated
 
-    static const UINT alignment = 32; // these are bytes, so align by 32 corresponds to SIMD32
+    static const UINT alignment = 32; // align to SIMD32
     static const UINT minBufferSize = 64 * 1024; // multiple of 64KB page
 
-    UINT oldBufferSize = 0;
+    UINT bufferSize = 0;
     if (nullptr != m_residencyMap.GetResource())
     {
-        oldBufferSize = (UINT)m_residencyMap.GetResource()->GetDesc().Width;
+        bufferSize = (UINT)m_residencyMap.GetResource()->GetDesc().Width;
     }
 
-    // allocate residency map buffer large enough for numswapbuffers * min mip map buffers for each SFSResource
-    m_residencyMapOffsets.resize(m_streamingResources.size());
-    UINT offset = 0;
-    for (UINT i = 0; i < (UINT)m_residencyMapOffsets.size(); i++)
+    UINT requiredSize = m_residencyMap.m_bytesUsed;
+    ASSERT(0 == (requiredSize & (alignment - 1)));
+    for (const auto& r : in_newResources)
     {
-        m_residencyMapOffsets[i] = offset;
-
-        UINT minMipMapSize = m_streamingResources[i]->GetNumTilesWidth() * m_streamingResources[i]->GetNumTilesHeight();
-
-        offset += minMipMapSize;
-
-        offset = (offset + alignment - 1) & ~(alignment-1);
+        UINT minMipMapSize = r->GetNumTilesWidth() * r->GetNumTilesHeight();
+        requiredSize += (minMipMapSize + alignment - 1) & ~(alignment - 1);
     }
 
-    if (offset > oldBufferSize)
+    UINT offset = m_residencyMap.m_bytesUsed;
+    auto* updateArray = &in_newResources;
+
+    // allocate residency map buffer large enough for all SFSResources
+    if (requiredSize > bufferSize)
     {
         // if available, use GPU Upload Heaps
         auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
@@ -399,7 +415,7 @@ ID3D12Resource* SFS::ManagerBase::AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HAND
 
         }
 
-        UINT bufferSize = std::max(2 * offset, minBufferSize);
+        bufferSize = std::max(2 * requiredSize, minBufferSize);
 
         // let thread de-allocate the old resource.
         pOldResource = m_residencyMap.Detach();
@@ -407,13 +423,21 @@ ID3D12Resource* SFS::ManagerBase::AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HAND
         m_residencyMap.Allocate(m_device.Get(), bufferSize, uploadHeapProperties);
 
         CreateMinMipMapView(in_descriptorHandle);
+
+        // need to re-assign all the streaming resources
+        offset = 0;
+        updateArray = &m_streamingResources;
     }
 
     // set offsets AFTER allocating resource. allows SFSResource to initialize buffer state
-    for (UINT i = 0; i < (UINT)m_streamingResources.size(); i++)
+    // assign all if we allocated above. if re-using, just assign in_newResources 
+    for (auto r : *updateArray)
     {
-        m_streamingResources[i]->SetResidencyMapOffsetBase(m_residencyMapOffsets[i]);
+        r->SetResidencyMapOffset(offset);
+        UINT minMipMapSize = r->GetNumTilesWidth() * r->GetNumTilesHeight();
+        offset += (minMipMapSize + alignment - 1) & ~(alignment - 1);
     }
+    m_residencyMap.m_bytesUsed = offset;
 
     return pOldResource;
 }
