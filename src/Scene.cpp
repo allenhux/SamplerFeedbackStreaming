@@ -735,21 +735,21 @@ void Scene::TryFit(XMMATRIX& out_matrix, float in_radius, float in_gap,
 //-----------------------------------------------------------------------------
 void Scene::SetSphereMatrix(float in_minDistance)
 {
-    constexpr float SPHERE_SPACING = SharedConstants::SPHERE_RADIUS * .5f;
+    constexpr float gap = SharedConstants::SPHERE_RADIUS * 2.f;
 
     float range = SharedConstants::SPHERE_RADIUS * SharedConstants::MAX_SPHERE_SCALE;
     float midPoint = .5f * range;
     float stdDev = range / 4.f;
     std::normal_distribution<float>scaleDis(midPoint, stdDev);
 
-    in_minDistance += SPHERE_SPACING + SharedConstants::SPHERE_RADIUS * SharedConstants::MAX_SPHERE_SCALE;
+    in_minDistance += gap + SharedConstants::SPHERE_RADIUS * SharedConstants::MAX_SPHERE_SCALE;
     m_universeSize = std::max(m_universeSize, in_minDistance * 1.25f);
 
     XMMATRIX matrix = XMMatrixIdentity();
 
     float sphereScale = std::clamp(scaleDis(m_gen), (float)SharedConstants::SPHERE_RADIUS, range);
 
-    TryFit(matrix, sphereScale, SPHERE_SPACING, in_minDistance);
+    TryFit(matrix, sphereScale, gap, in_minDistance);
 
     const XMMATRIX scale = XMMatrixScaling(sphereScale, sphereScale, sphereScale);
     matrix = scale * matrix;
@@ -762,7 +762,7 @@ void Scene::SetSphereMatrix(float in_minDistance)
 //-----------------------------------------------------------------------------
 void Scene::LoadSpheres()
 {
-    const UINT maxNewObjectsPerFrame = 200;
+    const UINT maxNewObjectsPerFrame = 500;
     UINT numObjectsAdded = 0;
     if (m_objects.size() < (UINT)m_args.m_numSpheres)
     {
