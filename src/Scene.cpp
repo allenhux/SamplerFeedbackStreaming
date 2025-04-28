@@ -25,11 +25,10 @@
 //*********************************************************
 
 #include "pch.h"
+#include <ppl.h>
 
 #include "Scene.h"
-
 #include "D3D12GpuTimer.h"
-
 #include "Gui.h"
 #include "TextureViewer.h"
 #include "BufferViewer.h"
@@ -1281,9 +1280,10 @@ void Scene::DrawObjects()
 
             if (!o->Drawable()) { continue; }
 
-            bool isVisible = o->IsVisible(m_projection, m_zFar); // draw or evict?
+            bool isVisible = o->IsVisible();
             // FIXME: magic number. idea is, no need to stream texture data to tiny objects
-            bool isTiny = o->GetScreenAreaPixels(m_windowHeight, m_fieldOfView) < 50;
+            bool isTiny = o->GetScreenAreaPixels() < 50;
+
             // get sampler feedback for this object?
             bool queueFeedback = isVisible && (!isTiny) && (numFeedbackObjects < maxNumFeedbackResolves);
             bool evict = !isVisible || isTiny;
@@ -1498,15 +1498,19 @@ void Scene::Animate()
     // spin objects
     float rotation = m_args.m_animationRate * 0.01f;
 
-    for (auto o : m_objects)
-    {
-        if (m_pSky != o)
+    // per-frame per-object compute visibility, lod, etc.
+    const XMMATRIX worldProj = m_viewMatrix * m_projection;
+    const float cotWdiv2 = XMVectorGetX(m_projection.r[0]);
+    const float cotHdiv2 = XMVectorGetY(m_projection.r[1]);
+    concurrency::parallel_for_each(m_objects.begin(), m_objects.end(), [&](auto o)
         {
-            o->Spin(rotation);
-        }
+            if (m_pSky != o)
+            {
+                o->Spin(rotation);
+            }
 
-        o->GetCombinedMatrix() = o->GetModelMatrix() * m_viewMatrix * m_projection;
-    }
+            o->SetCombinedMatrix(worldProj, m_windowHeight, cotWdiv2, cotHdiv2, m_zFar);
+        });
 }
 
 //-------------------------------------------------------------------------
@@ -1855,13 +1859,14 @@ bool Scene::Draw()
     // load more spheres?
     // SceneResource destruction/creation must be done outside of BeginFrame/EndFrame
     LoadSpheres();
-
+#if 0
+    // FIXME
     // after loading new objects
     if (m_args.m_waitForAssetLoad && WaitForAssetLoad())
     {
         return true;
     }
-
+#endif
     // prepare for new commands (need an open command list for LoadSpheres)
     m_commandAllocators[m_frameIndex]->Reset();
     m_commandList->Reset((ID3D12CommandAllocator*)m_commandAllocators[m_frameIndex].Get(), nullptr);

@@ -95,7 +95,7 @@ namespace SceneObjects
         void CreateResourceViews(D3D12_CPU_DESCRIPTOR_HANDLE in_baseDescriptorHandle, UINT in_srvUavCbvDescriptorSize);
 
         // within view frustum?
-        virtual bool IsVisible([[maybe_unused]] const DirectX::XMMATRIX& in_projection, [[maybe_unused]]const float in_zFar ) { return true; }
+        virtual bool IsVisible([[maybe_unused]] float in_cotWdiv2, [[maybe_unused]]const float in_zFar ) { return true; }
 
         // do not draw until minimal assets have been created/uploaded
         bool Drawable() const;
@@ -103,7 +103,11 @@ namespace SceneObjects
         void Draw(ID3D12GraphicsCommandList1* in_pCommandList, const DrawParams& in_drawParams);
 
         DirectX::XMMATRIX& GetModelMatrix() { return m_matrix; }
-        DirectX::XMMATRIX& GetCombinedMatrix() { return m_combinedMatrix; }
+        const DirectX::XMMATRIX& GetCombinedMatrix() { return m_combinedMatrix; }
+
+        // also compute visibility, screen area, and LoD
+        void SetCombinedMatrix(const DirectX::XMMATRIX& in_worldProjection,
+            UINT in_windowHeight, float in_cotWdiv2, float in_cotHdiv2, float in_zFar);
 
         void Spin(float in_radians); // spin this object around its desired axis
 
@@ -128,8 +132,11 @@ namespace SceneObjects
 
         virtual float GetBoundingSphereRadius() { return m_radius; }
 
-        float GetScreenAreaPixels(UINT in_windowHeight, float in_fov);
+        float GetScreenAreaPixels() const { return m_screenAreaPixels; }
+        UINT GetLoD() const { return m_lod; }
+        bool IsVisible() const { return m_visible; }
     protected:
+
         // pass in a location in a descriptor heap where this can write 3 descriptors
         BaseObject(
             SFSManager* in_pSFSManager,
@@ -163,8 +170,6 @@ namespace SceneObjects
 
         SFSResource* m_pStreamingResource{ nullptr };
 
-        UINT ComputeLod(const SceneObjects::DrawParams& in_drawParams);
-
         void CreatePipelineState(
             const wchar_t* in_ps, const wchar_t* in_psFB, const wchar_t* in_vs,
             ID3D12Device* in_pDevice, UINT in_sampleCount,
@@ -190,9 +195,18 @@ namespace SceneObjects
 
         // cache bounding sphere radius
         float m_radius{ 0.0f };
+        virtual bool ComputeVisible(
+            [[maybe_unused]] float in_cotWdiv2, [[maybe_unused]] float in_cotHdiv2,
+            [[maybe_unused]] const float in_zFar) { return true; }
 
     private:
         bool m_createResourceViews{ true };
+
+        bool m_visible{ true };
+        float m_screenAreaPixels{ 0 }; // only updated if visible
+        UINT m_lod{ 0 }; // only updated if visible
+        float ComputeScreenAreaPixels(UINT in_windowHeight, float in_fov);
+        UINT ComputeLod();
 
         struct Geometry
         {
@@ -246,7 +260,7 @@ namespace SceneObjects
             ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
             UINT in_sampleCount);
 
-        bool IsVisible(const DirectX::XMMATRIX& in_projection, const float in_zFar) override;
+        virtual bool ComputeVisible(float in_cotWdiv2, float in_cotHdiv2, const float in_zFar) override;
         float GetBoundingSphereRadius() override;
     };
 

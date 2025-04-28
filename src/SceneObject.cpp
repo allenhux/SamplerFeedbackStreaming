@@ -250,7 +250,7 @@ std::wstring SceneObjects::BaseObject::GetAssetFullPath(const std::wstring& in_f
 void SceneObjects::BaseObject::SetModelConstants(ModelConstantData& out_modelConstantData,
     const DirectX::XMMATRIX&, const DirectX::XMMATRIX&)
 {
-    out_modelConstantData.g_combinedTransform = m_combinedMatrix;
+    out_modelConstantData.g_combinedTransform = GetCombinedMatrix();
 
     out_modelConstantData.g_worldTransform = m_matrix;
 
@@ -317,7 +317,7 @@ void SceneObjects::BaseObject::SetCommonGraphicsState(ID3D12GraphicsCommandList1
 // Pick LoD
 // FIXME: need to know size of object on screen, calc triangles/pixel
 //-------------------------------------------------------------------------
-UINT SceneObjects::BaseObject::ComputeLod(const SceneObjects::DrawParams& in_drawParams)
+UINT SceneObjects::BaseObject::ComputeLod()
 {
     float z = DirectX::XMVectorGetZ(GetCombinedMatrix().r[3]);
 
@@ -327,14 +327,12 @@ UINT SceneObjects::BaseObject::ComputeLod(const SceneObjects::DrawParams& in_dra
         return 0;
     }
 
-    const float areaPixels = GetScreenAreaPixels(in_drawParams.m_windowHeight, in_drawParams.m_fov);
-
     UINT lod = (UINT)m_lods.size() - 1; // least triangles
     while (lod > 0)
     {
         UINT numTriangles = m_lods[lod - 1].m_numIndices / 3;
         numTriangles /= 2; // half the triangles are back-facing
-        if (areaPixels / numTriangles < SharedConstants::SPHERE_LOD_BIAS)
+        if (m_screenAreaPixels / numTriangles < SharedConstants::SPHERE_LOD_BIAS)
         {
             break;
         }
@@ -390,13 +388,7 @@ void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList,
     UINT num32BitValues = sizeof(ModelConstantData) / sizeof(UINT32);
     in_pCommandList->SetGraphicsRoot32BitConstants((UINT)RootSigParams::Param32BitConstants, num32BitValues, &modelConstantData, 0);
 
-    // choose LoD if applicable
-    UINT lod = 0;
-    if (m_lods.size() > 1)
-    {
-        lod = ComputeLod(in_drawParams);
-    }
-    const auto& geometry = m_lods[lod];
+    const auto& geometry = m_lods[m_lod];
 
     in_pCommandList->IASetIndexBuffer(&geometry.m_indexBufferView);
     in_pCommandList->IASetVertexBuffers(0, 1, &geometry.m_vertexBufferView);
@@ -406,11 +398,10 @@ void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList,
 //-----------------------------------------------------------------------------
 // rough approximation of screen area in pixels
 //-----------------------------------------------------------------------------
-float SceneObjects::BaseObject::GetScreenAreaPixels(UINT in_windowHeight, float in_fov)
+float SceneObjects::BaseObject::ComputeScreenAreaPixels(UINT in_windowHeight, float in_cotWdiv2)
 {
     // rough estimate of the projected radius in pixels:
-    const float cotWdiv2 = 1.f / std::tanf(in_fov / 2);
-    const float radiusScreen = GetBoundingSphereRadius() / DirectX::XMVectorGetW(m_combinedMatrix.r[3]) * cotWdiv2;
+    const float radiusScreen = GetBoundingSphereRadius() / DirectX::XMVectorGetW(m_combinedMatrix.r[3]) * in_cotWdiv2;
     const float radiusPixels = in_windowHeight * radiusScreen;
     float areaPixels = DirectX::XM_PI * radiusPixels * radiusPixels;
 
@@ -563,7 +554,28 @@ void SceneObjects::BaseObject::Spin(float in_radians)
     m_matrix = DirectX::XMMatrixRotationAxis(m_axis, in_radians) * m_matrix;
 }
 
- //=========================================================================
+//-------------------------------------------------------------------------
+// set combined matrix,
+// then use it for screen area, lod, visibility
+//-------------------------------------------------------------------------
+void SceneObjects::BaseObject::SetCombinedMatrix(const DirectX::XMMATRIX& in_worldProjection,
+    UINT in_windowHeight, float in_cotWdiv2, float in_cotHdiv2, float in_zFar)
+{
+    m_combinedMatrix = m_matrix * in_worldProjection;
+    m_visible = ComputeVisible(in_cotWdiv2, in_cotHdiv2, in_zFar);
+    if (m_visible)
+    {
+        m_screenAreaPixels = ComputeScreenAreaPixels(in_windowHeight, in_cotWdiv2);
+        m_lod = ComputeLod();
+    }
+    else
+    {
+        m_screenAreaPixels = 0;
+        m_lod = 0;
+    }
+}
+
+//=========================================================================
 // planets have multiple LoDs
 // Texture Coordinates may optionally be mirrored in U
 //=========================================================================
@@ -593,7 +605,7 @@ SceneObjects::Planet::Planet(Planet* in_pSharedObject) :
 //-------------------------------------------------------------------------
 // visibility of sphere for frustum culling
 //-------------------------------------------------------------------------
-bool SceneObjects::Planet::IsVisible(const DirectX::XMMATRIX& in_projection, const float in_zFar)
+bool SceneObjects::Planet::ComputeVisible(float in_cotWdiv2, float in_cotHdiv2, const float in_zFar)
 {
     const DirectX::XMVECTOR pos = GetCombinedMatrix().r[3];
     const float radius = GetBoundingSphereRadius();
@@ -613,8 +625,8 @@ bool SceneObjects::Planet::IsVisible(const DirectX::XMMATRIX& in_projection, con
     // pull fov scales out of the projection matrix
     // add in a margin, this is a rough estimate
     // FIXME! breaks when rotating view and object approaches zNear
-    float rx = 1.25f * radius * DirectX::XMVectorGetX(in_projection.r[0]); // (cot FOVwidth / 2)
-    float ry = 1.25f * radius * DirectX::XMVectorGetY(in_projection.r[1]); // (cot FOVheight / 2)
+    float rx = 1.25f * radius * in_cotWdiv2;
+    float ry = 1.25f * radius * in_cotHdiv2;
 
     float x = DirectX::XMVectorGetX(pos);
     float y = DirectX::XMVectorGetY(pos);
