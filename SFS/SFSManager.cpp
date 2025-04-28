@@ -57,7 +57,7 @@ void SFS::ManagerBase::Destroy()
 //--------------------------------------------
 SFSHeap* SFS::ManagerBase::CreateHeap(UINT in_maxNumTilesHeap)
 {
-    auto pStreamingHeap = new SFS::Heap(m_dataUploader.GetMappingQueue(), in_maxNumTilesHeap);
+    auto pStreamingHeap = new SFS::Heap(this, m_dataUploader.GetMappingQueue(), in_maxNumTilesHeap);
     return (SFSHeap*)pStreamingHeap;
 }
 
@@ -165,6 +165,28 @@ void SFS::ManagerBase::CaptureTraceFile(bool in_captureTrace)
 }
 
 //-----------------------------------------------------------------------------
+// delete resources that have been requested via Remove()
+// used by BeginFrame() and ~Heap
+//-----------------------------------------------------------------------------
+void SFS::ManagerBase::RemoveResources()
+{
+    ASSERT(!GetWithinFrame());
+
+    if (m_removeResources.size())
+    {
+        // stop other threads from accessing the resource
+        Finish();
+
+        ContainerRemove(m_streamingResources, m_removeResources);
+        ContainerRemove(m_pendingResources, m_removeResources);
+        ContainerRemove(m_packedMipTransitionResources, m_removeResources);
+
+        for (auto r : m_removeResources) { delete r; }
+        m_removeResources.clear();
+    }
+}
+
+//-----------------------------------------------------------------------------
 // Call this method once for each SFSManager that shares heap/upload buffers
 // expected to be called once per frame, before anything is drawn.
 //-----------------------------------------------------------------------------
@@ -172,6 +194,9 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     D3D12_CPU_DESCRIPTOR_HANDLE in_minmipmapDescriptorHandle)
 {
     ASSERT(!GetWithinFrame());
+
+    RemoveResources();
+
     m_withinFrame = true;
 
     // need to (re) StartThreads() if resources were deleted

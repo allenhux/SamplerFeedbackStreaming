@@ -164,7 +164,7 @@ namespace SFS
 
         UINT GetNumTilesWidth() const { return m_tileReferencesWidth; }
         UINT GetNumTilesHeight() const { return m_tileReferencesHeight; }
-
+        UINT GetMinMipMapSize() const { return GetNumTilesWidth() * GetNumTilesHeight(); }
     protected:
         // object that streams data from a file
         SFS::XeTexture m_textureFileInfo;

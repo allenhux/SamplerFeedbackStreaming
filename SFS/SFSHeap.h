@@ -73,7 +73,7 @@ namespace SFS
         // end external APIs
         //-----------------------------------------------------------------
 
-        Heap(ID3D12CommandQueue* in_pQueue, UINT in_maxNumTilesHeap);
+        Heap(class ManagerBase* in_pSFS, ID3D12CommandQueue* in_pQueue, UINT in_maxNumTilesHeap);
         virtual ~Heap();
 
         // allocate atlases for a format. does nothing if format already has an atlas
@@ -88,5 +88,6 @@ namespace SFS
 
         std::vector<SFS::Atlas*> m_atlases;
         ComPtr<ID3D12Heap> m_tileHeap; // heap to hold tiles resident in GPU memory
+        class ManagerBase* const m_pSfsManager{nullptr}; // used in debug mode to validate allocator
     };
 }

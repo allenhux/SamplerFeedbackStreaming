@@ -90,6 +90,9 @@ namespace SFS
         //--------------------------------------------
         void Finish();
 
+        // delete Remove()d resources (m_removeResources)
+        void RemoveResources();
+
         ManagerBase(const struct SFSManagerDesc& in_desc, ID3D12Device8* in_pDevice); // required for constructor
 
         virtual ~ManagerBase();
@@ -132,6 +135,7 @@ namespace SFS
         std::vector<ResourceBase*> m_newResourcesShareRT; // resources to be shared with ResidencyThread
         Lock m_newResourcesLockRT; // lock between ResidencyThread and main thread
 
+        std::set<ResourceBase*> m_removeResources;
     private:
 #ifdef _DEBUG
         std::atomic<bool> m_processFeedbackThreadRunning{ false };

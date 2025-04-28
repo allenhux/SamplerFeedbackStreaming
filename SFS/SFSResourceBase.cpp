@@ -102,9 +102,6 @@ SFS::ResourceBase::~ResourceBase()
     // do not delete SFSResource between BeginFrame() and EndFrame(). It's complicated.
     ASSERT(!m_pSFSManager->GetWithinFrame());
 
-    // tell SFSManager to stop tracking
-    m_pSFSManager->Remove(this);
-
     // remove tile allocations from the heap
     m_tileMappingState.FreeHeapAllocations(m_pHeap);
 

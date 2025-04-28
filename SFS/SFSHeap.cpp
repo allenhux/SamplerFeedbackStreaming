@@ -27,12 +27,17 @@
 #include "pch.h"
 
 #include "SFSHeap.h"
+#include "SFSManagerBase.h"
 
 //-----------------------------------------------------------------------------
 // call destructor on derived object
 //-----------------------------------------------------------------------------
 void SFS::Heap::Destroy()
 {
+    // in debug mode, try to get all allocations freed
+#ifdef _DEBUG
+    m_pSfsManager->RemoveResources();
+#endif
     delete this;
 }
 
@@ -165,7 +170,9 @@ ID3D12Resource* SFS::Atlas::ComputeCoordFromTileIndex(D3D12_TILED_RESOURCE_COORD
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-SFS::Heap::Heap(ID3D12CommandQueue* in_pQueue, UINT in_maxNumTilesHeap) : m_heapAllocator(in_maxNumTilesHeap)
+SFS::Heap::Heap(SFS::ManagerBase* in_pSfsManager,
+    ID3D12CommandQueue* in_pQueue, UINT in_maxNumTilesHeap)
+    : m_heapAllocator(in_maxNumTilesHeap), m_pSfsManager(in_pSfsManager)
 {
     ComPtr<ID3D12Device> device;
     in_pQueue->GetDevice(IID_PPV_ARGS(&device));

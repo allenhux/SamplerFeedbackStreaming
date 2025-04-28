@@ -60,14 +60,7 @@ namespace SFS
         void Remove(ResourceBase* in_pResource)
         {
             ASSERT(!GetWithinFrame());
-
-            // stop other threads from accessing the resource
-            Finish();
-
-            ContainerRemove(m_streamingResources, in_pResource);
-            ContainerRemove(m_pendingResources, in_pResource);
-            ContainerRemove(m_packedMipTransitionResources, in_pResource);
-            ASSERT(0 == m_newResources.size());
+            m_removeResources.insert(in_pResource);
         }
 
         UploadBuffer& GetResidencyMap() { return m_residencyMap; }
