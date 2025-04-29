@@ -208,7 +208,11 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
 
     SetViewMatrix(XMMatrixLookAtLH(vEyePt, lookAt, vUpVec));
 
-    m_pGui = new Gui(m_hwnd, m_device.Get(), m_srvHeap.Get(), (UINT)DescriptorHeapOffsets::GUI, m_swapBufferCount, SharedConstants::SWAP_CHAIN_FORMAT, adapterDescription, m_args);
+    UINT minNumObjects = m_args.m_skyTexture.size() ? 2 : 1;
+    m_pGui = new Gui(m_hwnd, m_device.Get(), m_srvHeap.Get(),
+        (UINT)DescriptorHeapOffsets::GUI, m_swapBufferCount,
+        SharedConstants::SWAP_CHAIN_FORMAT, adapterDescription,
+        minNumObjects, m_args);
 
     m_assetUploader.Init(m_device.Get());
 
@@ -736,9 +740,9 @@ void Scene::SetSphereMatrix(float in_minDistance)
 {
     constexpr float gap = SharedConstants::SPHERE_RADIUS * 2.f;
 
-    float range = SharedConstants::SPHERE_RADIUS * SharedConstants::MAX_SPHERE_SCALE;
+    float range = SharedConstants::SPHERE_RADIUS * (SharedConstants::MAX_SPHERE_SCALE - 1);
     float midPoint = .5f * range;
-    float stdDev = range / 4.f;
+    float stdDev = range / 5.f;
     std::normal_distribution<float>scaleDis(midPoint, stdDev);
 
     in_minDistance += gap + SharedConstants::SPHERE_RADIUS * SharedConstants::MAX_SPHERE_SCALE;
@@ -932,6 +936,7 @@ void Scene::PrepareScene()
         if (std::filesystem::exists(m_args.m_skyTexture))
         {
             m_args.m_skyTexture = std::filesystem::absolute(m_args.m_skyTexture);
+            m_args.m_numSpheres = std::max(m_args.m_numSpheres, 2);
         }
         else
         {
@@ -1194,51 +1199,25 @@ UINT Scene::DetermineMaxNumFeedbackResolves()
 //----------------------------------------------------------
 // draw objects grouped by same pipeline state
 //----------------------------------------------------------
-void Scene::DrawObjectSets(ID3D12GraphicsCommandList1* out_pCommandList)
+void Scene::DrawObjectSet(ID3D12GraphicsCommandList1* out_pCommandList,
+    SceneObjects::DrawParams& in_drawParams,
+    const ObjectSet& in_objectSet)
 {
-    // set common draw state
-    SceneObjects::DrawParams drawParams;
-    drawParams.m_projection = m_projection;
-    drawParams.m_view = m_viewMatrix;
-    drawParams.m_viewInverse = m_viewMatrixInverse;
-    drawParams.m_sharedMinMipMap = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
-    drawParams.m_constantBuffers = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), m_frameIndex + (UINT)DescriptorHeapOffsets::FRAME_CBV0, m_srvUavCbvDescriptorSize);
-    drawParams.m_samplers = m_samplerHeap->GetGPUDescriptorHandleForHeapStart();
-    drawParams.m_srvUavCbvDescriptorSize = m_srvUavCbvDescriptorSize;
-    drawParams.m_windowWidth = m_windowWidth;
-    drawParams.m_windowHeight = m_windowHeight;
-    drawParams.m_fov = m_fieldOfView;
+    auto pObject = in_objectSet[0].pObject;
 
-    drawParams.m_descriptorHeapBaseGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(
-        m_srvHeap->GetGPUDescriptorHandleForHeapStart(),
-        (UINT)DescriptorHeapOffsets::NumEntries, m_srvUavCbvDescriptorSize);
-    drawParams.m_descriptorHeapBaseCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(
-        m_srvHeap->GetCPUDescriptorHandleForHeapStart(),
-        (UINT)DescriptorHeapOffsets::NumEntries, m_srvUavCbvDescriptorSize);
+    // these objects all share pipeline state
+    // if feedback is enabled, 2 things:
+    // 1. tell the tile update manager to queue a readback of the resolved feedback
+    // 2. draw the object with a shader that calls WriteSamplerFeedback()
+    out_pCommandList->SetGraphicsRootSignature(pObject->GetRootSignature());
+    out_pCommandList->SetPipelineState(pObject->GetPipelineState());
 
-    for (auto& set : m_frameObjectSets)
+    pObject->SetCommonGraphicsState(out_pCommandList, in_drawParams);
+
+    for (auto& o : in_objectSet)
     {
-        auto pipelineState = set.first;
-        auto& objects = set.second;
-        if (objects.size())
-        {
-            auto pObject = objects[0].pObject;
-
-            // these objects all share pipeline state
-            // if feedback is enabled, 2 things:
-            // 1. tell the tile update manager to queue a readback of the resolved feedback
-            // 2. draw the object with a shader that calls WriteSamplerFeedback()
-            out_pCommandList->SetGraphicsRootSignature(pObject->GetRootSignature());
-            out_pCommandList->SetPipelineState(pipelineState);
-
-            pObject->SetCommonGraphicsState(out_pCommandList, drawParams);
-
-            for (auto& o : objects)
-            {
-                drawParams.m_descriptorHeapOffset = (o.index * (INT)SceneObjects::Descriptors::NumEntries);
-                o.pObject->Draw(out_pCommandList, drawParams);
-            }
-        }
+        in_drawParams.m_descriptorHeapOffset = (o.index * (INT)SceneObjects::Descriptors::NumEntries);
+        o.pObject->Draw(out_pCommandList, in_drawParams);
     }
 }
 
@@ -1257,7 +1236,8 @@ void Scene::DrawObjects()
         return;
     }
 
-    m_frameObjectSets.clear();
+    std::unordered_map<ID3D12PipelineState*, ObjectSet> frameObjectSets;
+    ObjectSet skyObjectSet;
 
     //------------------------------------------------------------------------------------
     // set feedback state on each object
@@ -1292,7 +1272,14 @@ void Scene::DrawObjects()
             {
                 o->SetFeedbackEnabled(queueFeedback); // must set if false or true
                 // group objects by material (PSO)
-                m_frameObjectSets[o->GetPipelineState()].push_back({ o, objectIndex });
+                if (m_pSky != o)
+                {
+                    frameObjectSets[o->GetPipelineState()].push_back({ o, objectIndex });
+                }
+                else
+                {
+                    skyObjectSet.push_back({ o, objectIndex });
+                }
             }
 
             if (queueFeedback)
@@ -1320,7 +1307,29 @@ void Scene::DrawObjects()
         m_prevNumFeedbackObjects[m_frameIndex] = numFeedbackObjects;
     }
 
-    DrawObjectSets(m_commandList.Get());
+    // set common draw state
+    SceneObjects::DrawParams drawParams;
+    drawParams.m_view = m_viewMatrix;
+    drawParams.m_viewInverse = m_viewMatrixInverse;
+    drawParams.m_sharedMinMipMap = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
+    drawParams.m_constantBuffers = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), m_frameIndex + (UINT)DescriptorHeapOffsets::FRAME_CBV0, m_srvUavCbvDescriptorSize);
+    drawParams.m_samplers = m_samplerHeap->GetGPUDescriptorHandleForHeapStart();
+    drawParams.m_srvUavCbvDescriptorSize = m_srvUavCbvDescriptorSize;
+    drawParams.m_descriptorHeapBaseGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(
+        m_srvHeap->GetGPUDescriptorHandleForHeapStart(),
+        (UINT)DescriptorHeapOffsets::NumEntries, m_srvUavCbvDescriptorSize);
+    drawParams.m_descriptorHeapBaseCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(
+        m_srvHeap->GetCPUDescriptorHandleForHeapStart(),
+        (UINT)DescriptorHeapOffsets::NumEntries, m_srvUavCbvDescriptorSize);
+
+    if (skyObjectSet.size())
+    {
+        DrawObjectSet(m_commandList.Get(), drawParams, skyObjectSet);
+    }
+    for (const auto& f : frameObjectSets)
+    {
+        DrawObjectSet(m_commandList.Get(), drawParams, f.second);
+    }
 }
 
 //-------------------------------------------------------------------------
@@ -1507,9 +1516,15 @@ void Scene::Animate()
             if (m_pSky != o)
             {
                 o->Spin(rotation);
+                o->SetCombinedMatrix(worldProj, m_windowHeight, cotWdiv2, cotHdiv2, m_zFar);
             }
-
-            o->SetCombinedMatrix(worldProj, m_windowHeight, cotWdiv2, cotHdiv2, m_zFar);
+            else
+            {
+                // remove translation from worldproj
+                auto tmp = worldProj;
+                tmp.r[3] = m_projection.r[3];
+                o->SetCombinedMatrix(tmp, m_windowHeight, cotWdiv2, cotHdiv2, m_zFar);
+            }
         });
 }
 
@@ -1853,7 +1868,8 @@ bool Scene::Draw()
 
 #if 0
     // TEST: creation/deletion and thread safety
-    m_args.m_numSpheres = 2 + (rand() * m_args.m_maxNumObjects) / RAND_MAX;
+    //m_args.m_numSpheres = 2 + (rand() * m_args.m_maxNumObjects) / RAND_MAX;
+    m_args.m_numSpheres = 1 + (m_frameNumber & 1);
 #endif
 
     // load more spheres?

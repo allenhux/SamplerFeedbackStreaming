@@ -54,7 +54,6 @@ namespace SceneObjects
 
     struct DrawParams
     {
-        DirectX::XMMATRIX m_projection;
         DirectX::XMMATRIX m_view;
         DirectX::XMMATRIX m_viewInverse;
         D3D12_GPU_DESCRIPTOR_HANDLE m_sharedMinMipMap;
@@ -64,9 +63,6 @@ namespace SceneObjects
         D3D12_CPU_DESCRIPTOR_HANDLE m_descriptorHeapBaseCpu;
         UINT m_srvUavCbvDescriptorSize;
         UINT m_descriptorHeapOffset; // before multiplying by descriptor size
-        UINT m_windowWidth{ 0 };
-        UINT m_windowHeight{ 0 };
-        float m_fov;
     };
 
     class BaseObject
@@ -164,9 +160,7 @@ namespace SceneObjects
             int g_minmipmapOffset;
         };
 
-        virtual void SetModelConstants(ModelConstantData& out_modelConstantData,
-            const DirectX::XMMATRIX& in_projection,
-            const DirectX::XMMATRIX& in_view);
+        void SetModelConstants(ModelConstantData& out_modelConstantData);
 
         SFSResource* m_pStreamingResource{ nullptr };
 
@@ -272,9 +266,5 @@ namespace SceneObjects
         Sky(SFSManager* in_pSFSManager,
             ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
             UINT in_sampleCount);
-
-        virtual void SetModelConstants(ModelConstantData& out_modelConstantData,
-            const DirectX::XMMATRIX& in_projection,
-            const DirectX::XMMATRIX& in_view) override;
     };
 }

@@ -11,7 +11,7 @@
   // sum of #tiles of pending batches. heuristic to reduce frequency of DS Submit() calls
   "minNumUploadRequests": 1024,
   // number of frames to delay evicting a tile
-  "evictionDelay":  8,
+  "evictionDelay": 8,
 
   "heapSizeTiles": 24576, // size for each heap. 64KB per tile * 16384 tiles -> 1GB heap
   "numHeaps": 1, // number of heaps. objects will be distributed among heaps
@@ -41,7 +41,7 @@
   "rollerCoaster": false, // fly through, vs. orbiting, planets
 
   "mediaDir": "media", // media directory
-  "skyTexture": "", // add a sky sphere. path relative to mediadir
+  "skyTexture": "heic2020d", // add a sky sphere. path relative to mediadir
   "earthTexture": "earth", // when a texture containing this string is encountered, treat it as a mercator projection (no uv mirror)
   "terrainTexture": "4kTiles.xet", // use this texture only for the terrain, no planets
 

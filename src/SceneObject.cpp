@@ -247,12 +247,10 @@ std::wstring SceneObjects::BaseObject::GetAssetFullPath(const std::wstring& in_f
 
 //-------------------------------------------------------------------------
 //-------------------------------------------------------------------------
-void SceneObjects::BaseObject::SetModelConstants(ModelConstantData& out_modelConstantData,
-    const DirectX::XMMATRIX&, const DirectX::XMMATRIX&)
+void SceneObjects::BaseObject::SetModelConstants(ModelConstantData& out_modelConstantData)
 {
     out_modelConstantData.g_combinedTransform = GetCombinedMatrix();
-
-    out_modelConstantData.g_worldTransform = m_matrix;
+    out_modelConstantData.g_worldTransform = GetModelMatrix();
 
     out_modelConstantData.g_minmipmapWidth = m_pStreamingResource->GetMinMipMapWidth();
     out_modelConstantData.g_minmipmapHeight = m_pStreamingResource->GetMinMipMapHeight();
@@ -384,7 +382,7 @@ void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList,
     }
 
     ModelConstantData modelConstantData{};
-    SetModelConstants(modelConstantData, in_drawParams.m_projection, in_drawParams.m_view);
+    SetModelConstants(modelConstantData);
     UINT num32BitValues = sizeof(ModelConstantData) / sizeof(UINT32);
     in_pCommandList->SetGraphicsRoot32BitConstants((UINT)RootSigParams::Param32BitConstants, num32BitValues, &modelConstantData, 0);
 
@@ -679,7 +677,7 @@ SceneObjects::Sky::Sky(
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     rasterizerDesc.CullMode = D3D12_CULL_MODE_FRONT;
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-    depthStencilDesc.DepthEnable = true; // false; FIXME? if sky was drawn first, could disable depth.
+    depthStencilDesc.DepthEnable = false; // NOTE: must be first object drawn
 
     CreatePipelineState(L"skyPS.cso", L"skyPS-FB.cso", L"skyVS.cso", in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc);
 
@@ -691,21 +689,4 @@ SceneObjects::Sky::Sky(
     CreateSphere(this, in_pDevice, in_assetUploader, sphereProperties);
 
     m_radius = std::numeric_limits<float>::max();
-}
-
-//-------------------------------------------------------------------------
-//-------------------------------------------------------------------------
-void SceneObjects::Sky::SetModelConstants(ModelConstantData& out_modelConstantData,
-    const DirectX::XMMATRIX& in_projection, const DirectX::XMMATRIX& in_view)
-{
-    DirectX::XMMATRIX view = in_view;
-    view.r[3] = DirectX::XMVectorSet(0, 0, 0, 1);
-
-    out_modelConstantData.g_combinedTransform = m_matrix * view * in_projection;
-
-    out_modelConstantData.g_worldTransform = DirectX::XMMatrixIdentity();
-
-    out_modelConstantData.g_minmipmapWidth = m_pStreamingResource->GetMinMipMapWidth();
-    out_modelConstantData.g_minmipmapHeight = m_pStreamingResource->GetMinMipMapHeight();
-    out_modelConstantData.g_minmipmapOffset = m_pStreamingResource->GetMinMipMapOffset();
 }

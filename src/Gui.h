@@ -36,7 +36,8 @@ public:
     Gui(HWND in_hWnd, ID3D12Device* in_pDevice,
         ID3D12DescriptorHeap* in_pSrvHeap, const UINT in_descriptorHeapOffset,
         const UINT in_swapChainBufferCount, const DXGI_FORMAT in_swapChainFormat,
-        const std::wstring& in_adapterDescription, CommandLineArgs& in_args);
+        const std::wstring& in_adapterDescription, UINT in_minNumObjects,
+        CommandLineArgs& in_args);
     ~Gui();
 
     struct DrawParams
@@ -77,6 +78,8 @@ private:
 
     float m_width;
     float m_height;
+
+    const UINT m_minNumObjects{ 1 }; // for slider
 
     // copy of arguments at creation for reset button
     const CommandLineArgs m_initialArgs;

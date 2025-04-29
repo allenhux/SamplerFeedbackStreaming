@@ -41,13 +41,15 @@
 Gui::Gui(HWND in_hWnd, ID3D12Device* in_pDevice,
     ID3D12DescriptorHeap* in_pSrvHeap, const UINT in_descriptorHeapOffset,
     const UINT in_swapChainBufferCount, const DXGI_FORMAT in_swapChainFormat,
-    const std::wstring& in_adapterDescription, CommandLineArgs& in_args) :
+    const std::wstring& in_adapterDescription, UINT in_minNumObjects,
+    CommandLineArgs& in_args) :
     m_initialArgs(in_args)
     , m_srvHeap(in_pSrvHeap)
     , m_width(300)
     , m_height(600)
     , m_bandwidthHistory(m_historySize)
     , m_numObjects(in_args.m_numSpheres)
+    , m_minNumObjects(in_minNumObjects)
 {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -362,7 +364,8 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     //---------------------------------------------------------------------
     // number of objects. affects heap occupancy
     //---------------------------------------------------------------------
-    ImGui::SliderInt("Num Objects", &m_numObjects, 1, (int)in_args.m_maxNumObjects);
+    ImGui::SliderInt("Num Objects", &m_numObjects, m_minNumObjects,
+        (int)in_args.m_maxNumObjects);
 
     // only change # objects after slider released.
     if (ImGui::IsItemDeactivatedAfterEdit())
