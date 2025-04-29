@@ -765,6 +765,10 @@ void Scene::SetSphereMatrix(float in_minDistance)
 //-----------------------------------------------------------------------------
 void Scene::LoadSpheres()
 {
+
+    //     m_pStreamingResource = m_pSFSManager->CreateResource(in_filename, in_pHeap, in_pFileHeader);
+
+
     const UINT maxNewObjectsPerFrame = 500;
     UINT numObjectsAdded = 0;
     if (m_objects.size() < (UINT)m_args.m_numSpheres)
@@ -798,52 +802,34 @@ void Scene::LoadSpheres()
             // FIXME? material sorting broke ordering
             if ((nullptr == m_pSky) && (m_args.m_skyTexture.size()))
             {
-                m_pSky = new SceneObjects::Sky(m_pSFSManager, m_device.Get(), m_assetUploader, m_args.m_sampleCount);
+                m_pSky = new SceneObjects::Sky(m_device.Get(), m_assetUploader, m_args.m_sampleCount);
                 o = m_pSky;
-                o->CreateResource(m_args.m_skyTexture, pHeap);
+                o->SetResource(m_pSFSManager->CreateResource(m_args.m_skyTexture, pHeap));
                 float scale = m_universeSize * 2; // NOTE: expects universe size to not change
                 o->GetModelMatrix() = DirectX::XMMatrixScaling(scale, scale, scale);
             }
             else if (nullptr == m_pTerrainSceneObject)
             {
-                m_pTerrainSceneObject = new SceneObjects::Terrain(m_pSFSManager, m_device.Get(), m_args.m_sampleCount, m_args, m_assetUploader);
-                m_terrainObjectIndex = objectIndex;
+                m_pTerrainSceneObject = new SceneObjects::Terrain(m_device.Get(), m_args.m_sampleCount, m_args, m_assetUploader);
                 o = m_pTerrainSceneObject;
-                o->CreateResource(m_args.m_terrainTexture, pHeap);
+                o->SetResource(m_pSFSManager->CreateResource(m_args.m_terrainTexture, pHeap));
+                m_terrainObjectIndex = objectIndex;
             }
             // earth
             else if (m_args.m_earthTexture.size() && (0 == fileIndex))
             {
                 ASSERT(0 == textureFilename.size()); // expect empty; cleared during scene creation
-                if (nullptr == m_pEarth)
-                {
-                    sphereProperties.m_mirrorU = false;
-                    sphereProperties.m_topBottom = false;
-                    m_pEarth = new SceneObjects::Planet(m_pSFSManager, m_device.Get(), m_assetUploader, m_args.m_sampleCount, sphereProperties);
-                    o = m_pEarth;
-                }
-                else
-                {
-                    o = new SceneObjects::Planet(m_pEarth);
-                }
-                o->CreateResource(m_args.m_earthTexture, pHeap);
-                o->SetAxis(XMVectorSet(0, 0, 1, 0));
+                sphereProperties.m_mirrorU = false;
+                sphereProperties.m_topBottom = false;
+                o = new SceneObjects::Earth(m_device.Get(), m_assetUploader, m_args.m_sampleCount, sphereProperties);
+                o->SetResource(m_pSFSManager->CreateResource(m_args.m_earthTexture, pHeap));
                 o->GetModelMatrix() = m_objectPoses.m_matrix[m_objects.size()];
             }
             // planet
             else
             {
-                if (nullptr == m_pFirstSphere)
-                {
-                    // use different sphere generator
-                    m_pFirstSphere = new SceneObjects::Planet(m_pSFSManager, m_device.Get(), m_assetUploader, m_args.m_sampleCount);
-                    o = m_pFirstSphere;
-                }
-                else
-                {
-                    o = new SceneObjects::Planet(m_pFirstSphere);
-                }
-                o->CreateResource(textureFilename, pHeap, &m_textureFileHeaders[fileIndex]);
+                o = new SceneObjects::Planet(m_device.Get(), m_assetUploader, m_args.m_sampleCount);
+                o->SetResource(m_pSFSManager->CreateResource(textureFilename, pHeap, &m_textureFileHeaders[fileIndex]));
                 static std::uniform_real_distribution<float> dis(-1.f, 1.f);
                 o->SetAxis(DirectX::XMVector3NormalizeEst(DirectX::XMVectorSet(dis(m_gen), dis(m_gen), dis(m_gen), 0)));
                 o->GetModelMatrix() = m_objectPoses.m_matrix[m_objects.size()];
@@ -868,16 +854,6 @@ void Scene::LoadSpheres()
             {
                 DeleteTerrainViewers();
                 m_pTerrainSceneObject = nullptr;
-            }
-
-            if (m_pFirstSphere == pObject)
-            {
-                m_pFirstSphere = nullptr;
-            }
-
-            if (m_pEarth == pObject)
-            {
-                m_pEarth = nullptr;
             }
 
             if (m_pSky == pObject)

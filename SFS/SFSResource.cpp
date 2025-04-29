@@ -107,6 +107,13 @@ bool SFS::ResourceBase::Drawable() const
 }
 
 //-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void SFS::ResourceBase::QueueFeedback(D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor)
+{
+    m_pSFSManager->QueueFeedback(this, in_gpuDescriptor);
+}
+
+//-----------------------------------------------------------------------------
 // if an object isn't visible, set all refcounts to 0
 // this will schedule all tiles to be evicted
 //-----------------------------------------------------------------------------

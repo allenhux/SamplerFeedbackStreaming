@@ -35,6 +35,8 @@ class AssetUploader;
 
 namespace SceneObjects
 {
+    template<typename T> using ComPtr = Microsoft::WRL::ComPtr<T>;
+
     enum class Descriptors
     {
         HeapOffsetTexture = 0,
@@ -65,6 +67,28 @@ namespace SceneObjects
         UINT m_descriptorHeapOffset; // before multiplying by descriptor size
     };
 
+    // meshes and materials
+    struct Geometry
+    {
+
+        struct Mesh
+        {
+            UINT m_numIndices{ 0 };
+            D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
+            D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
+            ComPtr<ID3D12Resource> m_indexBuffer;
+            ComPtr<ID3D12Resource> m_vertexBuffer;
+        };
+
+        std::vector<Mesh> m_lods;
+
+        ComPtr<ID3D12RootSignature> m_rootSignature;
+        ComPtr<ID3D12PipelineState> m_pipelineState;
+
+        ComPtr<ID3D12RootSignature> m_rootSignatureFB;
+        ComPtr<ID3D12PipelineState> m_pipelineStateFB;
+    };
+
     class BaseObject
     {
     public:
@@ -74,32 +98,28 @@ namespace SceneObjects
         }
 
         // state re-used by a number of objects
-        void SetCommonGraphicsState(ID3D12GraphicsCommandList1* in_pCommandList, const SceneObjects::DrawParams& in_drawParams);
+        static void SetCommonGraphicsState(ID3D12GraphicsCommandList1* out_pCommandList, const SceneObjects::DrawParams& in_drawParams);
 
         ID3D12RootSignature* GetRootSignature() const
         {
-            return m_feedbackEnabled ? m_rootSignatureFB.Get() : m_rootSignature.Get();
+            return m_feedbackEnabled ? GetGeometry().m_rootSignatureFB.Get() : GetGeometry().m_rootSignature.Get();
         }
 
         ID3D12PipelineState* GetPipelineState() const
         {
-            return m_feedbackEnabled ? m_pipelineStateFB.Get() : m_pipelineState.Get();
+            return m_feedbackEnabled ? GetGeometry().m_pipelineStateFB.Get() : GetGeometry().m_pipelineState.Get();
         }
-
-        void CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap,
-            const struct XetFileHeader* in_pFileHeader = nullptr);
-        void CreateResourceViews(D3D12_CPU_DESCRIPTOR_HANDLE in_baseDescriptorHandle, UINT in_srvUavCbvDescriptorSize);
-
-        // within view frustum?
-        virtual bool IsVisible([[maybe_unused]] float in_cotWdiv2, [[maybe_unused]]const float in_zFar ) { return true; }
 
         // do not draw until minimal assets have been created/uploaded
         bool Drawable() const;
 
+        // within view frustum?
+        virtual bool IsVisible([[maybe_unused]] float in_cotWdiv2, [[maybe_unused]]const float in_zFar ) { return true; }
+
         void Draw(ID3D12GraphicsCommandList1* in_pCommandList, const DrawParams& in_drawParams);
 
         DirectX::XMMATRIX& GetModelMatrix() { return m_matrix; }
-        const DirectX::XMMATRIX& GetCombinedMatrix() { return m_combinedMatrix; }
+        const DirectX::XMMATRIX& GetCombinedMatrix() const { return m_combinedMatrix; }
 
         // also compute visibility, screen area, and LoD
         void SetCombinedMatrix(const DirectX::XMMATRIX& in_worldProjection,
@@ -116,11 +136,7 @@ namespace SceneObjects
 #endif
 
         SFSResource* GetStreamingResource() const { return m_pStreamingResource; }
-
-        void CopyGeometry(const BaseObject* in_pObjectForSharedHeap);
-
-        void SetGeometry(ID3D12Resource* in_pVertexBuffer, UINT in_vertexSize,
-            ID3D12Resource* in_pIndexBuffer, UINT in_lod = 0);
+        void SetResource(SFSResource* in_pResource) { m_pStreamingResource = in_pResource; }
 
         void SetFeedbackEnabled(bool in_value) { m_feedbackEnabled = in_value; }
 
@@ -132,20 +148,9 @@ namespace SceneObjects
         UINT GetLoD() const { return m_lod; }
         bool IsVisible() const { return m_visible; }
     protected:
-
-        // pass in a location in a descriptor heap where this can write 3 descriptors
-        BaseObject(
-            SFSManager* in_pSFSManager,
-            ID3D12Device* in_pDevice);
-
-        BaseObject(
-            SFSManager* in_pSFSManager,
-            BaseObject* in_pSharedObject);  // to share root sig, etc.
-
-        template<typename T> using ComPtr = Microsoft::WRL::ComPtr<T>;
-
+        virtual const Geometry& GetGeometry() const = 0;
+        static std::vector<Geometry> m_geometries;
         bool m_feedbackEnabled{ true };
-        SFSManager* m_pSFSManager{ nullptr };
 
         DirectX::XMMATRIX m_matrix{ DirectX::XMMatrixIdentity() };
         DirectX::XMMATRIX m_combinedMatrix{ DirectX::XMMatrixIdentity() };
@@ -164,26 +169,14 @@ namespace SceneObjects
 
         SFSResource* m_pStreamingResource{ nullptr };
 
+        void CreateRootSignature(Geometry& out_geometry, ID3D12Device* in_pDevice);
         void CreatePipelineState(
+            SceneObjects::Geometry& out_geometry,
             const wchar_t* in_ps, const wchar_t* in_psFB, const wchar_t* in_vs,
             ID3D12Device* in_pDevice, UINT in_sampleCount,
             const D3D12_RASTERIZER_DESC& in_rasterizerDesc,
             const D3D12_DEPTH_STENCIL_DESC& in_depthStencilDesc,
             const std::vector<D3D12_INPUT_ELEMENT_DESC>& in_elementDescs = {});
-
-        // pipeline state that does not capture sampler feedback
-        void SetRootSigPso(ID3D12GraphicsCommandList1* in_pCommandList)
-        {
-            in_pCommandList->SetGraphicsRootSignature(m_rootSignature.Get());
-            in_pCommandList->SetPipelineState(m_pipelineState.Get());
-        }
-
-        // pipeline state with pixel shader that calls WriteSamplerFeedback()
-        void SetRootSigPsoFB(ID3D12GraphicsCommandList1* in_pCommandList)
-        {
-            in_pCommandList->SetGraphicsRootSignature(m_rootSignatureFB.Get());
-            in_pCommandList->SetPipelineState(m_pipelineStateFB.Get());
-        }
 
         DirectX::XMVECTORF32 m_axis{ { { 0.0f, 1.0f, 0.0f, 0.0f } } };
 
@@ -195,29 +188,13 @@ namespace SceneObjects
 
     private:
         bool m_createResourceViews{ true };
+        void CreateResourceViews(D3D12_CPU_DESCRIPTOR_HANDLE in_baseDescriptorHandle, UINT in_srvUavCbvDescriptorSize);
 
         bool m_visible{ true };
         float m_screenAreaPixels{ 0 }; // only updated if visible
         UINT m_lod{ 0 }; // only updated if visible
         float ComputeScreenAreaPixels(UINT in_windowHeight, float in_fov);
         UINT ComputeLod();
-
-        struct Geometry
-        {
-            UINT m_numIndices{ 0 };
-            D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
-            D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
-            ComPtr<ID3D12Resource> m_indexBuffer;
-            ComPtr<ID3D12Resource> m_vertexBuffer;
-        };
-
-        std::vector<Geometry> m_lods;
-
-        ComPtr<ID3D12RootSignature> m_rootSignature;
-        ComPtr<ID3D12PipelineState> m_pipelineState;
-
-        ComPtr<ID3D12RootSignature> m_rootSignatureFB;
-        ComPtr<ID3D12PipelineState> m_pipelineStateFB;
 
         std::wstring GetAssetFullPath(const std::wstring& in_filename);
     };
@@ -233,38 +210,52 @@ namespace SceneObjects
     class Terrain : public BaseObject
     {
     public:
-        Terrain(SFSManager* in_pSFSManager,
-            ID3D12Device* in_pDevice,
-            UINT in_sampleCount,
-            const CommandLineArgs& in_args,
-            AssetUploader& in_assetUploader);
+        Terrain(ID3D12Device* in_pDevice, UINT in_sampleCount,
+            const CommandLineArgs& in_args, AssetUploader& in_assetUploader);
+        virtual const Geometry& GetGeometry() const override { return m_geometries[m_geometryIndex]; }
+    private:
+        static Geometry* CreateGeometry(ID3D12Device* in_pDevice);
+        static UINT m_geometryIndex;
     };
 
-    class Planet : public BaseObject
+    class Sphere : public BaseObject
     {
     public:
-        Planet(SFSManager* in_pSFSManager,
-            ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
-            UINT in_sampleCount,
-            const SphereGen::Properties& in_properties);
-
-        Planet(Planet* in_pSharedObject);
-
-        Planet(SFSManager* in_pSFSManager,
-            ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
-            UINT in_sampleCount);
-
         virtual bool ComputeVisible(float in_cotWdiv2, float in_cotHdiv2, const float in_zFar) override;
         float GetBoundingSphereRadius() override;
     };
+
+    class Planet : public Sphere
+    {
+    public:
+        Planet(ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount);
+        virtual const Geometry& GetGeometry() const override { return m_geometries[m_geometryIndex]; }
+    private:
+        static Geometry* CreateGeometry(ID3D12Device* in_pDevice);
+        static UINT m_geometryIndex;
+    };
+
+    class Earth : public Sphere
+    {
+    public:
+        Earth(ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount,
+            const SphereGen::Properties& in_properties);
+        virtual const Geometry& GetGeometry() const override { return m_geometries[m_geometryIndex]; }
+    private:
+        static Geometry* CreateGeometry(ID3D12Device* in_pDevice);
+        static UINT m_geometryIndex;
+    };
+
 
     // special render state (front face cull)
     // lower triangle count
     class Sky : public BaseObject
     {
     public:
-        Sky(SFSManager* in_pSFSManager,
-            ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
-            UINT in_sampleCount);
+        Sky(ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount);
+        virtual const Geometry& GetGeometry() const override { return m_geometries[m_geometryIndex]; }
+    private:
+        static Geometry* CreateGeometry(ID3D12Device* in_pDevice);
+        static UINT m_geometryIndex;
     };
 }

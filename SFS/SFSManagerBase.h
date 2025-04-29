@@ -66,7 +66,6 @@ namespace SFS
         virtual SFSResource* CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap,
             const XetFileHeader* in_pFileHeader) override;
         virtual void BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap, D3D12_CPU_DESCRIPTOR_HANDLE in_minmipmapDescriptorHandle) override;
-        virtual void QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor) override;
         virtual CommandLists EndFrame() override;
         virtual void UseDirectStorage(bool in_useDS) override;
         virtual float GetGpuTime() const override;
@@ -83,6 +82,7 @@ namespace SFS
     public:
         // external api, but also used internally
         virtual bool GetWithinFrame() const override { return m_withinFrame; }
+        virtual void QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor) override;
 
         //--------------------------------------------
         // force all outstanding commands to complete.

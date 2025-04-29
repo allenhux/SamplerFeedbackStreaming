@@ -42,22 +42,12 @@
 #include "TerrainGenerator.h"
 #include "AssetUploader.h"
 
+std::vector<SceneObjects::Geometry> SceneObjects::BaseObject::m_geometries;
+
 //-------------------------------------------------------------------------
 // constructor
 //-------------------------------------------------------------------------
-SceneObjects::BaseObject::BaseObject(
-    SFSManager* in_pSFSManager,
-    BaseObject* in_pSharedObject) : m_pSFSManager(in_pSFSManager)
-{
-    m_rootSignature = in_pSharedObject->m_rootSignature;
-    m_rootSignatureFB = in_pSharedObject->m_rootSignatureFB;
-    m_pipelineState = in_pSharedObject->m_pipelineState;
-    m_pipelineStateFB = in_pSharedObject->m_pipelineStateFB;
-}
-
-SceneObjects::BaseObject::BaseObject(
-    SFSManager* in_pSFSManager,
-    ID3D12Device* in_pDevice) : m_pSFSManager(in_pSFSManager)
+void SceneObjects::BaseObject::CreateRootSignature(SceneObjects::Geometry& out_geometry, ID3D12Device* in_pDevice)
 {
     //---------------------------------------
     // create root signature
@@ -125,7 +115,8 @@ SceneObjects::BaseObject::BaseObject(
         ComPtr<ID3DBlob> signature;
         ComPtr<ID3DBlob> error;
         ThrowIfFailed(D3D12SerializeVersionedRootSignature(&rootSignatureDesc, &signature, &error));
-        ThrowIfFailed(in_pDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignature)));
+        ThrowIfFailed(in_pDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(),
+            IID_PPV_ARGS(&out_geometry.m_rootSignature)));
     }
 
     // root sig with feedback map bound
@@ -145,36 +136,15 @@ SceneObjects::BaseObject::BaseObject(
         ComPtr<ID3DBlob> signature;
         ComPtr<ID3DBlob> error;
         ThrowIfFailed(D3D12SerializeVersionedRootSignature(&rootSignatureDesc, &signature, &error));
-        ThrowIfFailed(in_pDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignatureFB)));
+        ThrowIfFailed(in_pDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(),
+            IID_PPV_ARGS(&out_geometry.m_rootSignatureFB)));
     }
-}
-
-//-------------------------------------------------------------------------
-// create streaming resources
-// optionally provide file header
-//-------------------------------------------------------------------------
-void SceneObjects::BaseObject::CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap,
-    const struct XetFileHeader* in_pFileHeader)
-{
-    m_pStreamingResource = m_pSFSManager->CreateResource(in_filename, in_pHeap, in_pFileHeader);
-}
-
-//-------------------------------------------------------------------------
-//-------------------------------------------------------------------------
-void SceneObjects::BaseObject::CreateResourceViews(D3D12_CPU_DESCRIPTOR_HANDLE in_baseDescriptorHandle, UINT in_srvUavCbvDescriptorSize)
-{
-    // sampler feedback view
-    CD3DX12_CPU_DESCRIPTOR_HANDLE feedbackHandle(in_baseDescriptorHandle, (UINT)Descriptors::HeapOffsetFeedback, in_srvUavCbvDescriptorSize);
-    m_pStreamingResource->CreateFeedbackView(feedbackHandle);
-
-    // texture view
-    CD3DX12_CPU_DESCRIPTOR_HANDLE textureHandle(in_baseDescriptorHandle, (UINT)Descriptors::HeapOffsetTexture, in_srvUavCbvDescriptorSize);
-    m_pStreamingResource->CreateShaderResourceView(textureHandle);
 }
 
 //-------------------------------------------------------------------------
 //-------------------------------------------------------------------------
 void SceneObjects::BaseObject::CreatePipelineState(
+    SceneObjects::Geometry& out_geometry,
     const wchar_t* in_ps, const wchar_t* in_psFB, const wchar_t* in_vs,
     ID3D12Device* in_pDevice, UINT in_sampleCount,
     const D3D12_RASTERIZER_DESC& in_rasterizerDesc,
@@ -198,7 +168,7 @@ void SceneObjects::BaseObject::CreatePipelineState(
 
     // Describe and create the graphics pipeline state object (PSO).
     D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-    psoDesc.pRootSignature = m_rootSignature.Get();
+    psoDesc.pRootSignature = out_geometry.m_rootSignature.Get();
     psoDesc.VS.BytecodeLength = vsBytes.size();
     psoDesc.VS.pShaderBytecode = vsBytes.data();
     psoDesc.PS.BytecodeLength = psBytes.size();
@@ -207,7 +177,7 @@ void SceneObjects::BaseObject::CreatePipelineState(
     psoDesc.SampleMask = UINT_MAX;
     psoDesc.RasterizerState = in_rasterizerDesc;
     psoDesc.DepthStencilState = in_depthStencilDesc;
-    psoDesc.InputLayout = { inputElementDescs.data(), (UINT)inputElementDescs.size()};
+    psoDesc.InputLayout = { inputElementDescs.data(), (UINT)inputElementDescs.size() };
     if (in_elementDescs.size())
     {
         psoDesc.InputLayout = { in_elementDescs.data(), (UINT)in_elementDescs.size() };
@@ -218,11 +188,11 @@ void SceneObjects::BaseObject::CreatePipelineState(
     psoDesc.DSVFormat = SharedConstants::DEPTH_FORMAT;
     psoDesc.SampleDesc.Count = in_sampleCount;
 
-    ThrowIfFailed(in_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState)));
+    ThrowIfFailed(in_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&out_geometry.m_pipelineState)));
 
     // create a second PSO that writes to a feedback map using our root signature with the feedback map UAV bound
     {
-        psoDesc.pRootSignature = m_rootSignatureFB.Get();
+        psoDesc.pRootSignature = out_geometry.m_rootSignatureFB.Get();
 
         firstPassPsPath = GetAssetFullPath(in_psFB);
         std::ifstream psFeedback(firstPassPsPath, std::fstream::binary);
@@ -231,8 +201,21 @@ void SceneObjects::BaseObject::CreatePipelineState(
         psoDesc.PS.BytecodeLength = psFeedbackBytes.size();
         psoDesc.PS.pShaderBytecode = psFeedbackBytes.data();
 
-        ThrowIfFailed(in_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineStateFB)));
+        ThrowIfFailed(in_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&out_geometry.m_pipelineStateFB)));
     }
+}
+
+//-------------------------------------------------------------------------
+//-------------------------------------------------------------------------
+void SceneObjects::BaseObject::CreateResourceViews(D3D12_CPU_DESCRIPTOR_HANDLE in_baseDescriptorHandle, UINT in_srvUavCbvDescriptorSize)
+{
+    // sampler feedback view
+    CD3DX12_CPU_DESCRIPTOR_HANDLE feedbackHandle(in_baseDescriptorHandle, (UINT)Descriptors::HeapOffsetFeedback, in_srvUavCbvDescriptorSize);
+    m_pStreamingResource->CreateFeedbackView(feedbackHandle);
+
+    // texture view
+    CD3DX12_CPU_DESCRIPTOR_HANDLE textureHandle(in_baseDescriptorHandle, (UINT)Descriptors::HeapOffsetTexture, in_srvUavCbvDescriptorSize);
+    m_pStreamingResource->CreateShaderResourceView(textureHandle);
 }
 
 //-------------------------------------------------------------------------
@@ -258,57 +241,21 @@ void SceneObjects::BaseObject::SetModelConstants(ModelConstantData& out_modelCon
 }
 
 //-------------------------------------------------------------------------
-//-------------------------------------------------------------------------
-void SceneObjects::BaseObject::CopyGeometry(const BaseObject* in_pObjectForSharedHeap)
-{
-    m_axis = in_pObjectForSharedHeap->m_axis;
-    m_lods.resize(in_pObjectForSharedHeap->m_lods.size());
-    for (UINT i = 0; i < m_lods.size(); i++)
-    {
-        m_lods[i].m_numIndices = in_pObjectForSharedHeap->m_lods[i].m_numIndices;
-        m_lods[i].m_indexBufferView = in_pObjectForSharedHeap->m_lods[i].m_indexBufferView;
-        m_lods[i].m_vertexBufferView = in_pObjectForSharedHeap->m_lods[i].m_vertexBufferView;
-    }
-}
-
-//-------------------------------------------------------------------------
-//-------------------------------------------------------------------------
-void SceneObjects::BaseObject::SetGeometry(ID3D12Resource* in_pVertexBuffer, UINT in_vertexSize, ID3D12Resource* in_pIndexBuffer, UINT in_lod)
-{
-    if (in_lod >= m_lods.size())
-    {
-        m_lods.resize(in_lod + 1);
-    }
-
-    auto& lod = m_lods[in_lod];
-
-    lod.m_vertexBuffer = in_pVertexBuffer;
-    lod.m_indexBuffer = in_pIndexBuffer;
-
-    in_pVertexBuffer->Release();
-    in_pIndexBuffer->Release();
-
-    lod.m_numIndices = (UINT)in_pIndexBuffer->GetDesc().Width / sizeof(UINT32);
-    lod.m_vertexBufferView = { lod.m_vertexBuffer->GetGPUVirtualAddress(), (UINT)in_pVertexBuffer->GetDesc().Width,  in_vertexSize};
-    lod.m_indexBufferView = { lod.m_indexBuffer->GetGPUVirtualAddress(), (UINT)in_pIndexBuffer->GetDesc().Width, DXGI_FORMAT_R32_UINT};
-}
-
-//-------------------------------------------------------------------------
 // state common to multiple objects
 // basic scene consists of a sky (1 or none), objects using feedback, and objects not using feedback
 //-------------------------------------------------------------------------
-void SceneObjects::BaseObject::SetCommonGraphicsState(ID3D12GraphicsCommandList1* in_pCommandList, const SceneObjects::DrawParams& in_drawParams)
+void SceneObjects::BaseObject::SetCommonGraphicsState(ID3D12GraphicsCommandList1* out_pCommandList, const SceneObjects::DrawParams& in_drawParams)
 {
-    in_pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    out_pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     // shared min mip map resource
-    in_pCommandList->SetGraphicsRootDescriptorTable((UINT)SceneObjects::RootSigParams::ParamSharedTextures, in_drawParams.m_sharedMinMipMap);
+    out_pCommandList->SetGraphicsRootDescriptorTable((UINT)SceneObjects::RootSigParams::ParamSharedTextures, in_drawParams.m_sharedMinMipMap);
 
     // frame constant buffer
-    in_pCommandList->SetGraphicsRootDescriptorTable((UINT)SceneObjects::RootSigParams::ParamConstantBuffers, in_drawParams.m_constantBuffers);
+    out_pCommandList->SetGraphicsRootDescriptorTable((UINT)SceneObjects::RootSigParams::ParamConstantBuffers, in_drawParams.m_constantBuffers);
 
     // samplers
-    in_pCommandList->SetGraphicsRootDescriptorTable((UINT)SceneObjects::RootSigParams::ParamSamplers, in_drawParams.m_samplers);
+    out_pCommandList->SetGraphicsRootDescriptorTable((UINT)SceneObjects::RootSigParams::ParamSamplers, in_drawParams.m_samplers);
 }
 
 //-------------------------------------------------------------------------
@@ -325,10 +272,10 @@ UINT SceneObjects::BaseObject::ComputeLod()
         return 0;
     }
 
-    UINT lod = (UINT)m_lods.size() - 1; // least triangles
+    UINT lod = (UINT)GetGeometry().m_lods.size() - 1; // least triangles
     while (lod > 0)
     {
-        UINT numTriangles = m_lods[lod - 1].m_numIndices / 3;
+        UINT numTriangles = GetGeometry().m_lods[lod - 1].m_numIndices / 3;
         numTriangles /= 2; // half the triangles are back-facing
         if (m_screenAreaPixels / numTriangles < SharedConstants::SPHERE_LOD_BIAS)
         {
@@ -352,7 +299,8 @@ bool SceneObjects::BaseObject::Drawable() const
 //-------------------------------------------------------------------------
 // draw object
 //-------------------------------------------------------------------------
-void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList, const SceneObjects::DrawParams& in_drawParams)
+void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList,
+    const SceneObjects::DrawParams& in_drawParams)
 {
     ASSERT(Drawable());
 
@@ -371,7 +319,7 @@ void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList,
     {
         D3D12_GPU_DESCRIPTOR_HANDLE h = descriptorHeapBaseGpu;
         h.ptr += in_drawParams.m_srvUavCbvDescriptorSize * (UINT)SceneObjects::Descriptors::HeapOffsetFeedback;
-        m_pSFSManager->QueueFeedback(GetStreamingResource(), h);
+        m_pStreamingResource->QueueFeedback(h);
     }
 
     // uavs and srvs
@@ -386,7 +334,7 @@ void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList,
     UINT num32BitValues = sizeof(ModelConstantData) / sizeof(UINT32);
     in_pCommandList->SetGraphicsRoot32BitConstants((UINT)RootSigParams::Param32BitConstants, num32BitValues, &modelConstantData, 0);
 
-    const auto& geometry = m_lods[m_lod];
+    const auto& geometry = GetGeometry().m_lods[m_lod];
 
     in_pCommandList->IASetIndexBuffer(&geometry.m_indexBufferView);
     in_pCommandList->IASetVertexBuffers(0, 1, &geometry.m_vertexBufferView);
@@ -455,44 +403,28 @@ void SceneObjects::CreateSphereResources(
     }
 }
 
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-void SceneObjects::CreateSphere(SceneObjects::BaseObject* out_pObject,
-    ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
-    const SphereGen::Properties& in_sphereProperties,
-    UINT in_numLods)
-{
-    const float lodStepFactor = 1.0f / in_numLods;
-    float lodScaleFactor = 1.0f;
-
-    SphereGen::Properties sphereProperties = in_sphereProperties;
-
-    for (UINT lod = 0; lod < in_numLods; lod++)
-    {
-        sphereProperties.m_numLat = UINT(in_sphereProperties.m_numLat * lodScaleFactor);
-        sphereProperties.m_numLong = UINT(in_sphereProperties.m_numLong * lodScaleFactor);
-        lodScaleFactor -= lodStepFactor;
-
-        ID3D12Resource* pVertexBuffer{ nullptr };
-        ID3D12Resource* pIndexBuffer{ nullptr };
-        CreateSphereResources(&pVertexBuffer, &pIndexBuffer, in_pDevice, sphereProperties, in_assetUploader);
-        out_pObject->SetGeometry(pVertexBuffer, (UINT)sizeof(SphereGen::Vertex), pIndexBuffer, lod);
-    }
-}
-
 //=========================================================================
 //=========================================================================
+UINT SceneObjects::Terrain::m_geometryIndex{ UINT(-1) };
 SceneObjects::Terrain::Terrain(
-    SFSManager* in_pSFSManager,
-    ID3D12Device* in_pDevice,
-    UINT in_sampleCount,
-    const CommandLineArgs& in_args,
-    AssetUploader& in_assetUploader) :
-    BaseObject(in_pSFSManager, in_pDevice)
+    ID3D12Device* in_pDevice, UINT in_sampleCount,
+    const CommandLineArgs& in_args, AssetUploader& in_assetUploader)
 {
+    if (UINT(-1) != m_geometryIndex)
+    {
+        return;
+    }
+
+    m_geometryIndex = (UINT)m_geometries.size();
+    m_geometries.resize(m_geometries.size() + 1);
+
+    CreateRootSignature(m_geometries.back(), in_pDevice);
+
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-    CreatePipelineState(L"terrainPS.cso", L"terrainPS-FB.cso", L"terrainVS.cso", in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc);
+    CreatePipelineState(m_geometries.back(),
+        L"terrainPS.cso", L"terrainPS-FB.cso", L"terrainVS.cso",
+        in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc);
 
     D3D12_INDEX_BUFFER_VIEW indexBufferView{};
     D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
@@ -536,12 +468,21 @@ SceneObjects::Terrain::Terrain(
 
         std::vector<BYTE> indices(mesh.GetIndexBufferSize());
         mesh.GenerateIndices((UINT*)indices.data());
-        
+
         in_assetUploader.SubmitRequest(pIndexBuffer, indices.data(), indices.size(),
             D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_INDEX_BUFFER);
     }
 
-    SetGeometry(pVertexBuffer, (UINT)sizeof(TerrainGenerator::Vertex), pIndexBuffer);
+    m_geometries.back().m_lods.resize(1);
+    auto& lod = m_geometries.back().m_lods[0];
+    lod.m_vertexBuffer = pVertexBuffer;
+    lod.m_indexBuffer = pIndexBuffer;
+    lod.m_numIndices = (UINT)lod.m_indexBuffer->GetDesc().Width / sizeof(UINT32);
+    lod.m_vertexBufferView = { lod.m_vertexBuffer->GetGPUVirtualAddress(), (UINT)lod.m_vertexBuffer->GetDesc().Width, (UINT)sizeof(TerrainGenerator::Vertex) };
+    lod.m_indexBufferView = { lod.m_indexBuffer->GetGPUVirtualAddress(), (UINT)lod.m_indexBuffer->GetDesc().Width, DXGI_FORMAT_R32_UINT };
+
+    pVertexBuffer->Release();
+    pIndexBuffer->Release();
 }
 
 //-------------------------------------------------------------------------
@@ -577,33 +518,62 @@ void SceneObjects::BaseObject::SetCombinedMatrix(const DirectX::XMMATRIX& in_wor
 // planets have multiple LoDs
 // Texture Coordinates may optionally be mirrored in U
 //=========================================================================
-SceneObjects::Planet::Planet(
-    SFSManager* in_pSFSManager,
-    ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
-    UINT in_sampleCount,
-    const SphereGen::Properties& in_sphereProperties) :
-    BaseObject(in_pSFSManager, in_pDevice)
+UINT SceneObjects::Earth::m_geometryIndex{ UINT(-1) };
+SceneObjects::Earth::Earth(
+    ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount,
+    const SphereGen::Properties& in_sphereProperties)
 {
+    SetAxis(DirectX::XMVectorSet(0, 0, 1, 0));
+
+    if (UINT(-1) != m_geometryIndex)
+    {
+        return;
+    }
+
+    m_geometryIndex = (UINT)m_geometries.size();
+    m_geometries.resize(m_geometries.size() + 1);
+
+    CreateRootSignature(m_geometries.back(), in_pDevice);
+
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-    CreatePipelineState(L"terrainPS.cso", L"terrainPS-FB.cso", L"terrainVS.cso", in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc);
+    CreatePipelineState(m_geometries.back(),
+        L"terrainPS.cso", L"terrainPS-FB.cso", L"terrainVS.cso",
+        in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc);
 
     const UINT numLevelsOfDetail = SharedConstants::NUM_SPHERE_LEVELS_OF_DETAIL;
-    CreateSphere(this, in_pDevice, in_assetUploader, in_sphereProperties, numLevelsOfDetail);
-}
+    //CreateSphere(this, in_pDevice, in_assetUploader, in_sphereProperties, numLevelsOfDetail);
+    const float lodStepFactor = 1.0f / numLevelsOfDetail;
+    float lodScaleFactor = 1.0f;
 
-//-------------------------------------------------------------------------
-//-------------------------------------------------------------------------
-SceneObjects::Planet::Planet(Planet* in_pSharedObject) :
-    BaseObject(in_pSharedObject->m_pSFSManager, in_pSharedObject)
-{
-    CopyGeometry(in_pSharedObject);
+    SphereGen::Properties sphereProperties = in_sphereProperties;
+
+    m_geometries.back().m_lods.resize(numLevelsOfDetail);
+    for (UINT i = 0; i < numLevelsOfDetail; i++)
+    {
+        sphereProperties.m_numLat = UINT(in_sphereProperties.m_numLat * lodScaleFactor);
+        sphereProperties.m_numLong = UINT(in_sphereProperties.m_numLong * lodScaleFactor);
+        lodScaleFactor -= lodStepFactor;
+
+        ID3D12Resource* pVertexBuffer{ nullptr };
+        ID3D12Resource* pIndexBuffer{ nullptr };
+        CreateSphereResources(&pVertexBuffer, &pIndexBuffer, in_pDevice, sphereProperties, in_assetUploader);
+
+        auto& lod = m_geometries.back().m_lods[i];
+        lod.m_vertexBuffer = pVertexBuffer;
+        lod.m_indexBuffer = pIndexBuffer;
+        lod.m_numIndices = (UINT)lod.m_indexBuffer->GetDesc().Width / sizeof(UINT32);
+        lod.m_vertexBufferView = { lod.m_vertexBuffer->GetGPUVirtualAddress(), (UINT)lod.m_vertexBuffer->GetDesc().Width, (UINT)sizeof(SphereGen::Vertex) };
+        lod.m_indexBufferView = { lod.m_indexBuffer->GetGPUVirtualAddress(), (UINT)lod.m_indexBuffer->GetDesc().Width, DXGI_FORMAT_R32_UINT };
+    }
+    m_geometries.back().m_lods[0].m_vertexBuffer->Release();
+    m_geometries.back().m_lods[0].m_indexBuffer->Release();
 }
 
 //-------------------------------------------------------------------------
 // visibility of sphere for frustum culling
 //-------------------------------------------------------------------------
-bool SceneObjects::Planet::ComputeVisible(float in_cotWdiv2, float in_cotHdiv2, const float in_zFar)
+bool SceneObjects::Sphere::ComputeVisible(float in_cotWdiv2, float in_cotHdiv2, const float in_zFar)
 {
     const DirectX::XMVECTOR pos = GetCombinedMatrix().r[3];
     const float radius = GetBoundingSphereRadius();
@@ -651,7 +621,7 @@ bool SceneObjects::Planet::ComputeVisible(float in_cotWdiv2, float in_cotHdiv2, 
 // compute bounding sphere radius for a sphere
 // assumes scale factor same in x, y, z
 //-------------------------------------------------------------------------
-float SceneObjects::Planet::GetBoundingSphereRadius()
+float SceneObjects::Sphere::GetBoundingSphereRadius()
 {
     if (0 == m_radius)
     {
@@ -668,25 +638,50 @@ float SceneObjects::Planet::GetBoundingSphereRadius()
 // it has only 1 LoD
 // shading is much simpler: no lighting
 //=============================================================================
+UINT SceneObjects::Sky::m_geometryIndex{ UINT(-1) };
 SceneObjects::Sky::Sky(
-    SFSManager* in_pSFSManager,
     ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
-    UINT in_sampleCount) :
-    BaseObject(in_pSFSManager, in_pDevice)
+    UINT in_sampleCount)
 {
+    m_radius = std::numeric_limits<float>::max();
+
+    if (UINT(-1) != m_geometryIndex)
+    {
+        return;
+    }
+
+    m_geometryIndex = (UINT)m_geometries.size();
+    m_geometries.resize(m_geometries.size() + 1);
+
+    CreateRootSignature(m_geometries.back(), in_pDevice);
+
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     rasterizerDesc.CullMode = D3D12_CULL_MODE_FRONT;
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
     depthStencilDesc.DepthEnable = false; // NOTE: must be first object drawn
 
-    CreatePipelineState(L"skyPS.cso", L"skyPS-FB.cso", L"skyVS.cso", in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc);
+    CreatePipelineState(m_geometries.back(),
+        L"skyPS.cso", L"skyPS-FB.cso", L"skyVS.cso",
+        in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc);
 
     SphereGen::Properties sphereProperties;
     sphereProperties.m_numLong = 80;
     sphereProperties.m_numLat = 81;
     sphereProperties.m_mirrorU = true;
     sphereProperties.m_topBottom = true;
-    CreateSphere(this, in_pDevice, in_assetUploader, sphereProperties);
 
-    m_radius = std::numeric_limits<float>::max();
+    m_geometries.back().m_lods.resize(1);
+    ID3D12Resource* pVertexBuffer{ nullptr };
+    ID3D12Resource* pIndexBuffer{ nullptr };
+    CreateSphereResources(&pVertexBuffer, &pIndexBuffer, in_pDevice, sphereProperties, in_assetUploader);
+
+    auto& lod = m_geometries.back().m_lods[0];
+    lod.m_vertexBuffer = pVertexBuffer;
+    lod.m_indexBuffer = pIndexBuffer;
+    lod.m_numIndices = (UINT)lod.m_indexBuffer->GetDesc().Width / sizeof(UINT32);
+    lod.m_vertexBufferView = { lod.m_vertexBuffer->GetGPUVirtualAddress(), (UINT)lod.m_vertexBuffer->GetDesc().Width, (UINT)sizeof(SphereGen::Vertex) };
+    lod.m_indexBufferView = { lod.m_indexBuffer->GetGPUVirtualAddress(), (UINT)lod.m_indexBuffer->GetDesc().Width, DXGI_FORMAT_R32_UINT };
+
+    m_geometries.back().m_lods[0].m_vertexBuffer->Release();
+    m_geometries.back().m_lods[0].m_indexBuffer->Release();
 }

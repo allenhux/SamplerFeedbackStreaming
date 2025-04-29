@@ -63,6 +63,7 @@ namespace SFS
         virtual UINT GetMinMipMapHeight() const override;
         virtual UINT GetMinMipMapOffset() const override;
         virtual bool Drawable() const override;
+        virtual void QueueFeedback(D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor);
         virtual void QueueEviction() override;
         virtual ID3D12Resource* GetMinMipMap() const override;
         virtual UINT GetNumTilesVirtual() const override;

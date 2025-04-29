@@ -86,6 +86,9 @@ struct SFSResource
     // application should not use this texture before it is ready
     virtual bool Drawable() const = 0;
 
+    // convenience function that behaves like the SFS Manager API of the same name
+    virtual void QueueFeedback(D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor) = 0;
+
     // if a resource isn't visible, evict associated data
     // call any time
     virtual void QueueEviction() = 0;

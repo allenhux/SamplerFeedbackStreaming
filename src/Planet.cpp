@@ -93,13 +93,20 @@ static ID3D12Resource* CreatePlanetVertexBuffer(
 // planets have multiple LoDs
 // Texture Coordinates may optionally be mirrored in U
 //=========================================================================
-SceneObjects::Planet::Planet(
-    SFSManager* in_pSFSManager,
-    ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
-    UINT in_sampleCount) :
-    BaseObject(in_pSFSManager, in_pDevice)
+UINT SceneObjects::Planet::m_geometryIndex{ UINT(-1) };
+SceneObjects::Planet::Planet(ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount)
 {
     SetAxis(DirectX::XMVectorSet(0, 0, 1, 0));
+
+    if (UINT(-1) != m_geometryIndex)
+    {
+        return;
+    }
+
+    m_geometryIndex = (UINT)m_geometries.size();
+    m_geometries.resize(m_geometries.size() + 1);
+
+    CreateRootSignature(m_geometries.back(), in_pDevice);
 
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
@@ -109,7 +116,8 @@ SceneObjects::Planet::Planet(
         { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
     };
 
-    CreatePipelineState(L"planetPS.cso", L"planetPS-FB.cso", L"planetVS.cso",
+    CreatePipelineState(m_geometries.back(),
+        L"planetPS.cso", L"planetPS-FB.cso", L"planetVS.cso",
         in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc, inputElementDescs);
 
     std::vector<PlanetVertex> verts;
@@ -177,12 +185,21 @@ SceneObjects::Planet::Planet(
         sub.GetIndices(indices);
         indexBuffers[lod] = CreatePlanetIndexBuffer(in_pDevice, in_assetUploader, indices);
     }
-    
+
     // only 1 vertex buffer is required for all LoDs because subdivided triangles re-use vertices
     ID3D12Resource* pVertexBuffer = CreatePlanetVertexBuffer(in_pDevice, in_assetUploader, verts);
 
-    for (UINT lod = 0; lod < numLods; lod++)
+    m_geometries.back().m_lods.resize(numLods);
+    for (UINT i = 0; i < numLods; i++)
     {
-        SetGeometry(pVertexBuffer, (UINT)sizeof(verts[0]), indexBuffers[lod], numLods - lod - 1);
+        auto& lod = m_geometries.back().m_lods[numLods - i - 1];
+        lod.m_vertexBuffer = pVertexBuffer;
+        lod.m_indexBuffer = indexBuffers[i];
+        lod.m_numIndices = (UINT)lod.m_indexBuffer->GetDesc().Width / sizeof(UINT32);
+        lod.m_vertexBufferView = { lod.m_vertexBuffer->GetGPUVirtualAddress(), (UINT)lod.m_vertexBuffer->GetDesc().Width, sizeof(verts[0]) };
+        lod.m_indexBufferView = { lod.m_indexBuffer->GetGPUVirtualAddress(), (UINT)lod.m_indexBuffer->GetDesc().Width, DXGI_FORMAT_R32_UINT };
+
+        lod.m_vertexBuffer->Release();
+        lod.m_indexBuffer->Release();
     }
 }
