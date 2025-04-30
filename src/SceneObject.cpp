@@ -567,9 +567,10 @@ SceneObjects::Earth::Earth(
         lod.m_numIndices = (UINT)lod.m_indexBuffer->GetDesc().Width / sizeof(UINT32);
         lod.m_vertexBufferView = { lod.m_vertexBuffer->GetGPUVirtualAddress(), (UINT)lod.m_vertexBuffer->GetDesc().Width, (UINT)sizeof(SphereGen::Vertex) };
         lod.m_indexBufferView = { lod.m_indexBuffer->GetGPUVirtualAddress(), (UINT)lod.m_indexBuffer->GetDesc().Width, DXGI_FORMAT_R32_UINT };
+
+        lod.m_vertexBuffer->Release();
+        lod.m_indexBuffer->Release();
     }
-    m_geometries.back().m_lods[0].m_vertexBuffer->Release();
-    m_geometries.back().m_lods[0].m_indexBuffer->Release();
 }
 
 //-------------------------------------------------------------------------
