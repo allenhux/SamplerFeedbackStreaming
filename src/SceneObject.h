@@ -239,7 +239,7 @@ namespace SceneObjects
     {
     public:
         Earth(ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount,
-            const SphereGen::Properties& in_properties);
+            UINT in_sphereLat, UINT in_sphereLong);
         virtual const Geometry& GetGeometry() const override { return m_geometries[m_geometryIndex]; }
     private:
         static Geometry* CreateGeometry(ID3D12Device* in_pDevice);

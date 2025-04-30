@@ -233,7 +233,7 @@ private:
     std::vector<class SceneObjects::BaseObject*> m_objects;
 
     UINT m_terrainObjectIndex{ 0 };
-    SceneObjects::BaseObject* m_pTerrainSceneObject{ nullptr }; // convenience pointer, do not delete or draw, this is also in m_objects.
+    SceneObjects::BaseObject* m_pTerrain{ nullptr }; // convenience pointer, do not delete or draw, this is also in m_objects.
     SceneObjects::BaseObject* m_pSky{ nullptr }; // lifetime owned by m_objects
 
     struct ObjectPose

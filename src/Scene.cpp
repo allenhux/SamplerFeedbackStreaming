@@ -145,8 +145,6 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
 
     UINT factoryFlags = 0;
 
-    PrepareScene();
-
 #ifdef _DEBUG
     factoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
     InitDebugLayer();
@@ -201,6 +199,10 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
     CreateSampler();
     CreateConstantBuffers();
 
+    m_assetUploader.Init(m_device.Get());
+
+    PrepareScene();
+
     float eyePos = 100.0f;
     XMVECTOR vEyePt = XMVectorSet(eyePos, eyePos, eyePos, 1.0f);
     XMVECTOR lookAt = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
@@ -213,8 +215,6 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
         (UINT)DescriptorHeapOffsets::GUI, m_swapBufferCount,
         SharedConstants::SWAP_CHAIN_FORMAT, adapterDescription,
         minNumObjects, m_args);
-
-    m_assetUploader.Init(m_device.Get());
 
     m_pFrustumViewer = new FrustumViewer(m_device.Get(),
         SharedConstants::SWAP_CHAIN_FORMAT,
@@ -765,10 +765,6 @@ void Scene::SetSphereMatrix(float in_minDistance)
 //-----------------------------------------------------------------------------
 void Scene::LoadSpheres()
 {
-
-    //     m_pStreamingResource = m_pSFSManager->CreateResource(in_filename, in_pHeap, in_pFileHeader);
-
-
     const UINT maxNewObjectsPerFrame = 500;
     UINT numObjectsAdded = 0;
     if (m_objects.size() < (UINT)m_args.m_numSpheres)
@@ -790,50 +786,21 @@ void Scene::LoadSpheres()
 
             SceneObjects::BaseObject* o = nullptr;
 
-            SphereGen::Properties sphereProperties;
-            sphereProperties.m_numLat = m_args.m_sphereLat;
-            sphereProperties.m_numLong = m_args.m_sphereLong;
-            sphereProperties.m_mirrorU = true;
-            sphereProperties.m_topBottom = true;
-
-            // 3 options: sphere, earth, sky
-
-            // only 1 sky, and it must be first because it disables depth when drawn
-            // FIXME? material sorting broke ordering
-            if ((nullptr == m_pSky) && (m_args.m_skyTexture.size()))
-            {
-                m_pSky = new SceneObjects::Sky(m_device.Get(), m_assetUploader, m_args.m_sampleCount);
-                o = m_pSky;
-                o->SetResource(m_pSFSManager->CreateResource(m_args.m_skyTexture, pHeap));
-                float scale = m_universeSize * 2; // NOTE: expects universe size to not change
-                o->GetModelMatrix() = DirectX::XMMatrixScaling(scale, scale, scale);
-            }
-            else if (nullptr == m_pTerrainSceneObject)
-            {
-                m_pTerrainSceneObject = new SceneObjects::Terrain(m_device.Get(), m_args.m_sampleCount, m_args, m_assetUploader);
-                o = m_pTerrainSceneObject;
-                o->SetResource(m_pSFSManager->CreateResource(m_args.m_terrainTexture, pHeap));
-                m_terrainObjectIndex = objectIndex;
-            }
             // earth
-            else if (m_args.m_earthTexture.size() && (0 == fileIndex))
+            if ((0 == fileIndex) && m_args.m_earthTexture.size())
             {
-                ASSERT(0 == textureFilename.size()); // expect empty; cleared during scene creation
-                sphereProperties.m_mirrorU = false;
-                sphereProperties.m_topBottom = false;
-                o = new SceneObjects::Earth(m_device.Get(), m_assetUploader, m_args.m_sampleCount, sphereProperties);
-                o->SetResource(m_pSFSManager->CreateResource(m_args.m_earthTexture, pHeap));
-                o->GetModelMatrix() = m_objectPoses.m_matrix[m_objects.size()];
+                o = new SceneObjects::Earth(m_device.Get(), m_assetUploader, m_args.m_sampleCount,
+                    m_args.m_sphereLat, m_args.m_sphereLong);
             }
             // planet
             else
             {
                 o = new SceneObjects::Planet(m_device.Get(), m_assetUploader, m_args.m_sampleCount);
-                o->SetResource(m_pSFSManager->CreateResource(textureFilename, pHeap, &m_textureFileHeaders[fileIndex]));
                 static std::uniform_real_distribution<float> dis(-1.f, 1.f);
                 o->SetAxis(DirectX::XMVector3NormalizeEst(DirectX::XMVectorSet(dis(m_gen), dis(m_gen), dis(m_gen), 0)));
-                o->GetModelMatrix() = m_objectPoses.m_matrix[m_objects.size()];
             }
+            o->SetResource(m_pSFSManager->CreateResource(textureFilename, pHeap, &m_textureFileHeaders[fileIndex]));
+            o->GetModelMatrix() = m_objectPoses.m_matrix[objectIndex];
             m_objects.push_back(o);
 
             numObjectsAdded++;
@@ -850,10 +817,10 @@ void Scene::LoadSpheres()
         {
             SceneObjects::BaseObject* pObject = m_objects.back();
 
-            if (m_pTerrainSceneObject == pObject)
+            if (m_pTerrain == pObject)
             {
                 DeleteTerrainViewers();
-                m_pTerrainSceneObject = nullptr;
+                m_pTerrain = nullptr;
             }
 
             if (m_pSky == pObject)
@@ -930,14 +897,17 @@ void Scene::PrepareScene()
             if (std::wstring::npos != i->find(m_args.m_earthTexture))
             {
                 m_args.m_earthTexture = *i;
-                *i = m_args.m_textures[0];
-                m_args.m_textures[0].clear();
+                *i = m_args.m_textures.back();
+                m_args.m_textures.resize(m_args.m_textures.size() - 1);
                 break;
             }
         }
         if (std::filesystem::exists(m_args.m_earthTexture))
         {
             m_args.m_earthTexture = std::filesystem::absolute(m_args.m_earthTexture);
+            m_args.m_textures.push_back(m_args.m_earthTexture);
+            // move earth texture to first position in array to simplify loading later
+            std::swap(m_args.m_textures[0], m_args.m_textures.back());
         }
         else
         {
@@ -976,6 +946,31 @@ void Scene::PrepareScene()
         ASSERT(fileHeader.m_version = XetFileHeader::GetVersion()); // correct XET version?
 
         m_textureFileHeaders.push_back(fileHeader);
+    }
+
+    //--------------------------
+    // create one-off objects
+    //--------------------------
+
+    { // --- terrain ---
+        m_terrainObjectIndex = (UINT)m_objects.size();
+        UINT heapIndex = m_terrainObjectIndex % m_sharedHeaps.size();
+        SFSHeap* pHeap = m_sharedHeaps[heapIndex];
+        m_pTerrain = new SceneObjects::Terrain(m_device.Get(), m_args.m_sampleCount, m_args, m_assetUploader);
+        m_pTerrain->SetResource(m_pSFSManager->CreateResource(m_args.m_terrainTexture, pHeap));
+        m_objects.push_back(m_pTerrain);
+    }
+
+    if (m_args.m_skyTexture.size()) // --- sky ---
+    {
+        UINT objectIndex = (UINT)m_objects.size();
+        UINT heapIndex = objectIndex % m_sharedHeaps.size();
+        SFSHeap* pHeap = m_sharedHeaps[heapIndex];
+        m_pSky = new SceneObjects::Sky(m_device.Get(), m_assetUploader, m_args.m_sampleCount);
+        m_pSky->SetResource(m_pSFSManager->CreateResource(m_args.m_skyTexture, pHeap));
+        float scale = m_universeSize * 2; // NOTE: expects universe size to not change
+        m_pSky->GetModelMatrix() = DirectX::XMMatrixScaling(scale, scale, scale);
+        m_objects.push_back(m_pSky);
     }
 }
 
@@ -1509,7 +1504,7 @@ void Scene::Animate()
 //-------------------------------------------------------------------------
 void Scene::CreateTerrainViewers()
 {
-    ASSERT(m_pTerrainSceneObject);
+    ASSERT(m_pTerrain);
     if (nullptr == m_pTextureViewer)
     {
         UINT heapOffset = (UINT)DescriptorHeapOffsets::NumEntries +
@@ -1518,7 +1513,7 @@ void Scene::CreateTerrainViewers()
 
         // create viewer for the streaming resource
         m_pTextureViewer = new TextureViewer(
-            m_pTerrainSceneObject->GetTiledResource(),
+            m_pTerrain->GetTiledResource(),
             SharedConstants::SWAP_CHAIN_FORMAT, m_srvHeap.Get(),
             heapOffset);
     }
@@ -1526,11 +1521,11 @@ void Scene::CreateTerrainViewers()
     // create viewer for the resolved feedback
     if (nullptr == m_pFeedbackViewer)
     {
-        UINT feedbackWidth = m_pTerrainSceneObject->GetStreamingResource()->GetMinMipMapWidth();
-        UINT feedbackHeight = m_pTerrainSceneObject->GetStreamingResource()->GetMinMipMapHeight();
+        UINT feedbackWidth = m_pTerrain->GetStreamingResource()->GetMinMipMapWidth();
+        UINT feedbackHeight = m_pTerrain->GetStreamingResource()->GetMinMipMapHeight();
 
         m_pFeedbackViewer = new BufferViewer(
-            m_pTerrainSceneObject->GetResolvedFeedback(),
+            m_pTerrain->GetResolvedFeedback(),
             feedbackWidth, feedbackHeight, feedbackWidth, 0,
             SharedConstants::SWAP_CHAIN_FORMAT);
     }
@@ -1541,14 +1536,14 @@ void Scene::CreateTerrainViewers()
     if (nullptr == m_pMinMipMapViewer)
     {
         // create min-mip-map viewer
-        UINT feedbackWidth = m_pTerrainSceneObject->GetStreamingResource()->GetMinMipMapWidth();
-        UINT feedbackHeight = m_pTerrainSceneObject->GetStreamingResource()->GetMinMipMapHeight();
+        UINT feedbackWidth = m_pTerrain->GetStreamingResource()->GetMinMipMapWidth();
+        UINT feedbackHeight = m_pTerrain->GetStreamingResource()->GetMinMipMapHeight();
 
         // note: bufferview can't be created until after SFSM::BeginFrame because the residency map will be NULL
         m_pMinMipMapViewer = new BufferViewer(
-            m_pTerrainSceneObject->GetMinMipMap(),
+            m_pTerrain->GetMinMipMap(),
             feedbackWidth, feedbackHeight, feedbackWidth,
-            m_pTerrainSceneObject->GetStreamingResource()->GetMinMipMapOffset(),
+            m_pTerrain->GetStreamingResource()->GetMinMipMapOffset(),
             SharedConstants::SWAP_CHAIN_FORMAT,
             m_srvHeap.Get(), (INT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP);
     }
@@ -1617,7 +1612,7 @@ void Scene::DrawUI()
     //-------------------------------------------
     // Display various textures
     //-------------------------------------------
-    if (m_args.m_showFeedbackMaps && (nullptr != m_pTerrainSceneObject) && (m_pTerrainSceneObject->Drawable()))
+    if (m_args.m_showFeedbackMaps && (nullptr != m_pTerrain) && (m_pTerrain->Drawable()))
     {
         CreateTerrainViewers();
 
@@ -1696,9 +1691,9 @@ void Scene::DrawUI()
         }
 
         guiDrawParams.m_cpuFeedbackTime = m_pSFSManager->GetCpuProcessFeedbackTime();
-        if (m_pTerrainSceneObject)
+        if (m_pTerrain)
         {
-            guiDrawParams.m_scrollMipDim = m_pTerrainSceneObject->GetStreamingResource()->GetTiledResource()->GetDesc().MipLevels;
+            guiDrawParams.m_scrollMipDim = m_pTerrain->GetStreamingResource()->GetTiledResource()->GetDesc().MipLevels;
         }
         guiDrawParams.m_numTilesUploaded = m_numUploadsPreviousFrame;
         guiDrawParams.m_numTilesEvicted = m_numEvictionsPreviousFrame;

@@ -521,7 +521,7 @@ void SceneObjects::BaseObject::SetCombinedMatrix(const DirectX::XMMATRIX& in_wor
 UINT SceneObjects::Earth::m_geometryIndex{ UINT(-1) };
 SceneObjects::Earth::Earth(
     ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount,
-    const SphereGen::Properties& in_sphereProperties)
+    UINT in_sphereLat, UINT in_sphereLong)
 {
     SetAxis(DirectX::XMVectorSet(0, 0, 1, 0));
 
@@ -546,13 +546,15 @@ SceneObjects::Earth::Earth(
     const float lodStepFactor = 1.0f / numLevelsOfDetail;
     float lodScaleFactor = 1.0f;
 
-    SphereGen::Properties sphereProperties = in_sphereProperties;
+    SphereGen::Properties sphereProperties;
+    sphereProperties.m_mirrorU = false;
+    sphereProperties.m_topBottom = false;
 
     m_geometries.back().m_lods.resize(numLevelsOfDetail);
     for (UINT i = 0; i < numLevelsOfDetail; i++)
     {
-        sphereProperties.m_numLat = UINT(in_sphereProperties.m_numLat * lodScaleFactor);
-        sphereProperties.m_numLong = UINT(in_sphereProperties.m_numLong * lodScaleFactor);
+        sphereProperties.m_numLat = UINT(in_sphereLat * lodScaleFactor);
+        sphereProperties.m_numLong = UINT(in_sphereLong * lodScaleFactor);
         lodScaleFactor -= lodStepFactor;
 
         ID3D12Resource* pVertexBuffer{ nullptr };
