@@ -31,6 +31,7 @@
 #include "SamplerFeedbackStreaming.h"
 #include "CreateSphere.h"
 
+class Scene;
 class AssetUploader;
 
 namespace SceneObjects
@@ -210,8 +211,7 @@ namespace SceneObjects
     class Terrain : public BaseObject
     {
     public:
-        Terrain(ID3D12Device* in_pDevice, UINT in_sampleCount,
-            const CommandLineArgs& in_args, AssetUploader& in_assetUploader);
+        Terrain(Scene* in_pScene);
         virtual const Geometry& GetGeometry() const override { return m_geometries[m_geometryIndex]; }
     private:
         static Geometry* CreateGeometry(ID3D12Device* in_pDevice);
@@ -228,7 +228,7 @@ namespace SceneObjects
     class Planet : public Sphere
     {
     public:
-        Planet(ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount);
+        Planet(Scene* in_pScene);
         virtual const Geometry& GetGeometry() const override { return m_geometries[m_geometryIndex]; }
     private:
         static Geometry* CreateGeometry(ID3D12Device* in_pDevice);
@@ -238,8 +238,7 @@ namespace SceneObjects
     class Earth : public Sphere
     {
     public:
-        Earth(ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount,
-            UINT in_sphereLat, UINT in_sphereLong);
+        Earth(Scene* in_pScene);
         virtual const Geometry& GetGeometry() const override { return m_geometries[m_geometryIndex]; }
     private:
         static Geometry* CreateGeometry(ID3D12Device* in_pDevice);
@@ -252,7 +251,7 @@ namespace SceneObjects
     class Sky : public BaseObject
     {
     public:
-        Sky(ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount);
+        Sky(Scene* in_pScene);
         virtual const Geometry& GetGeometry() const override { return m_geometries[m_geometryIndex]; }
     private:
         static Geometry* CreateGeometry(ID3D12Device* in_pDevice);

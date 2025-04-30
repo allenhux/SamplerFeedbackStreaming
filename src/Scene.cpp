@@ -789,13 +789,12 @@ void Scene::LoadSpheres()
             // earth
             if ((0 == fileIndex) && m_args.m_earthTexture.size())
             {
-                o = new SceneObjects::Earth(m_device.Get(), m_assetUploader, m_args.m_sampleCount,
-                    m_args.m_sphereLat, m_args.m_sphereLong);
+                o = new SceneObjects::Earth(this);
             }
             // planet
             else
             {
-                o = new SceneObjects::Planet(m_device.Get(), m_assetUploader, m_args.m_sampleCount);
+                o = new SceneObjects::Planet(this);
                 static std::uniform_real_distribution<float> dis(-1.f, 1.f);
                 o->SetAxis(DirectX::XMVector3NormalizeEst(DirectX::XMVectorSet(dis(m_gen), dis(m_gen), dis(m_gen), 0)));
             }
@@ -956,7 +955,7 @@ void Scene::PrepareScene()
         m_terrainObjectIndex = (UINT)m_objects.size();
         UINT heapIndex = m_terrainObjectIndex % m_sharedHeaps.size();
         SFSHeap* pHeap = m_sharedHeaps[heapIndex];
-        m_pTerrain = new SceneObjects::Terrain(m_device.Get(), m_args.m_sampleCount, m_args, m_assetUploader);
+        m_pTerrain = new SceneObjects::Terrain(this);
         m_pTerrain->SetResource(m_pSFSManager->CreateResource(m_args.m_terrainTexture, pHeap));
         m_objects.push_back(m_pTerrain);
     }
@@ -966,7 +965,7 @@ void Scene::PrepareScene()
         UINT objectIndex = (UINT)m_objects.size();
         UINT heapIndex = objectIndex % m_sharedHeaps.size();
         SFSHeap* pHeap = m_sharedHeaps[heapIndex];
-        m_pSky = new SceneObjects::Sky(m_device.Get(), m_assetUploader, m_args.m_sampleCount);
+        m_pSky = new SceneObjects::Sky(this);
         m_pSky->SetResource(m_pSFSManager->CreateResource(m_args.m_skyTexture, pHeap));
         float scale = m_universeSize * 2; // NOTE: expects universe size to not change
         m_pSky->GetModelMatrix() = DirectX::XMMatrixScaling(scale, scale, scale);

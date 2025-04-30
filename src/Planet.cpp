@@ -94,7 +94,7 @@ static ID3D12Resource* CreatePlanetVertexBuffer(
 // Texture Coordinates may optionally be mirrored in U
 //=========================================================================
 UINT SceneObjects::Planet::m_geometryIndex{ UINT(-1) };
-SceneObjects::Planet::Planet(ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount)
+SceneObjects::Planet::Planet(Scene* in_pScene)
 {
     SetAxis(DirectX::XMVectorSet(0, 0, 1, 0));
 
@@ -103,10 +103,14 @@ SceneObjects::Planet::Planet(ID3D12Device* in_pDevice, AssetUploader& in_assetUp
         return;
     }
 
+    ID3D12Device* pDevice = in_pScene->GetDevice();
+    auto& assetUploader = in_pScene->GetAssetUploader();
+    UINT sampleCount = in_pScene->GetArgs().m_sampleCount;
+
     m_geometryIndex = (UINT)m_geometries.size();
     m_geometries.resize(m_geometries.size() + 1);
 
-    CreateRootSignature(m_geometries.back(), in_pDevice);
+    CreateRootSignature(m_geometries.back(), pDevice);
 
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
@@ -118,7 +122,7 @@ SceneObjects::Planet::Planet(ID3D12Device* in_pDevice, AssetUploader& in_assetUp
 
     CreatePipelineState(m_geometries.back(),
         L"planetPS.cso", L"planetPS-FB.cso", L"planetVS.cso",
-        in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc, inputElementDescs);
+        pDevice, sampleCount, rasterizerDesc, depthStencilDesc, inputElementDescs);
 
     std::vector<PlanetVertex> verts;
     verts.push_back({ { 1, 0, 0 }, {0, 0, 0} }); // 0
@@ -183,11 +187,11 @@ SceneObjects::Planet::Planet(ID3D12Device* in_pDevice, AssetUploader& in_assetUp
         sub.Next();
         std::vector<uint32_t> indices;
         sub.GetIndices(indices);
-        indexBuffers[lod] = CreatePlanetIndexBuffer(in_pDevice, in_assetUploader, indices);
+        indexBuffers[lod] = CreatePlanetIndexBuffer(pDevice, assetUploader, indices);
     }
 
     // only 1 vertex buffer is required for all LoDs because subdivided triangles re-use vertices
-    ID3D12Resource* pVertexBuffer = CreatePlanetVertexBuffer(in_pDevice, in_assetUploader, verts);
+    ID3D12Resource* pVertexBuffer = CreatePlanetVertexBuffer(pDevice, assetUploader, verts);
 
     m_geometries.back().m_lods.resize(numLods);
     for (UINT i = 0; i < numLods; i++)
