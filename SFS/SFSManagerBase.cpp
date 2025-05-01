@@ -371,7 +371,7 @@ void SFS::ManagerBase::Finish()
 // assign offsets to new resources and update all resources on resource allocation
 // descriptor handle required to update the assoiated shader resource view
 //-----------------------------------------------------------------------------
-ID3D12Resource* SFS::ManagerBase::AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle,
+ID3D12Resource* SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle,
     std::vector<ResourceBase*>& in_newResources)
 {
     ID3D12Resource* pOldResource = nullptr; // return old resource if a new one was allocated

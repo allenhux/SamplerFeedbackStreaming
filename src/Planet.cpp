@@ -93,20 +93,20 @@ static ID3D12Resource* CreatePlanetVertexBuffer(
 // planets have multiple LoDs
 // Texture Coordinates may optionally be mirrored in U
 //=========================================================================
-UINT SceneObjects::Planet::m_geometryIndex{ UINT(-1) };
+UINT SceneObjects::Planet::m_geometryIndex{ InvalidClassIndex };
+UINT& SceneObjects::Planet::GetClassIndex() const { return m_geometryIndex; }
 SceneObjects::Planet::Planet(ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount)
 {
     SetAxis(DirectX::XMVectorSet(0, 0, 1, 0));
 
-    if (UINT(-1) != m_geometryIndex)
+    if (InvalidClassIndex != GetClassIndex())
     {
         return;
     }
 
-    m_geometryIndex = (UINT)m_geometries.size();
-    m_geometries.resize(m_geometries.size() + 1);
+    auto& geometry = ConstructGeometry();
 
-    CreateRootSignature(m_geometries.back(), in_pDevice);
+    CreateRootSignature(geometry, in_pDevice);
 
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
@@ -116,7 +116,7 @@ SceneObjects::Planet::Planet(ID3D12Device* in_pDevice, AssetUploader& in_assetUp
         { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
     };
 
-    CreatePipelineState(m_geometries.back(),
+    CreatePipelineState(geometry,
         L"planetPS.cso", L"planetPS-FB.cso", L"planetVS.cso",
         in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc, inputElementDescs);
 
@@ -189,10 +189,10 @@ SceneObjects::Planet::Planet(ID3D12Device* in_pDevice, AssetUploader& in_assetUp
     // only 1 vertex buffer is required for all LoDs because subdivided triangles re-use vertices
     ID3D12Resource* pVertexBuffer = CreatePlanetVertexBuffer(in_pDevice, in_assetUploader, verts);
 
-    m_geometries.back().m_lods.resize(numLods);
+    geometry.m_lods.resize(numLods);
     for (UINT i = 0; i < numLods; i++)
     {
-        auto& lod = m_geometries.back().m_lods[numLods - i - 1];
+        auto& lod = geometry.m_lods[numLods - i - 1];
         lod.m_vertexBuffer = pVertexBuffer;
         lod.m_indexBuffer = indexBuffers[i];
         lod.m_numIndices = (UINT)lod.m_indexBuffer->GetDesc().Width / sizeof(UINT32);

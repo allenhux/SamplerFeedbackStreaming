@@ -191,10 +191,6 @@ namespace SFS
         // are we between BeginFrame and EndFrame? useful for debugging
         std::atomic<bool> m_withinFrame{ false };
 
-        // returns old resource if a new resource was created
-        ID3D12Resource* AllocateResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle,
-            std::vector<ResourceBase*>& in_newResources);
-
         struct CommandList
         {
             ComPtr<ID3D12GraphicsCommandList1> m_commandList;
@@ -204,10 +200,10 @@ namespace SFS
 
         const UINT m_maxTileMappingUpdatesPerApiCall;
 
-        std::atomic<bool> m_threadsRunning{ false };
-
         const UINT m_minNumUploadRequests{ 2000 }; // heuristic to reduce Submit()s
         void SignalFileStreamer();
+
+        std::atomic<bool> m_threadsRunning{ false };
         int m_threadPriority{ 0 };
 
         // a thread to process feedback (when available) and queue tile loads / evictions to datauploader
@@ -219,7 +215,12 @@ namespace SFS
         // the min mip map is shared. it must be created (at least) every time a SFSResource is created/destroyed
         void CreateMinMipMapView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor);
 
-        ComPtr<ID3D12DescriptorHeap> m_sharedClearUavHeap; // CPU heap to clear feedback resources, shared by all
+        // returns old resource if a new resource was created
+        ID3D12Resource* AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle,
+            std::vector<ResourceBase*>& in_newResources);
+
+        // heap to clear feedback resources, shared by all
+        ComPtr<ID3D12DescriptorHeap> m_sharedClearUavHeap;
         void AllocateSharedClearUavHeap();
 
         //-------------------------------------------
@@ -233,7 +234,7 @@ namespace SFS
 NOTE:
 
 Because there are several small per-object operations, there can be a lot of barriers if there are many objects.
-These have all been coalesced into 2 command lists per frame:
+These have all been coalesced into the per-frame AFTER command list:
 
 after draw commands:
     barriers for packed mips

@@ -232,7 +232,6 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
                 tmpResources.push_back(p);
                 m_packedMipTransitionResources[i] = m_packedMipTransitionResources.back();
                 m_packedMipTransitionResources.resize(m_packedMipTransitionResources.size() - 1);
-                //m_streamingResources.push_back(p);
             }
             else
             {
@@ -241,11 +240,10 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
         }
         if (m_packedMipTransitionBarriers.size())
         {
-            pOldResidencyMapRT = AllocateResidencyMap(in_minmipmapDescriptorHandle, tmpResources);
+            pOldResidencyMapRT = AllocateSharedResidencyMap(in_minmipmapDescriptorHandle, tmpResources);
             AllocateSharedClearUavHeap();
         }
     }
-
 
     // if new StreamingResources have been created...
     if (m_newResources.size())

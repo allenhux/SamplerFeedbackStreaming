@@ -92,6 +92,8 @@ namespace SceneObjects
     class BaseObject
     {
     public:
+        BaseObject() {}
+
         virtual ~BaseObject()
         {
             m_pStreamingResource->Destroy();
@@ -148,8 +150,11 @@ namespace SceneObjects
         UINT GetLoD() const { return m_lod; }
         bool IsVisible() const { return m_visible; }
     protected:
-        virtual const Geometry& GetGeometry() const = 0;
-        static std::vector<Geometry> m_geometries;
+        static constexpr UINT InvalidClassIndex{ UINT(-1) };
+        virtual UINT& GetClassIndex() const = 0;
+        const Geometry& GetGeometry() const { return m_geometries[GetClassIndex()]; }
+        Geometry& ConstructGeometry();
+
         bool m_feedbackEnabled{ true };
 
         DirectX::XMMATRIX m_matrix{ DirectX::XMMatrixIdentity() };
@@ -170,8 +175,7 @@ namespace SceneObjects
         SFSResource* m_pStreamingResource{ nullptr };
 
         void CreateRootSignature(Geometry& out_geometry, ID3D12Device* in_pDevice);
-        void CreatePipelineState(
-            SceneObjects::Geometry& out_geometry,
+        void CreatePipelineState(Geometry& out_geometry,
             const wchar_t* in_ps, const wchar_t* in_psFB, const wchar_t* in_vs,
             ID3D12Device* in_pDevice, UINT in_sampleCount,
             const D3D12_RASTERIZER_DESC& in_rasterizerDesc,
@@ -187,6 +191,7 @@ namespace SceneObjects
             [[maybe_unused]] const float in_zFar) { return true; }
 
     private:
+        static std::vector<Geometry> m_geometries;
         bool m_createResourceViews{ true };
         void CreateResourceViews(D3D12_CPU_DESCRIPTOR_HANDLE in_baseDescriptorHandle, UINT in_srvUavCbvDescriptorSize);
 
@@ -197,6 +202,11 @@ namespace SceneObjects
         UINT ComputeLod();
 
         std::wstring GetAssetFullPath(const std::wstring& in_filename);
+
+        BaseObject(const BaseObject&) = delete;
+        BaseObject(BaseObject&&) = delete;
+        BaseObject& operator=(const BaseObject&) = delete;
+        BaseObject& operator=(BaseObject&&) = delete;
     };
 
     void CreateSphere(SceneObjects::BaseObject* out_pObject,
@@ -212,8 +222,8 @@ namespace SceneObjects
     public:
         Terrain(ID3D12Device* in_pDevice, UINT in_sampleCount,
             const CommandLineArgs& in_args, AssetUploader& in_assetUploader);
-        virtual const Geometry& GetGeometry() const override { return m_geometries[m_geometryIndex]; }
     private:
+        virtual UINT& GetClassIndex() const override;
         static Geometry* CreateGeometry(ID3D12Device* in_pDevice);
         static UINT m_geometryIndex;
     };
@@ -229,8 +239,8 @@ namespace SceneObjects
     {
     public:
         Planet(ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount);
-        virtual const Geometry& GetGeometry() const override { return m_geometries[m_geometryIndex]; }
     private:
+        virtual UINT& GetClassIndex() const override;
         static Geometry* CreateGeometry(ID3D12Device* in_pDevice);
         static UINT m_geometryIndex;
     };
@@ -240,8 +250,8 @@ namespace SceneObjects
     public:
         Earth(ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount,
             UINT in_sphereLat, UINT in_sphereLong);
-        virtual const Geometry& GetGeometry() const override { return m_geometries[m_geometryIndex]; }
     private:
+        virtual UINT& GetClassIndex() const override;
         static Geometry* CreateGeometry(ID3D12Device* in_pDevice);
         static UINT m_geometryIndex;
     };
@@ -253,8 +263,8 @@ namespace SceneObjects
     {
     public:
         Sky(ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount);
-        virtual const Geometry& GetGeometry() const override { return m_geometries[m_geometryIndex]; }
     private:
+        virtual UINT& GetClassIndex() const override;
         static Geometry* CreateGeometry(ID3D12Device* in_pDevice);
         static UINT m_geometryIndex;
     };
