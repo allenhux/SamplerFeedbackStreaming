@@ -81,14 +81,17 @@ public:
 
     void ScreenShot(std::wstring& in_fileName) const;
 
+    // may be used by Object constructors
+    const CommandLineArgs& GetArgs() const { return m_args; }
+    ID3D12Device8* GetDevice() const { return m_device.Get(); }
+    AssetUploader& GetAssetUploader() { return m_assetUploader; }
+
 private:
     Scene(const Scene&) = delete;
     Scene(Scene&&) = delete;
     Scene& operator=(const Scene&) = delete;
     Scene& operator=(Scene&&) = delete;
     template<typename T> using ComPtr = Microsoft::WRL::ComPtr<T>;
-
-    void Animate(); // camera and objects
 
     std::atomic<bool> m_fullScreen{ false };
     bool m_desiredFullScreen{ false };
@@ -97,7 +100,6 @@ private:
     // remember placement for restore from full screen
     WINDOWPLACEMENT m_windowPlacement{};
     void Resize();
-
     void RotateView(float in_x, float in_y, float in_z);
 
     CommandLineArgs m_args;
@@ -219,6 +221,7 @@ private:
 
     struct SFSManager* m_pSFSManager{ nullptr };
 
+    void Animate(); // camera and objects
     UINT DetermineMaxNumFeedbackResolves();
     void DrawObjects();   // draw all the objects
 

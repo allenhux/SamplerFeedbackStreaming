@@ -417,24 +417,26 @@ void SceneObjects::CreateSphereResources(
 //=========================================================================
 UINT SceneObjects::Terrain::m_geometryIndex{ InvalidClassIndex };
 UINT& SceneObjects::Terrain::GetClassIndex() const { return m_geometryIndex; }
-SceneObjects::Terrain::Terrain(
-    ID3D12Device* in_pDevice, UINT in_sampleCount,
-    const CommandLineArgs& in_args, AssetUploader& in_assetUploader)
+SceneObjects::Terrain::Terrain(Scene* in_pScene)
 {
     if (InvalidClassIndex != GetClassIndex())
     {
         return;
     }
 
+    ID3D12Device* pDevice = in_pScene->GetDevice();
+    auto& assetUploader = in_pScene->GetAssetUploader();
+    UINT sampleCount = in_pScene->GetArgs().m_sampleCount;
+
     auto& geometry = ConstructGeometry();
 
-    CreateRootSignature(geometry, in_pDevice);
+    CreateRootSignature(geometry, pDevice);
 
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
     CreatePipelineState(geometry,
         L"terrainPS.cso", L"terrainPS-FB.cso", L"terrainVS.cso",
-        in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc);
+        pDevice, sampleCount, rasterizerDesc, depthStencilDesc);
 
     D3D12_INDEX_BUFFER_VIEW indexBufferView{};
     D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
@@ -442,8 +444,8 @@ SceneObjects::Terrain::Terrain(
     ID3D12Resource* pVertexBuffer{ nullptr };
     ID3D12Resource* pIndexBuffer{ nullptr };
 
-    TerrainGenerator mesh(in_args.m_terrainParams);
-    m_radius = std::max((float)in_args.m_terrainParams.m_terrainSideSize, in_args.m_terrainParams.m_heightScale) / 2.f;
+    TerrainGenerator mesh(in_pScene->GetArgs().m_terrainParams);
+    m_radius = std::max((float)in_pScene->GetArgs().m_terrainParams.m_terrainSideSize, in_pScene->GetArgs().m_terrainParams.m_heightScale) / 2.f;
 
     // build vertex buffer
     {
@@ -452,7 +454,7 @@ SceneObjects::Terrain::Terrain(
         UINT vertexBufferSize = UINT(vertices.size() * sizeof(vertices[0]));
         const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
         const auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize);
-        ThrowIfFailed(in_pDevice->CreateCommittedResource(
+        ThrowIfFailed(pDevice->CreateCommittedResource(
             &heapProperties,
             D3D12_HEAP_FLAG_NONE,
             &resourceDesc,
@@ -460,7 +462,7 @@ SceneObjects::Terrain::Terrain(
             nullptr,
             IID_PPV_ARGS(&pVertexBuffer)));
 
-        in_assetUploader.SubmitRequest(pVertexBuffer, mesh.GetVertices().data(), vertexBufferSize,
+        assetUploader.SubmitRequest(pVertexBuffer, mesh.GetVertices().data(), vertexBufferSize,
             D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
     }
 
@@ -468,7 +470,7 @@ SceneObjects::Terrain::Terrain(
     {
         const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
         const auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(mesh.GetIndexBufferSize());
-        ThrowIfFailed(in_pDevice->CreateCommittedResource(
+        ThrowIfFailed(pDevice->CreateCommittedResource(
             &heapProperties,
             D3D12_HEAP_FLAG_NONE,
             &resourceDesc,
@@ -479,7 +481,7 @@ SceneObjects::Terrain::Terrain(
         std::vector<BYTE> indices(mesh.GetIndexBufferSize());
         mesh.GenerateIndices((UINT*)indices.data());
 
-        in_assetUploader.SubmitRequest(pIndexBuffer, indices.data(), indices.size(),
+        assetUploader.SubmitRequest(pIndexBuffer, indices.data(), indices.size(),
             D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_INDEX_BUFFER);
     }
 
@@ -530,9 +532,7 @@ void SceneObjects::BaseObject::SetCombinedMatrix(const DirectX::XMMATRIX& in_wor
 //=========================================================================
 UINT SceneObjects::Earth::m_geometryIndex{ InvalidClassIndex };
 UINT& SceneObjects::Earth::GetClassIndex() const { return m_geometryIndex; }
-SceneObjects::Earth::Earth(
-    ID3D12Device* in_pDevice, AssetUploader& in_assetUploader, UINT in_sampleCount,
-    UINT in_sphereLat, UINT in_sphereLong)
+SceneObjects::Earth::Earth(Scene* in_pScene)
 {
     SetAxis(DirectX::XMVectorSet(0, 0, 1, 0));
 
@@ -541,18 +541,23 @@ SceneObjects::Earth::Earth(
         return;
     }
 
+    ID3D12Device* pDevice = in_pScene->GetDevice();
+    auto& assetUploader = in_pScene->GetAssetUploader();
+    UINT sampleCount = in_pScene->GetArgs().m_sampleCount;
+    UINT in_sphereLat = in_pScene->GetArgs().m_sphereLat;
+    UINT in_sphereLong = in_pScene->GetArgs().m_sphereLong;
+
     auto& geometry = ConstructGeometry();
 
-    CreateRootSignature(geometry, in_pDevice);
+    CreateRootSignature(geometry, pDevice);
 
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     D3D12_DEPTH_STENCIL_DESC depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
     CreatePipelineState(geometry,
         L"terrainPS.cso", L"terrainPS-FB.cso", L"terrainVS.cso",
-        in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc);
+        pDevice, sampleCount, rasterizerDesc, depthStencilDesc);
 
     const UINT numLevelsOfDetail = SharedConstants::NUM_SPHERE_LEVELS_OF_DETAIL;
-    //CreateSphere(this, in_pDevice, in_assetUploader, in_sphereProperties, numLevelsOfDetail);
     const float lodStepFactor = 1.0f / numLevelsOfDetail;
     float lodScaleFactor = 1.0f;
 
@@ -569,7 +574,7 @@ SceneObjects::Earth::Earth(
 
         ID3D12Resource* pVertexBuffer{ nullptr };
         ID3D12Resource* pIndexBuffer{ nullptr };
-        CreateSphereResources(&pVertexBuffer, &pIndexBuffer, in_pDevice, sphereProperties, in_assetUploader);
+        CreateSphereResources(&pVertexBuffer, &pIndexBuffer, pDevice, sphereProperties, assetUploader);
 
         auto& lod = geometry.m_lods[i];
         lod.m_vertexBuffer = pVertexBuffer;
@@ -653,9 +658,7 @@ float SceneObjects::Sphere::GetBoundingSphereRadius()
 //=============================================================================
 UINT SceneObjects::Sky::m_geometryIndex{ InvalidClassIndex };
 UINT& SceneObjects::Sky::GetClassIndex() const { return m_geometryIndex; }
-SceneObjects::Sky::Sky(
-    ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
-    UINT in_sampleCount)
+SceneObjects::Sky::Sky(Scene* in_pScene)
 {
     m_radius = std::numeric_limits<float>::max();
 
@@ -664,9 +667,13 @@ SceneObjects::Sky::Sky(
         return;
     }
 
+    ID3D12Device* pDevice = in_pScene->GetDevice();
+    auto& assetUploader = in_pScene->GetAssetUploader();
+    UINT sampleCount = in_pScene->GetArgs().m_sampleCount;
+
     auto& geometry = ConstructGeometry();
 
-    CreateRootSignature(geometry, in_pDevice);
+    CreateRootSignature(geometry, pDevice);
 
     D3D12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     rasterizerDesc.CullMode = D3D12_CULL_MODE_FRONT;
@@ -675,7 +682,7 @@ SceneObjects::Sky::Sky(
 
     CreatePipelineState(geometry,
         L"skyPS.cso", L"skyPS-FB.cso", L"skyVS.cso",
-        in_pDevice, in_sampleCount, rasterizerDesc, depthStencilDesc);
+        pDevice, sampleCount, rasterizerDesc, depthStencilDesc);
 
     SphereGen::Properties sphereProperties;
     sphereProperties.m_numLong = 80;
@@ -686,7 +693,7 @@ SceneObjects::Sky::Sky(
     geometry.m_lods.resize(1);
     ID3D12Resource* pVertexBuffer{ nullptr };
     ID3D12Resource* pIndexBuffer{ nullptr };
-    CreateSphereResources(&pVertexBuffer, &pIndexBuffer, in_pDevice, sphereProperties, in_assetUploader);
+    CreateSphereResources(&pVertexBuffer, &pIndexBuffer, pDevice, sphereProperties, assetUploader);
 
     auto& lod = geometry.m_lods[0];
     lod.m_vertexBuffer = pVertexBuffer;
