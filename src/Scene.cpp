@@ -697,7 +697,7 @@ void Scene::TryFit(XMMATRIX& out_matrix, float in_radius, float in_gap,
     XMMATRIX rtate = XMMatrixIdentity();
     XMMATRIX xlate = XMMatrixIdentity();
 
-    UINT numTries = 200;
+    UINT numTries = 100;
     while (numTries)
     {
         rtate = XMMatrixRotationRollPitchYaw(
@@ -738,7 +738,7 @@ void Scene::TryFit(XMMATRIX& out_matrix, float in_radius, float in_gap,
 //-----------------------------------------------------------------------------
 void Scene::SetSphereMatrix(float in_minDistance)
 {
-    constexpr float gap = SharedConstants::SPHERE_RADIUS * 2.f;
+    constexpr float gap = SharedConstants::SPHERE_RADIUS;
 
     float range = SharedConstants::SPHERE_RADIUS * (SharedConstants::MAX_SPHERE_SCALE - 1);
     float midPoint = .5f * range;
@@ -755,8 +755,13 @@ void Scene::SetSphereMatrix(float in_minDistance)
     TryFit(matrix, sphereScale, gap, in_minDistance);
 
     const XMMATRIX scale = XMMatrixScaling(sphereScale, sphereScale, sphereScale);
-    matrix = scale * matrix;
-    
+
+    // mix up the orientation
+    std::uniform_real_distribution<float> rDis(-XM_PI, XM_PI);
+    auto rtate = XMMatrixRotationRollPitchYaw(rDis(m_gen), rDis(m_gen), rDis(m_gen));
+
+    matrix = rtate * scale * matrix;
+
     m_objectPoses.push_back(matrix, sphereScale);
 }
 
@@ -765,8 +770,6 @@ void Scene::SetSphereMatrix(float in_minDistance)
 //-----------------------------------------------------------------------------
 void Scene::LoadSpheres()
 {
-    const UINT maxNewObjectsPerFrame = 500;
-    UINT numObjectsAdded = 0;
     if (m_objects.size() < (UINT)m_args.m_numSpheres)
     {
         UINT textureIndex = (UINT)m_objects.size();
@@ -801,12 +804,6 @@ void Scene::LoadSpheres()
             o->SetResource(m_pSFSManager->CreateResource(textureFilename, pHeap, &m_textureFileHeaders[fileIndex]));
             o->GetModelMatrix() = m_objectPoses.m_matrix[objectIndex];
             m_objects.push_back(o);
-
-            numObjectsAdded++;
-            if (maxNewObjectsPerFrame <= numObjectsAdded)
-            {
-                break;
-            }
         }
     } // end if adding objects
     else if (m_objects.size() > (UINT)m_args.m_numSpheres) // else evict objects
@@ -1671,7 +1668,10 @@ void Scene::DrawUI()
         UINT numTilesVirtual = 0;
         for (auto& o : m_objects)
         {
-            numTilesVirtual += o->GetStreamingResource()->GetNumTilesVirtual();
+            if (o->Drawable())
+            {
+                numTilesVirtual += o->GetStreamingResource()->GetNumTilesVirtual();
+            }
         }
 
         UINT numTilesCommitted = 0;
@@ -1838,9 +1838,9 @@ bool Scene::Draw()
 
 #if 0
     // TEST: creation/deletion and thread safety
-    //if (m_frameNumber < 100)
-    //m_args.m_numSpheres = 2 + (rand() * (m_args.m_maxNumObjects-2)) / RAND_MAX;
-    m_args.m_numSpheres = 1 + (m_frameNumber & 1);
+    if (m_frameNumber < 100)
+    m_args.m_numSpheres = 2 + (rand() * (m_args.m_maxNumObjects-2)) / RAND_MAX;
+    //m_args.m_numSpheres = 1 + (m_frameNumber & 1);
 #endif
 
     // load more spheres?

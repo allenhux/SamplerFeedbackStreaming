@@ -203,7 +203,8 @@ SceneObjects::Planet::Planet(Scene* in_pScene)
         lod.m_vertexBufferView = { lod.m_vertexBuffer->GetGPUVirtualAddress(), (UINT)lod.m_vertexBuffer->GetDesc().Width, sizeof(verts[0]) };
         lod.m_indexBufferView = { lod.m_indexBuffer->GetGPUVirtualAddress(), (UINT)lod.m_indexBuffer->GetDesc().Width, DXGI_FORMAT_R32_UINT };
 
-        DebugPrint(lod.m_indexBuffer->Release());
+        lod.m_indexBuffer->Release();
     }
-    // NOTE: pVertexBuffer should have refcount == numLods
+
+    pVertexBuffer->Release();
 }

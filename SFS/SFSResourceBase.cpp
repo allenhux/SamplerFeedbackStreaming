@@ -60,6 +60,16 @@ SFS::ResourceBase::ResourceBase(
     , m_pHeap(in_pHeap)
     , m_textureFileInfo(in_filename, in_pFileHeader)
 {
+    // all internal allocation deferred
+}
+
+//-----------------------------------------------------------------------------
+// create internal D3D resources. This is rather expensive, so deferred from main thread
+// load tile offsets etc. to cpu memory
+// open a file handle for streaming to gpu
+//-----------------------------------------------------------------------------
+void SFS::ResourceBase::DeferredInitialize1()
+{
     m_resources = std::make_unique<SFS::InternalResources>(m_pSFSManager->GetDevice(), m_textureFileInfo, (UINT)m_queuedFeedback.size());
     m_tileMappingState.Init(m_resources->GetPackedMipInfo().NumStandardMips, m_resources->GetTiling());
 
@@ -71,10 +81,7 @@ SFS::ResourceBase::ResourceBase(
 
     // there had better be standard mips, otherwise, why stream?
     ASSERT(m_maxMip);
-}
 
-void SFS::ResourceBase::DeferredInitialize1()
-{
     m_textureFileInfo.LoadTileInfo();
     m_pFileHandle.reset(m_pSFSManager->OpenFile(m_textureFileInfo.GetFileName()));
 }
@@ -874,6 +881,7 @@ bool SFS::ResourceBase::InitPackedMips()
         {
             DeferredInitialize2();
             m_packedMipStatus = PackedMipStatus::RESIDENT;
+            return true;
         }
     }
 

@@ -210,10 +210,6 @@ void SFS::ManagerBase::ProcessFeedbackThread()
                     i++;
                 }
             }
-            if (newResources.size())
-            {
-                continue; // still working on loading packed mips. don't move on to other streaming tasks yet.
-            }
         }
 
         // check for existing resources that have feedback
@@ -225,6 +221,11 @@ void SFS::ManagerBase::ProcessFeedbackThread()
             m_pendingLockPFT.Release();
 
             activeResources.insert(tmpResources.begin(), tmpResources.end());
+        }
+
+        if (newResources.size())
+        {
+            continue; // still working on loading packed mips. don't move on to other streaming tasks yet.
         }
 
         bool flushPendingUploadRequests = false;
@@ -475,10 +476,14 @@ void SFS::ManagerBase::AllocateSharedClearUavHeap()
     auto srvUavCbvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     for (const auto& r : m_streamingResources)
     {
-        CD3DX12_CPU_DESCRIPTOR_HANDLE clearHandle(m_sharedClearUavHeap->GetCPUDescriptorHandleForHeapStart(), sharedClearUavHeapIndex, srvUavCbvDescriptorSize);
-        sharedClearUavHeapIndex++;
-        r->CreateFeedbackView(clearHandle);
-        r->SetClearUavDescriptor(clearHandle);
+        // only update resources that are sufficiently initialized
+        if (r->Drawable())
+        {
+            CD3DX12_CPU_DESCRIPTOR_HANDLE clearHandle(m_sharedClearUavHeap->GetCPUDescriptorHandleForHeapStart(), sharedClearUavHeapIndex, srvUavCbvDescriptorSize);
+            sharedClearUavHeapIndex++;
+            r->CreateFeedbackView(clearHandle);
+            r->SetClearUavDescriptor(clearHandle);
+        }
     }
 }
 
