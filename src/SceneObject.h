@@ -105,12 +105,12 @@ namespace SceneObjects
 
         ID3D12RootSignature* GetRootSignature() const
         {
-            return m_feedbackEnabled ? GetGeometry().m_rootSignatureFB.Get() : GetGeometry().m_rootSignature.Get();
+            return m_feedbackEnabled ? GetGeometry()->m_rootSignatureFB.Get() : GetGeometry()->m_rootSignature.Get();
         }
 
         ID3D12PipelineState* GetPipelineState() const
         {
-            return m_feedbackEnabled ? GetGeometry().m_pipelineStateFB.Get() : GetGeometry().m_pipelineState.Get();
+            return m_feedbackEnabled ? GetGeometry()->m_pipelineStateFB.Get() : GetGeometry()->m_pipelineState.Get();
         }
 
         // do not draw until minimal assets have been created/uploaded
@@ -151,10 +151,8 @@ namespace SceneObjects
         UINT GetLoD() const { return m_lod; }
         bool IsVisible() const { return m_visible; }
     protected:
-        static constexpr UINT InvalidClassIndex{ UINT(-1) };
-        virtual UINT& GetClassIndex() const = 0;
-        const Geometry& GetGeometry() const { return m_geometries[GetClassIndex()]; }
-        Geometry& ConstructGeometry();
+        virtual const Geometry* GetGeometry() const = 0;
+        Geometry* ConstructGeometry();
 
         bool m_feedbackEnabled{ true };
 
@@ -175,8 +173,8 @@ namespace SceneObjects
 
         SFSResource* m_pStreamingResource{ nullptr };
 
-        void CreateRootSignature(Geometry& out_geometry, ID3D12Device* in_pDevice);
-        void CreatePipelineState(Geometry& out_geometry,
+        void CreateRootSignature(Geometry* out_pGeometry, ID3D12Device* in_pDevice);
+        void CreatePipelineState(Geometry* out_pGeometry,
             const wchar_t* in_ps, const wchar_t* in_psFB, const wchar_t* in_vs,
             ID3D12Device* in_pDevice, UINT in_sampleCount,
             const D3D12_RASTERIZER_DESC& in_rasterizerDesc,
@@ -192,7 +190,15 @@ namespace SceneObjects
             [[maybe_unused]] const float in_zFar) { return true; }
 
     private:
-        static std::vector<Geometry> m_geometries;
+        // container for per-class object resources
+        static struct Geometries
+        {
+            std::vector<Geometry*> m_members;
+            ~Geometries() {
+                for (auto p : m_members) { delete p; }
+            }
+        } m_geometries;
+
         bool m_createResourceViews{ true };
         void CreateResourceViews(D3D12_CPU_DESCRIPTOR_HANDLE in_baseDescriptorHandle, UINT in_srvUavCbvDescriptorSize);
 
@@ -223,8 +229,8 @@ namespace SceneObjects
     public:
         Terrain(Scene* in_pScene);
     private:
-        virtual UINT& GetClassIndex() const override;
-        static UINT m_geometryIndex;
+        virtual const Geometry* GetGeometry() const override;
+        static Geometry* m_pGeometry;
     };
 
     class Sphere : public BaseObject
@@ -239,8 +245,8 @@ namespace SceneObjects
     public:
         Planet(Scene* in_pScene);
     private:
-        virtual UINT& GetClassIndex() const override;
-        static UINT m_geometryIndex;
+        virtual const Geometry* GetGeometry() const override;
+        static Geometry* m_pGeometry;
     };
 
     class Earth : public Sphere
@@ -248,8 +254,8 @@ namespace SceneObjects
     public:
         Earth(Scene* in_pScene);
     private:
-        virtual UINT& GetClassIndex() const override;
-        static UINT m_geometryIndex;
+        virtual const Geometry* GetGeometry() const override;
+        static Geometry* m_pGeometry;
     };
 
 
@@ -260,7 +266,7 @@ namespace SceneObjects
     public:
         Sky(Scene* in_pScene);
     private:
-        virtual UINT& GetClassIndex() const override;
-        static UINT m_geometryIndex;
+        virtual const Geometry* GetGeometry() const override;
+        static Geometry* m_pGeometry;
     };
 }

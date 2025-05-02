@@ -1838,7 +1838,8 @@ bool Scene::Draw()
 
 #if 0
     // TEST: creation/deletion and thread safety
-    //m_args.m_numSpheres = 2 + (rand() * m_args.m_maxNumObjects) / RAND_MAX;
+    //if (m_frameNumber < 100)
+    //m_args.m_numSpheres = 2 + (rand() * (m_args.m_maxNumObjects-2)) / RAND_MAX;
     m_args.m_numSpheres = 1 + (m_frameNumber & 1);
 #endif
 
