@@ -71,6 +71,16 @@ SFS::ResourceBase::ResourceBase(
 void SFS::ResourceBase::DeferredInitialize1()
 {
     m_resources = std::make_unique<SFS::InternalResources>(m_pSFSManager->GetDevice(), m_textureFileInfo, (UINT)m_queuedFeedback.size());
+
+    m_textureFileInfo.LoadTileInfo();
+    m_pFileHandle.reset(m_pSFSManager->OpenFile(m_textureFileInfo.GetFileName()));
+}
+
+//-----------------------------------------------------------------------------
+// finish creating/initializing internal resources
+//-----------------------------------------------------------------------------
+void SFS::ResourceBase::DeferredInitialize2()
+{
     m_tileMappingState.Init(m_resources->GetPackedMipInfo().NumStandardMips, m_resources->GetTiling());
 
     // initialize a structure that holds ref counts with dimensions equal to min-mip-map
@@ -82,15 +92,6 @@ void SFS::ResourceBase::DeferredInitialize1()
     // there had better be standard mips, otherwise, why stream?
     ASSERT(m_maxMip);
 
-    m_textureFileInfo.LoadTileInfo();
-    m_pFileHandle.reset(m_pSFSManager->OpenFile(m_textureFileInfo.GetFileName()));
-}
-
-//-----------------------------------------------------------------------------
-// finish creating/initializing internal resources
-//-----------------------------------------------------------------------------
-void SFS::ResourceBase::DeferredInitialize2()
-{
     m_tileReferences.resize(m_tileReferencesWidth * m_tileReferencesHeight, m_maxMip);
     m_minMipMap.resize(m_tileReferences.size(), m_maxMip);
 
@@ -901,10 +902,11 @@ bool SFS::ResourceBase::InitPackedMips()
 
     if (pUpdateList)
     {
+        m_packedMipStatus = PackedMipStatus::REQUESTED;
+
         pUpdateList->m_heapIndices = m_packedMipHeapIndices;
         m_pSFSManager->SubmitUpdateList(*pUpdateList);
 
-        m_packedMipStatus = PackedMipStatus::REQUESTED;
         return true;
     }
 
