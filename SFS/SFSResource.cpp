@@ -121,7 +121,7 @@ void SFS::ResourceBase::QueueEviction()
 {
     if (!m_refCountsZero)
     {
-        m_setZeroRefCounts = true;
+        m_evictAll = true;
         m_pSFSManager->SetPending(this);
     }
 }

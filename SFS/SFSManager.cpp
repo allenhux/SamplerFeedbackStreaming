@@ -231,7 +231,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
                 m_packedMipTransitionBarriers.push_back(b);
                 tmpResources.push_back(p);
                 m_packedMipTransitionResources[i] = m_packedMipTransitionResources.back();
-                m_packedMipTransitionResources.resize(m_packedMipTransitionResources.size() - 1);
+                m_packedMipTransitionResources.pop_back();
             }
             else
             {

@@ -319,14 +319,14 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
 
     bool changed = false;
 
-    if (m_setZeroRefCounts)
+    if (m_evictAll)
     {
-        m_setZeroRefCounts = false;
+        m_evictAll = false;
 
         m_pendingEvictions.MoveAllToPending();
 
         // has this resource already been zeroed? don't clear again, early exit
-        // this is set to false if "changed" due to feedback below
+        // future processing of feedback will set this to false if "changed"
         if (m_refCountsZero)
         {
             return;

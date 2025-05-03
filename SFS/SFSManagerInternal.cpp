@@ -266,6 +266,11 @@ void SFS::ManagerBase::ProcessFeedbackThread()
             for (auto i = pendingResources.begin(); i != pendingResources.end();)
             {
                 ResourceBase* pResource = *i;
+
+                // tiles that are "loading" can't be evicted. as soon as they arrive, they can be.
+                // note: since we aren't unmapping evicted tiles, we can evict even if no UpdateLists are available
+                numEvictions += pResource->QueuePendingTileEvictions();
+
                 if (m_dataUploader.GetNumUpdateListsAvailable()
                     // with DirectStorage Queue::EnqueueRequest() can block.
                     // when there are many pending uploads, there can be multiple frames of waiting.
@@ -277,10 +282,6 @@ void SFS::ManagerBase::ProcessFeedbackThread()
                 {
                     uploadsRequested += pResource->QueueTiles();
                 }
-
-                // tiles that are "loading" can't be evicted. as soon as they arrive, they can be.
-                // note: since we aren't unmapping evicted tiles, we can evict even if no UpdateLists are available
-                numEvictions += pResource->QueuePendingTileEvictions();
 
                 if (!pResource->IsStale()) // still have work to do?
                 {

@@ -261,8 +261,9 @@ namespace SFS
         //--------------------------------------------------------
         UINT m_residencyMapOffsetBase{ UINT(-1) };
 
-        // used by QueueEviction()
-        std::atomic<bool> m_setZeroRefCounts{ false };
+        // set by QueueEviction()
+        // read by ProcessFeedback()
+        std::atomic<bool> m_evictAll{ false };
 
         void DeferredInitialize1(); // before requesting packed mips (in ProcessFeedbackThread)
         void DeferredInitialize2(); // after packed mips arrive (FenceMonitorThread -> NotifyPackedMips)
@@ -344,7 +345,8 @@ namespace SFS
 
         void QueuePendingTileLoads(SFS::UpdateList* out_pUpdateList); // returns # tiles queued
 
-        // used by QueueEviction()
-        bool m_refCountsZero{ true };
+        // read by QueueEviction()
+        // written by ProcessFeedback()
+        std::atomic<bool> m_refCountsZero{ true };
     };
 }
