@@ -117,10 +117,10 @@
     <ClCompile Include="SimpleAllocator.cpp" />
     <ClCompile Include="SFSHeap.cpp" />
     <ClCompile Include="SFSResource.cpp" />
-    <ClCompile Include="SFSResourceBase.cpp" />
+    <ClCompile Include="SFSResourceInternal.cpp" />
     <ClCompile Include="SFSResourceDU.cpp" />
     <ClCompile Include="SFSManager.cpp" />
-    <ClCompile Include="SFSManagerBase.cpp" />
+    <ClCompile Include="SFSManagerInternal.cpp" />
     <ClCompile Include="UpdateList.cpp" />
     <ClCompile Include="XeTexture.cpp" />
   </ItemGroup>

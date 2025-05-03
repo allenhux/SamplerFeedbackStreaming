@@ -100,7 +100,7 @@
     <ClCompile Include="SFSResource.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="SFSResourceBase.cpp">
+    <ClCompile Include="SFSResourceInternal.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="SFSResourceDU.cpp">
@@ -109,7 +109,7 @@
     <ClCompile Include="SFSManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="SFSManagerBase.cpp">
+    <ClCompile Include="SFSManagerInternal.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="UpdateList.cpp">
