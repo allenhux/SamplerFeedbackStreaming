@@ -68,8 +68,7 @@ SFS::InternalResources::InternalResources(
         in_pDevice->GetResourceTiling(GetTiledResource(), &m_numTilesTotal, &m_packedMipInfo, &m_tileShape, &subresourceCount, 0, m_tiling.data());
     }
 
-    m_resolvedReadback.resize(in_swapChainBufferCount);
-    m_resolvedReadbackCpuAddress.reserve(in_swapChainBufferCount);
+    m_readbackStride = in_swapChainBufferCount; // temporary storage until allocation
 
     // create the feedback map
     // the dimensions of the feedback map must match the size of the streaming texture
@@ -129,28 +128,25 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice)
         // CopyTextureRegion requires pitch multiple of D3D12_TEXTURE_DATA_PITCH_ALIGNMENT = 256
         UINT pitch = GetNumTilesWidth();
         pitch = (pitch + 0x0ff) & ~0x0ff;
-        rd.Width = pitch * GetNumTilesHeight();
+        UINT swapchainCount = m_readbackStride;
+        m_readbackStride = pitch * (UINT)GetNumTilesHeight();
+        rd.Width = m_readbackStride * swapchainCount;
 #endif
 
-        for (auto& b : m_resolvedReadback)
-        {
-            ThrowIfFailed(in_pDevice->CreateCommittedResource(
-                &resolvedHeapProperties,
-                D3D12_HEAP_FLAG_NONE,
-                &rd,
+        ThrowIfFailed(in_pDevice->CreateCommittedResource(
+            &resolvedHeapProperties,
+            D3D12_HEAP_FLAG_NONE,
+            &rd,
 #if RESOLVE_TO_TEXTURE
-                D3D12_RESOURCE_STATE_COPY_DEST,
+            D3D12_RESOURCE_STATE_COPY_DEST,
 #else
-                D3D12_RESOURCE_STATE_RESOLVE_DEST,
+            D3D12_RESOURCE_STATE_RESOLVE_DEST,
 #endif
-                nullptr,
-                IID_PPV_ARGS(&b)));
-            static UINT resolveCount = 0;
-            b->SetName(AutoString("ResolveDest_", resolveCount++).str().c_str());
-            void* pData = nullptr;
-            b->Map(0, nullptr, (void**)&pData);
-            m_resolvedReadbackCpuAddress.push_back(pData);
-        }
+            nullptr,
+            IID_PPV_ARGS(&m_resolvedReadback)));
+        static UINT resolveCount = 0;
+        m_resolvedReadback->SetName(L"ResolveDest");
+        m_resolvedReadback->Map(0, nullptr, (void**)&m_resolvedReadbackCpuAddress);
     }
 }
 
@@ -205,9 +201,9 @@ void SFS::InternalResources::ResolveFeedback(ID3D12GraphicsCommandList1 * out_pC
 //-----------------------------------------------------------------------------
 void SFS::InternalResources::ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList, UINT in_index)
 {
-    ID3D12Resource* pResolvedReadback = m_resolvedReadback[in_index].Get();
+    ID3D12Resource* pResolvedReadback = m_resolvedReadback.Get();
     auto srcDesc = m_resolvedResource->GetDesc();
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout{ 0,
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout{ in_index * m_readbackStride,
         {srcDesc.Format, (UINT)srcDesc.Width, srcDesc.Height, 1, (UINT)srcDesc.Width } };
     layout.Footprint.RowPitch = (layout.Footprint.RowPitch + 0x0ff) & ~0x0ff;
 
@@ -236,7 +232,7 @@ void SFS::InternalResources::NameStreamingTexture()
 //-----------------------------------------------------------------------------
 void* SFS::InternalResources::MapResolvedReadback(UINT in_index) const
 {
-    return m_resolvedReadbackCpuAddress[in_index];
+    return &m_resolvedReadbackCpuAddress[in_index * m_readbackStride];
 }
 
 //-----------------------------------------------------------------------------

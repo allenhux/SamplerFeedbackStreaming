@@ -199,6 +199,13 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
 
     m_withinFrame = true;
 
+    // the frame fence is used to determine when to read feedback:
+    // read back the feedback after the frame that writes to it has completed
+    // note the signal is for the previous frame
+    // the updated value is used for resolve & copy commands for this frame during EndFrame()
+    m_directCommandQueue->Signal(m_frameFence.Get(), m_frameFenceValue);
+    m_frameFenceValue++;
+
     // need to (re) StartThreads() if resources were deleted
     if (!m_threadsRunning)
     {
@@ -238,7 +245,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
                 i++;
             }
         }
-        if (m_packedMipTransitionBarriers.size())
+        if (tmpResources.size())
         {
             pOldResidencyMapRT = AllocateSharedResidencyMap(in_minmipmapDescriptorHandle, tmpResources);
             AllocateSharedClearUavHeap();
@@ -274,12 +281,6 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     }
 
     m_processFeedbackFlag.Set(); // every frame, process feedback (also steps eviction history from prior frames)
-
-    // the frame fence is used to optimize readback of feedback
-    // only read back the feedback after the frame that writes to it has completed
-    // note the signal is for the previous frame, the value is for "this" frame
-    m_directCommandQueue->Signal(m_frameFence.Get(), m_frameFenceValue);
-    m_frameFenceValue++;
 
     m_renderFrameIndex = (m_renderFrameIndex + 1) % m_numSwapBuffers;
     for (auto& cl : m_commandLists)

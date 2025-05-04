@@ -81,8 +81,9 @@ namespace SFS
         ComPtr<ID3D12Resource> m_resolvedResource;
 #endif
         // per-swap-buffer cpu readable resolved feedback
-        std::vector<ComPtr<ID3D12Resource>> m_resolvedReadback;
-        std::vector<void*> m_resolvedReadbackCpuAddress;
+        UINT m_readbackStride{ 0 };
+        ComPtr<ID3D12Resource> m_resolvedReadback;
+        UINT8* m_resolvedReadbackCpuAddress{ nullptr };
 
         D3D12_PACKED_MIP_INFO m_packedMipInfo; // last n mips may be packed into a single tile
         D3D12_TILE_SHAPE m_tileShape;          // e.g. a 64K tile may contain 128x128 texels @ 4B/pixel
