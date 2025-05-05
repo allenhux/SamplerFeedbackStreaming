@@ -81,16 +81,17 @@ void SFS::ResourceBase::DeferredInitialize1()
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::DeferredInitialize2()
 {
-    m_tileMappingState.Init(m_resources->GetPackedMipInfo().NumStandardMips, m_resources->GetTiling());
+    m_maxMip = UINT8(m_resources->GetPackedMipInfo().NumStandardMips);
+
+    // there had better be standard mips, otherwise, why stream?
+    ASSERT(m_maxMip);
+
+    m_tileMappingState.Init(m_maxMip, m_resources->GetTiling());
 
     // initialize a structure that holds ref counts with dimensions equal to min-mip-map
     // set the bottom-most bits, representing the packed mips as being resident
     m_tileReferencesWidth = m_resources->GetNumTilesWidth();
     m_tileReferencesHeight = m_resources->GetNumTilesHeight();
-    m_maxMip = UINT8(m_tileMappingState.GetNumSubresources());
-
-    // there had better be standard mips, otherwise, why stream?
-    ASSERT(m_maxMip);
 
     m_tileReferences.resize(m_tileReferencesWidth * m_tileReferencesHeight, m_maxMip);
     m_minMipMap.resize(m_tileReferences.size(), m_maxMip);
@@ -118,9 +119,6 @@ SFS::ResourceBase::~ResourceBase()
     {
         m_pHeap->GetAllocator().Free(m_packedMipHeapIndices);
     }
-
-    m_pendingEvictions.Clear();
-    m_pendingTileLoads.clear();
 }
 
 //-----------------------------------------------------------------------------
@@ -213,22 +211,12 @@ void SFS::ResourceBase::TileMappingState::Init(UINT in_numMips, const D3D12_SUBR
     {
         UINT width = in_pTiling[mip].WidthInTiles;
         UINT height = in_pTiling[mip].HeightInTiles;
-        m_refcounts[mip].resize(height);
-        m_heapIndices[mip].resize(height);
-        m_resident[mip].resize(height);
 
-        for (auto& row : m_refcounts[mip])
-        {
-            row.assign(width, 0);
-        }
-        for (auto& row : m_heapIndices[mip])
-        {
-            row.assign(width, TileMappingState::InvalidIndex);
-        }
-        for (auto& row : m_resident[mip])
-        {
-            row.assign(width, 0);
-        }
+        m_dimensions.push_back({ width, height });
+
+        m_refcounts[mip].Init(width, height, 0);
+        m_heapIndices[mip].Init(width, height, TileMappingState::InvalidIndex);
+        m_resident[mip].Init(width, height, 0);
     }
 }
 
@@ -237,19 +225,28 @@ void SFS::ResourceBase::TileMappingState::Init(UINT in_numMips, const D3D12_SUBR
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::TileMappingState::FreeHeapAllocations(SFS::Heap* in_pHeap)
 {
-    for (auto& layer : m_heapIndices)
+    std::vector<UINT> indices;
+    // traverse bottom up. can early-out if a lower tile is empty,
+    // because tiles are loaded bottom-up
+    for (auto layer = m_heapIndices.rbegin(); layer != m_heapIndices.rend(); layer++)
     {
-        for (auto& row : layer)
+        for (auto& i : layer->m_tiles)
         {
-            for (auto& i : row)
+            if (TileMappingState::InvalidIndex != i)
             {
-                if (TileMappingState::InvalidIndex != i)
-                {
-                    in_pHeap->GetAllocator().Free(i);
-                    i = TileMappingState::InvalidIndex;
-                }
+                indices.push_back(i);
+                i = TileMappingState::InvalidIndex;
             }
         }
+        // if there were no tiles on this mip layer, won't be any tiles on higher-res mip layers
+        if (0 == indices.size())
+        {
+            break;
+        }
+    }
+    if (indices.size())
+    {
+        in_pHeap->GetAllocator().Free(indices);
     }
 }
 
@@ -258,17 +255,14 @@ void SFS::ResourceBase::TileMappingState::FreeHeapAllocations(SFS::Heap* in_pHea
 //-----------------------------------------------------------------------------
 bool SFS::ResourceBase::TileMappingState::GetAnyRefCount() const
 {
-    auto& lastMip = m_refcounts.back();
-    for (const auto& y : lastMip)
+    for (auto i : m_refcounts.back().m_tiles)
     {
-        for (const auto& x : y)
+        if (i)
         {
-            if (x)
-            {
-                return true;
-            }
+            return true;
         }
     }
+
     return false;
 }
 
@@ -282,16 +276,14 @@ UINT8 SFS::ResourceBase::TileMappingState::GetMinResidentMip()
     UINT8 minResidentMip = (UINT8)m_resident.size();
 
     auto& lastMip = m_resident.back();
-    for (const auto& y : lastMip)
+    for (auto i : lastMip.m_tiles)
     {
-        for (const auto& x : y)
+        if (TileMappingState::Residency::Resident != i)
         {
-            if (TileMappingState::Residency::Resident != x)
-            {
-                return minResidentMip;
-            }
+            return minResidentMip;
         }
     }
+
     return minResidentMip - 1;
 }
 
@@ -723,7 +715,7 @@ void SFS::ResourceBase::UpdateMinMipMap()
 
 #if 0
         // FIXME? if the optimization below introduces artifacts, this might work:
-        const UINT8 minResidentMip = (UINT8)m_tileMappingState.GetNumSubresources();
+        const UINT8 minResidentMip = m_maxMip;
 #else
         // a simple optimization that's especially effective for large textures
         // and harmless for smaller ones:

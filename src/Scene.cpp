@@ -1690,7 +1690,7 @@ void Scene::DrawUI()
         }
 
         guiDrawParams.m_cpuFeedbackTime = m_pSFSManager->GetCpuProcessFeedbackTime();
-        if (m_pTerrain)
+        if (m_pTerrain && m_pTerrain->Drawable())
         {
             guiDrawParams.m_scrollMipDim = m_pTerrain->GetStreamingResource()->GetTiledResource()->GetDesc().MipLevels;
         }

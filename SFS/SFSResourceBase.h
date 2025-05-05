@@ -197,9 +197,6 @@ namespace SFS
         public:
             void Init(UINT in_numMips, const D3D12_SUBRESOURCE_TILING* in_pTiling);
 
-            UINT GetNumSubresources() const { return (UINT)m_refcounts.size(); }
-
-
             // 4 states are encoded by the residency state and ref count:
             // residency | refcount | tile state
             // ----------+----------+------------------
@@ -218,15 +215,15 @@ namespace SFS
                 Loading     = 0b11,
             };
 
-            void SetResidency(UINT x, UINT y, UINT s, Residency in_residency) { m_resident[s][y][x] = (BYTE)in_residency; }
-            BYTE GetResidency(UINT x, UINT y, UINT s) const { return m_resident[s][y][x]; }
-            UINT32& GetRefCount(UINT x, UINT y, UINT s) { return m_refcounts[s][y][x]; }
+            void SetResidency(UINT x, UINT y, UINT s, Residency in_residency) { m_resident[s](x, y, GetWidth(s)) = (BYTE)in_residency; }
+            BYTE GetResidency(UINT x, UINT y, UINT s) const { return m_resident[s](x, y, GetWidth(s)); }
+            UINT32& GetRefCount(UINT x, UINT y, UINT s) { return m_refcounts[s](x, y, GetWidth(s)); }
 
             void SetResidency(const D3D12_TILED_RESOURCE_COORDINATE& in_coord, Residency in_residency) { SetResidency(in_coord.X, in_coord.Y, in_coord.Subresource, in_residency); }
             BYTE GetResidency(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) { return GetResidency(in_coord.X, in_coord.Y, in_coord.Subresource); }
-            UINT32 GetRefCount(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) const { return m_refcounts[in_coord.Subresource][in_coord.Y][in_coord.X]; }
+            UINT32 GetRefCount(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) const { return m_refcounts[in_coord.Subresource](in_coord.X, in_coord.Y, GetWidth(in_coord.Subresource)); }
 
-            UINT32& GetHeapIndex(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) { return m_heapIndices[in_coord.Subresource][in_coord.Y][in_coord.X]; }
+            UINT32& GetHeapIndex(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) { return m_heapIndices[in_coord.Subresource](in_coord.X, in_coord.Y, GetWidth(in_coord.Subresource)); }
 
             // searches refcount of bottom-most non-packed tile(s). If none are in use, we know nothing is resident.
             // used in both UpdateMinMipMap() and ProcessFeedback()
@@ -239,18 +236,31 @@ namespace SFS
             // remove all mappings from a heap. useful when removing an object from a scene
             void FreeHeapAllocations(SFS::Heap* in_pHeap);
 
-            UINT GetWidth(UINT in_s) const { return (UINT)m_resident[in_s][0].size(); }
-            UINT GetHeight(UINT in_s) const { return (UINT)m_resident[in_s].size(); }
+            UINT GetWidth(UINT in_s) const { return m_dimensions[in_s].m_width; }
+            UINT GetHeight(UINT in_s) const { return m_dimensions[in_s].m_height; }
 
             static const UINT InvalidIndex{ UINT(-1) };
         private:
-            template<typename T> using TileRow = std::vector<T>;
-            template<typename T> using TileY = std::vector<TileRow<T>>;
-            template<typename T> using TileLayer = std::vector<TileY<T>>;
+            template<typename T> struct Layer
+            {
+            public:
+                void Init(UINT in_width, UINT in_height, T value) { m_tiles.assign(in_width * in_height, value); };
+                T& operator()(UINT x, UINT y, UINT w) { return m_tiles[y * w + x]; }
+                T operator()(UINT x, UINT y, UINT w) const { return m_tiles[y * w + x]; }
+                std::vector<T> m_tiles;
+            };
+            template<typename T> using TileLayers = std::vector<Layer<T>>;
 
-            TileLayer<BYTE> m_resident;
-            TileLayer<UINT32> m_refcounts;
-            TileLayer<UINT32> m_heapIndices;
+            struct Dim
+            {
+                UINT m_width;
+                UINT m_height;
+            };
+            std::vector<Dim> m_dimensions;
+
+            TileLayers<BYTE> m_resident;
+            TileLayers<UINT32> m_refcounts;
+            TileLayers<UINT32> m_heapIndices;
         };
         TileMappingState m_tileMappingState;
 

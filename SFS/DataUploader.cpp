@@ -482,6 +482,9 @@ void SFS::DataUploader::SubmitThread()
         // set to the fence value to be signaled next
         updateList.m_mappingFenceValue = m_mappingFenceValue;
 
+#if 0
+        // NOTE: dead code. currently not un-mapping tiles
+
         // unmap tiles that are being evicted
         if (updateList.GetNumEvictions())
         {
@@ -490,6 +493,7 @@ void SFS::DataUploader::SubmitThread()
             // this will skip the uploading state unless there are uploads
             updateList.m_executionState = UpdateList::State::STATE_MAP_PENDING;
         }
+#endif
 
         // map standard tiles
         // can upload and evict in a single UpdateList
