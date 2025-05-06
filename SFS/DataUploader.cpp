@@ -122,7 +122,7 @@ void SFS::DataUploader::LoadTextureFromMemory(SFS::UpdateList& out_updateList)
     request.UncompressedSize = packedMip.m_mipInfo.uncompressedSize;
     request.Destination.MultipleSubresources.Resource = out_updateList.m_pResource->GetTiledResource();
     request.Destination.MultipleSubresources.FirstSubresource = out_updateList.m_pResource->GetPackedMipInfo().NumStandardMips;
-    request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)out_updateList.m_pResource->GetTextureFileInfo()->GetCompressionFormat();
+    request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)out_updateList.m_pResource->GetCompressionFormat();
 
     out_updateList.m_copyFenceValue = m_memoryFenceValue;
     m_memoryQueue->EnqueueRequest(&request);

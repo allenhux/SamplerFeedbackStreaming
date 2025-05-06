@@ -27,7 +27,6 @@
 #pragma once
 
 #include "SFSResourceBase.h"
-#include "XeTexture.h"
 #include "UpdateList.h"
 
 //-----------------------------------------------------------------
@@ -38,7 +37,7 @@ namespace SFS
     class ResourceDU : private ResourceBase
     {
     public:
-        const XeTexture* GetTextureFileInfo() const { return &m_textureFileInfo; }
+        //const XeTexture* GetTextureFileInfo() const { return &m_textureFileInfo; }
         SFS::Heap* GetHeap() const { return m_pHeap; }
 
         // just for packed mips
@@ -51,10 +50,26 @@ namespace SFS
         ID3D12Resource* GetTiledResource() const { return m_resources->GetTiledResource(); }
 
         const FileHandle* GetFileHandle() const { return m_pFileHandle.get(); }
-        const std::wstring& GetFileName() const { return m_textureFileInfo.GetFileName(); }
+        const std::wstring& GetFileName() const { return m_filename; }
 
         // packed mips are treated differently from regular tiles: they aren't tracked by the data structure, and share heap indices
         void LoadPackedMipInfo(UpdateList& out_updateList);
         void MapPackedMips(ID3D12CommandQueue* in_pCommandQueue);
+
+        UINT GetCompressionFormat() const { return m_resourceDesc.m_compressionFormat; }
+        DXGI_FORMAT GetTextureFormat() const { return (DXGI_FORMAT)m_resourceDesc.m_textureFormat; }
+
+        // performance of copy vs. return by reference probably roughly equal
+        SFSResourceDesc::TileData GetFileOffset(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) const
+        {
+            return m_resourceDesc.m_tileData[m_resourceDesc.GetLinearIndex(in_coord.X, in_coord.Y, in_coord.Subresource)];
+        }
+
+        void GetPackedMipInfo(UINT& out_fileOffset, UINT& out_numBytes, UINT& out_numUncompressedBytes)
+        {
+            out_fileOffset = m_resourceDesc.m_packedMipData.m_offset;
+            out_numBytes = m_resourceDesc.m_packedMipData.m_numBytes;
+            out_numUncompressedBytes = m_resourceDesc.m_mipInfo.m_numUncompressedBytesForPackedMips;
+        }
     };
 }

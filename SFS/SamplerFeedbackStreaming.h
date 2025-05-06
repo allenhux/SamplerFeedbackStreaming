@@ -170,8 +170,8 @@ struct SFSManager
     // Create StreamingResources using a common SFSManager
     // Optionally provide a file header (e.g. if app opens many files or uses a custom file format)
     //--------------------------------------------
-    virtual SFSResource* CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap,
-        const struct XetFileHeader* in_pFileHeader = nullptr) = 0;
+    virtual SFSResource* CreateResource(const struct SFSResourceDesc& in_desc,
+        SFSHeap* in_pHeap, const std::wstring& in_filename) = 0;
 
     //--------------------------------------------
     // Call BeginFrame() first,
@@ -230,4 +230,51 @@ struct SFSManager
     virtual UINT GetTotalNumEvictions() const = 0; // number of tiles evicted so far
     virtual float GetTotalTileCopyLatency() const = 0; // very approximate average latency of tile upload from request to completion
     virtual UINT GetTotalNumSubmits() const = 0;   // number of fence signals for uploads. when using DS, equals number of calls to IDStorageQueue::Submit()
+};
+
+struct SFSResourceDesc
+{
+    UINT m_width{ 0 };
+    UINT m_height{ 0 };
+    UINT m_textureFormat{ 0 }; // DXGI_FORMAT
+    UINT m_compressionFormat{ 0 }; // DSTORAGE_COMPRESSION_FORMAT
+
+    struct MipInfo
+    {
+        UINT32 m_numStandardMips;
+        UINT32 m_numTilesForStandardMips;
+        UINT32 m_numPackedMips;
+        UINT32 m_numTilesForPackedMips;
+        UINT32 m_numUncompressedBytesForPackedMips;
+    };
+    MipInfo m_mipInfo;
+
+    // use subresource tile dimensions to generate linear tile index
+    struct StandardMipInfo
+    {
+        UINT32 m_widthTiles;
+        UINT32 m_heightTiles;
+        UINT32 m_depthTiles;
+
+        // convenience value, can be computed from sum of previous subresource dimensions
+        UINT32 m_subresourceTileIndex;
+    };
+    std::vector<StandardMipInfo> m_standardMipInfo; // size = MipInfo::m_numStandardMips
+
+    // array TileData[m_numTilesForStandardMips + 1], 1 entry for each tile plus a final entry for packed mips
+    struct TileData
+    {
+        UINT32 m_offset;          // file offset to tile data
+        UINT32 m_numBytes;        // # bytes for the tile
+    };
+
+    TileData m_packedMipData; // may be unused
+    std::vector<TileData> m_tileData; // size = MipInfo::m_numTilesForStandardMips
+
+    // defines the order of the data in m_tileData
+    UINT GetLinearIndex(UINT x, UINT y, UINT s) const
+    {
+        const auto& data = m_standardMipInfo[s];
+        return data.m_subresourceTileIndex + (y * data.m_widthTiles) + x;
+    }
 };

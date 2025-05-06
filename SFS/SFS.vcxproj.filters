@@ -62,12 +62,6 @@
     <ClInclude Include="UpdateList.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="XeTexture.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="XetFileHeader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -113,9 +107,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="UpdateList.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="XeTexture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

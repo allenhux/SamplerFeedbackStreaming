@@ -64,12 +64,12 @@ SFSHeap* SFS::ManagerBase::CreateHeap(UINT in_maxNumTilesHeap)
 //--------------------------------------------
 // Create SFS Resources using a common SFSManager
 //--------------------------------------------
-SFSResource* SFS::ManagerBase::CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap,
-    const XetFileHeader* in_pFileHeader)
+SFSResource* SFS::ManagerBase::CreateResource(const struct SFSResourceDesc& in_desc,
+    SFSHeap* in_pHeap, const std::wstring& in_filename)
 {
     ASSERT(!m_withinFrame);
 
-    auto pRsrc = new SFS::ResourceBase(in_filename, in_pFileHeader, (SFS::ManagerSR*)this, (SFS::Heap*)in_pHeap);
+    auto pRsrc = new SFS::ResourceBase(in_filename, in_desc, (SFS::ManagerSR*)this, (SFS::Heap*)in_pHeap);
 
     m_streamingResources.push_back(pRsrc);
     m_newResources.push_back(pRsrc);

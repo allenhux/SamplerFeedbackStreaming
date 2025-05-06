@@ -37,7 +37,6 @@ Base class for SFSResource
 
 #include "SamplerFeedbackStreaming.h"
 #include "InternalResources.h"
-#include "XeTexture.h"
 
 namespace SFS
 {
@@ -74,8 +73,8 @@ namespace SFS
         ResourceBase(
             // method that will fill a tile-worth of bits, for streaming
             const std::wstring& in_filename,
-            // texture file header with dimension, format, etc.
-            const XetFileHeader* in_pFileHeader,
+            // description with dimension, format, etc.
+            const SFSResourceDesc& in_desc,
             // share heap and upload buffers with other InternalResources
             SFS::ManagerSR* in_pSFSManager,
             Heap* in_pHeap);
@@ -168,7 +167,8 @@ namespace SFS
         UINT GetMinMipMapSize() const { return GetNumTilesWidth() * GetNumTilesHeight(); }
     protected:
         // object that streams data from a file
-        SFS::XeTexture m_textureFileInfo;
+        const SFSResourceDesc m_resourceDesc;
+        std::wstring m_filename; // only used so we can dynamically change file streamer type :/
         std::unique_ptr<SFS::InternalResources> m_resources;
         std::unique_ptr<SFS::FileHandle> m_pFileHandle;
         SFS::Heap* m_pHeap{ nullptr };
@@ -271,10 +271,6 @@ namespace SFS
         //--------------------------------------------------------
         UINT m_residencyMapOffsetBase{ UINT(-1) };
 
-        // set by QueueEviction()
-        // read by ProcessFeedback()
-        std::atomic<bool> m_evictAll{ false };
-
         void DeferredInitialize1(); // before requesting packed mips (in ProcessFeedbackThread)
         void DeferredInitialize2(); // after packed mips arrive (FenceMonitorThread -> NotifyPackedMips)
     private:
@@ -320,27 +316,24 @@ namespace SFS
         // with a 16kx16k limit, DX will never see 255 mip levels. but, we want a byte so we can modify cache-coherently
         using TileReference = UINT8;
         std::vector<TileReference> m_tileReferences;
-        UINT m_tileReferencesWidth;  // function of resource tiling
-        UINT m_tileReferencesHeight; // function of resource tiling
+        UINT m_tileReferencesWidth{ 0 };  // function of resource tiling
+        UINT m_tileReferencesHeight{ 0 }; // function of resource tiling
 
-        UINT8 m_maxMip;
+        UINT8 m_maxMip{ 0 }; // FIXME: equals num standard mips, should be const known at constructor time
         std::vector<BYTE, SFS::AlignedAllocator<BYTE>> m_minMipMap; // local version of min mip map, rectified in UpdateMinMipMap()
-
-        // non-packed mip copy complete notification
-        std::atomic<bool> m_tileResidencyChanged{ false };
 
         // drop pending loads that are no longer relevant
         void AbandonPendingLoads();
 
         // index to next min-mip feedback resolve target
-        UINT m_readbackIndex;
+        UINT m_readbackIndex{ 0 };
 
         // if feedback is queued, it is ready to use after the render fence has reached this value
         // support having a feedback queued every frame (num swap buffers)
         struct QueuedFeedback
         {
             UINT64 m_renderFenceForFeedback{ UINT_MAX };
-            std::atomic<bool> m_feedbackQueued{ false }; // written by render thread, read by UpdateFeedback() thread
+            std::atomic<bool> m_feedbackQueued{ false }; // written by render thread, read by ProcessFeedback() thread
         };
         std::vector<QueuedFeedback> m_queuedFeedback;
 
@@ -355,7 +348,16 @@ namespace SFS
 
         void QueuePendingTileLoads(SFS::UpdateList* out_pUpdateList); // returns # tiles queued
 
-        // read by QueueEviction()
+        // standard tile copy complete notification (not packed mips)
+        // exchanged by UpdateMinMip()
+        // set by ProcessFeedback()
+        std::atomic<bool> m_tileResidencyChanged{ false };
+
+        // set by QueueEviction() - render thread
+        // read by ProcessFeedback()
+        std::atomic<bool> m_evictAll{ false };
+
+        // read by QueueEviction() - render thread, to avoid setting evict all unnecessarily
         // written by ProcessFeedback()
         std::atomic<bool> m_refCountsZero{ true };
     };

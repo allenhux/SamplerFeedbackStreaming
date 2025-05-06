@@ -47,18 +47,18 @@
 SFS::ResourceBase::ResourceBase(
     // file containing streaming texture and tile offsets
     const std::wstring& in_filename,
-    // texture file header with dimension, format, etc.
-    const XetFileHeader* in_pFileHeader,
+    // description with dimension, format, etc.
+    const SFSResourceDesc& in_desc,
     // share upload buffers with other InternalResources
     SFS::ManagerSR* in_pSFSManager,
     // share heap with other StreamingResources
     SFS::Heap* in_pHeap) :
-    m_readbackIndex(0)
-    , m_pSFSManager(in_pSFSManager)
+    m_pSFSManager(in_pSFSManager)
     , m_queuedFeedback(in_pSFSManager->GetNumSwapBuffers())
     , m_pendingEvictions(in_pSFSManager->GetEvictionDelay())
     , m_pHeap(in_pHeap)
-    , m_textureFileInfo(in_filename, in_pFileHeader)
+    , m_resourceDesc(in_desc)
+    , m_filename(in_filename)
 {
     // all internal allocation deferred
 }
@@ -70,10 +70,9 @@ SFS::ResourceBase::ResourceBase(
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::DeferredInitialize1()
 {
-    m_resources = std::make_unique<SFS::InternalResources>(m_pSFSManager->GetDevice(), m_textureFileInfo, (UINT)m_queuedFeedback.size());
+    m_resources = std::make_unique<SFS::InternalResources>(m_pSFSManager->GetDevice(), m_resourceDesc, (UINT)m_queuedFeedback.size());
 
-    m_textureFileInfo.LoadTileInfo();
-    m_pFileHandle.reset(m_pSFSManager->OpenFile(m_textureFileInfo.GetFileName()));
+    m_pFileHandle.reset(m_pSFSManager->OpenFile(m_filename));
 }
 
 //-----------------------------------------------------------------------------
@@ -97,7 +96,7 @@ void SFS::ResourceBase::DeferredInitialize2()
     m_minMipMap.resize(m_tileReferences.size(), m_maxMip);
 
     // make sure my heap has an atlas corresponding to my format
-    m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), m_textureFileInfo.GetFormat());
+    m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), (DXGI_FORMAT)m_resourceDesc.m_textureFormat);
 
     m_resources->Initialize(m_pSFSManager->GetDevice());
 }
@@ -697,10 +696,8 @@ void SFS::ResourceBase::UpdateMinMipMap()
 {
     // m_tileResidencyChanged is an atomic that forms a happens-before relationship between this thread and DataUploader Notify* routines
     // m_tileResidencyChanged is also set when ClearAll() evicts everything
-
-    if (!m_tileResidencyChanged) return;
-
-    m_tileResidencyChanged = false;
+    bool expected = true;
+    if (!m_tileResidencyChanged.compare_exchange_weak(expected, false)) return;
 
     // NOTE: packed mips status is not atomic, but m_tileResidencyChanged is sufficient
     ASSERT(Drawable());
@@ -849,7 +846,7 @@ void SFS::ResourceBase::EvictionDelay::Rescue(const SFS::ResourceBase::TileMappi
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::SetFileHandle(const DataUploader* in_pDataUploader)
 {
-    m_pFileHandle.reset(in_pDataUploader->OpenFile(m_textureFileInfo.GetFileName()));
+    m_pFileHandle.reset(in_pDataUploader->OpenFile(m_filename));
 }
 
 //-----------------------------------------------------------------------------

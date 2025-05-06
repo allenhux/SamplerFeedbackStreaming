@@ -28,7 +28,6 @@
 
 #include "FileStreamerReference.h"
 #include "UpdateList.h"
-#include "XeTexture.h"
 #include "SFSResourceDU.h"
 #include "SFSHeap.h"
 
@@ -206,12 +205,11 @@ void SFS::FileStreamerReference::LoadTexture(SFS::FileStreamerReference::CopyBat
 
     if (VisualizationMode::DATA_VIZ_NONE == m_visualizationMode)
     {
-        auto pTextureFileInfo = pUpdateList->m_pResource->GetTextureFileInfo();
         auto pFileHandle = FileStreamerReference::GetFileHandle(pUpdateList->m_pResource->GetFileHandle());
         for (UINT i = startIndex; i < endIndex; i++)
         {
             // get file offset to tile
-            auto fileOffset = pTextureFileInfo->GetFileOffset(pUpdateList->m_coords[i]);
+            auto fileOffset = pUpdateList->m_pResource->GetFileOffset(pUpdateList->m_coords[i]);
 
             // convert tile index into byte offset
             UINT byteOffset = D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES * in_copyBatch.m_uploadIndices[i];
@@ -225,11 +223,11 @@ void SFS::FileStreamerReference::LoadTexture(SFS::FileStreamerReference::CopyBat
             o.Internal = 0;
             o.InternalHigh = 0;
             o.OffsetHigh = 0;
-            o.Offset = fileOffset.offset;
+            o.Offset = fileOffset.m_offset;
 
             // align # bytes read
             UINT alignment = FileStreamerReference::MEDIA_SECTOR_SIZE - 1;
-            UINT numBytes = (fileOffset.numBytes + alignment) & ~(alignment);
+            UINT numBytes = (fileOffset.m_numBytes + alignment) & ~(alignment);
             o.Offset &= ~alignment; // rewind the offset to alignment
 
             ::ReadFile(pFileHandle, pDst, numBytes, nullptr, &o);
@@ -245,7 +243,7 @@ void SFS::FileStreamerReference::LoadTexture(SFS::FileStreamerReference::CopyBat
 
             // add to base address of upload buffer
             BYTE* pDst = pStagingBaseAddress + byteOffset;
-            void* pSrc = GetVisualizationData(pUpdateList->m_coords[i], in_copyBatch.m_pUpdateList->m_pResource->GetTextureFileInfo()->GetFormat());
+            void* pSrc = GetVisualizationData(pUpdateList->m_coords[i], in_copyBatch.m_pUpdateList->m_pResource->GetTextureFormat());
             memcpy(pDst, pSrc, D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES);
         }
         // fast-forward last signaled to the end. there are no events to check because there are no file accesses
@@ -261,7 +259,7 @@ void SFS::FileStreamerReference::CopyTiles(ID3D12GraphicsCommandList* out_pCopyC
 {
     // generate copy command list
     D3D12_TILE_REGION_SIZE tileRegionSize{ 1, FALSE, 0, 0, 0 };
-    DXGI_FORMAT textureFormat = in_pUpdateList->m_pResource->GetTextureFileInfo()->GetFormat();
+    DXGI_FORMAT textureFormat = in_pUpdateList->m_pResource->GetTextureFormat();
     UINT numTiles = (UINT)in_indices.size();
     for (UINT i = 0; i < numTiles; i++)
     {
@@ -342,7 +340,7 @@ void SFS::FileStreamerReference::CopyThread()
                 // generate copy commands
                 // copy from we left of last time (copyEnd) until the last load that completed (lastSignaled)
                 D3D12_TILE_REGION_SIZE tileRegionSize{ 1, FALSE, 0, 0, 0 };
-                DXGI_FORMAT textureFormat = c.m_pUpdateList->m_pResource->GetTextureFileInfo()->GetFormat();
+                DXGI_FORMAT textureFormat = c.m_pUpdateList->m_pResource->GetTextureFormat();
                 for (UINT i = c.m_copyEnd; i < c.m_lastSignaled; i++)
                 {
                     D3D12_TILED_RESOURCE_COORDINATE coord;

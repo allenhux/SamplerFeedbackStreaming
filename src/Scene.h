@@ -259,8 +259,9 @@ private:
     void SetSphereMatrix(float in_minDistance);
 
     // optimize file open/read for many files
-    // corresponds to m_args.m_textures
-    std::vector<XetFileHeader> m_textureFileHeaders;
+    // m_sfsResourceDescs[i] correspond to m_args.m_textures[i]
+    std::vector<SFSResourceDesc> m_sfsResourceDescs;
+    void LoadResourceDesc(SFSResourceDesc& out_desc, const std::wstring& in_filename);
 
     void LoadSpheres(); // progressively over multiple frames
 

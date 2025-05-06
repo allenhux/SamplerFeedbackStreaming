@@ -34,9 +34,7 @@
 void SFS::ResourceDU::LoadPackedMipInfo(UpdateList& out_updateList)
 {
     UpdateList::PackedMip packedMip;
-    packedMip.m_mipInfo.offset = m_textureFileInfo.GetPackedMipFileOffset(&packedMip.m_mipInfo.numBytes,
-        &packedMip.m_mipInfo.uncompressedSize);
-
+    GetPackedMipInfo(packedMip.m_mipInfo.offset, packedMip.m_mipInfo.numBytes, packedMip.m_mipInfo.uncompressedSize);
     out_updateList.m_coords.push_back(packedMip.m_coord);
 }
 

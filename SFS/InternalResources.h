@@ -37,7 +37,7 @@ namespace SFS
     class InternalResources
     {
     public:
-        InternalResources(ID3D12Device8* in_pDevice, const class XeTexture& m_textureFileInfo,
+        InternalResources(ID3D12Device8* in_pDevice, const SFSResourceDesc& in_resourceDesc,
             // need the swap chain count so we can create per-frame upload buffers
             UINT in_swapChainBufferCount);
 

@@ -29,7 +29,6 @@
 #include "FileStreamerDS.h"
 #include "SFSResourceDU.h"
 
-#include "XeTexture.h"
 #include "UpdateList.h"
 #include "SFSHeap.h"
 
@@ -102,7 +101,7 @@ void SFS::FileStreamerDS::StreamPackedMips(SFS::UpdateList& in_updateList)
     request.UncompressedSize = packedMip.m_mipInfo.uncompressedSize;
     request.Destination.MultipleSubresources.Resource = in_updateList.m_pResource->GetTiledResource();
     request.Destination.MultipleSubresources.FirstSubresource = in_updateList.m_pResource->GetPackedMipInfo().NumStandardMips;
-    request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)in_updateList.m_pResource->GetTextureFileInfo()->GetCompressionFormat();
+    request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)in_updateList.m_pResource->GetCompressionFormat();
 
     m_fileQueue->EnqueueRequest(&request);
 
@@ -116,8 +115,7 @@ void SFS::FileStreamerDS::StreamTexture(SFS::UpdateList& in_updateList)
 {
     ASSERT(in_updateList.GetNumStandardUpdates());
 
-    auto pTextureFileInfo = in_updateList.m_pResource->GetTextureFileInfo();
-    DXGI_FORMAT textureFormat = pTextureFileInfo->GetFormat();
+    DXGI_FORMAT textureFormat = in_updateList.m_pResource->GetTextureFormat();
     auto pDstHeap = in_updateList.m_pResource->GetHeap();
 
     DSTORAGE_REQUEST request{};
@@ -133,16 +131,16 @@ void SFS::FileStreamerDS::StreamTexture(SFS::UpdateList& in_updateList)
         UINT numCoords = (UINT)in_updateList.m_coords.size();
         for (UINT i = 0; i < numCoords; i++)
         {
-            auto fileOffset = pTextureFileInfo->GetFileOffset(in_updateList.m_coords[i]);
-            request.Source.File.Offset = fileOffset.offset;
-            request.Source.File.Size = fileOffset.numBytes;
+            auto fileOffset = in_updateList.m_pResource->GetFileOffset(in_updateList.m_coords[i]);
+            request.Source.File.Offset = fileOffset.m_offset;
+            request.Source.File.Size = fileOffset.m_numBytes;
 
             D3D12_TILED_RESOURCE_COORDINATE coord{};
             ID3D12Resource* pAtlas = pDstHeap->ComputeCoordFromTileIndex(coord, in_updateList.m_heapIndices[i], textureFormat);
 
             request.Destination.Tiles.Resource = pAtlas;
             request.Destination.Tiles.TiledRegionStartCoordinate = coord;
-            request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)pTextureFileInfo->GetCompressionFormat();
+            request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)in_updateList.m_pResource->GetCompressionFormat();
 
             m_fileQueue->EnqueueRequest(&request);
 

@@ -801,7 +801,7 @@ void Scene::LoadSpheres()
                 static std::uniform_real_distribution<float> dis(-1.f, 1.f);
                 o->SetAxis(DirectX::XMVector3NormalizeEst(DirectX::XMVectorSet(dis(m_gen), dis(m_gen), dis(m_gen), 0)));
             }
-            o->SetResource(m_pSFSManager->CreateResource(textureFilename, pHeap, &m_textureFileHeaders[fileIndex]));
+            o->SetResource(m_pSFSManager->CreateResource(m_sfsResourceDescs[fileIndex], pHeap, textureFilename));
             o->GetModelMatrix() = m_objectPoses.m_matrix[objectIndex];
             m_objects.push_back(o);
         }
@@ -927,21 +927,12 @@ void Scene::PrepareScene()
     }
 
     // load texture file headers
-    m_textureFileHeaders.reserve(m_args.m_textures.size());
-    for (auto s : m_args.m_textures)
+    m_sfsResourceDescs.resize(m_args.m_textures.size());
+    UINT i = 0;
+    for (const auto& s : m_args.m_textures)
     {
-        std::ifstream inFile(s.c_str(), std::ios::binary);
-        ASSERT(!inFile.fail()); // File doesn't exist?
-
-        XetFileHeader fileHeader;
-        inFile.read((char*)&fileHeader, sizeof(fileHeader));
-        ASSERT(inFile.good()); // Unexpected Error reading header
-        inFile.close();
-
-        ASSERT(fileHeader.m_magic == XetFileHeader::GetMagic()); // valid XET file?
-        ASSERT(fileHeader.m_version = XetFileHeader::GetVersion()); // correct XET version?
-
-        m_textureFileHeaders.push_back(fileHeader);
+        LoadResourceDesc(m_sfsResourceDescs[i], s);
+        i++;
     }
 
     //--------------------------
@@ -953,7 +944,9 @@ void Scene::PrepareScene()
         UINT heapIndex = m_terrainObjectIndex % m_sharedHeaps.size();
         SFSHeap* pHeap = m_sharedHeaps[heapIndex];
         m_pTerrain = new SceneObjects::Terrain(this);
-        m_pTerrain->SetResource(m_pSFSManager->CreateResource(m_args.m_terrainTexture, pHeap));
+        SFSResourceDesc resourceDesc;
+        LoadResourceDesc(resourceDesc, m_args.m_terrainTexture);
+        m_pTerrain->SetResource(m_pSFSManager->CreateResource(resourceDesc, pHeap, m_args.m_terrainTexture));
         m_objects.push_back(m_pTerrain);
     }
 
@@ -963,10 +956,86 @@ void Scene::PrepareScene()
         UINT heapIndex = objectIndex % m_sharedHeaps.size();
         SFSHeap* pHeap = m_sharedHeaps[heapIndex];
         m_pSky = new SceneObjects::Sky(this);
-        m_pSky->SetResource(m_pSFSManager->CreateResource(m_args.m_skyTexture, pHeap));
+        SFSResourceDesc resourceDesc;
+        LoadResourceDesc(resourceDesc, m_args.m_skyTexture);
+        m_pSky->SetResource(m_pSFSManager->CreateResource(resourceDesc, pHeap, m_args.m_skyTexture));
         float scale = m_universeSize * 2; // NOTE: expects universe size to not change
         m_pSky->GetModelMatrix() = DirectX::XMMatrixScaling(scale, scale, scale);
         m_objects.push_back(m_pSky);
+    }
+}
+
+//-----------------------------------------------------------------------------
+// read file contents into SFSResourceDesc
+//-----------------------------------------------------------------------------
+void Scene::LoadResourceDesc(SFSResourceDesc& out_desc, const std::wstring& in_filename)
+{
+    std::ifstream inFile(in_filename.c_str(), std::ios::binary);
+    ASSERT(!inFile.fail()); // File doesn't exist?
+
+    XetFileHeader fileHeader;
+    inFile.read((char*)&fileHeader, sizeof(fileHeader));
+    ASSERT(inFile.good()); // Unexpected Error reading header
+
+    out_desc =
+    {
+        .m_width = fileHeader.m_ddsHeader.width,
+        .m_height = fileHeader.m_ddsHeader.height,
+        .m_textureFormat = (UINT)fileHeader.m_extensionHeader.dxgiFormat,
+        .m_compressionFormat = fileHeader.m_compressionFormat
+    };
+ 
+    out_desc.m_mipInfo =
+    {
+        .m_numStandardMips = fileHeader.m_mipInfo.m_numStandardMips,
+        .m_numTilesForStandardMips = fileHeader.m_mipInfo.m_numTilesForStandardMips,
+        .m_numPackedMips = fileHeader.m_mipInfo.m_numPackedMips,
+        .m_numTilesForPackedMips = fileHeader.m_mipInfo.m_numTilesForPackedMips,
+        .m_numUncompressedBytesForPackedMips = fileHeader.m_mipInfo.m_numUncompressedBytesForPackedMips
+    };
+
+    ASSERT(fileHeader.m_magic == XetFileHeader::GetMagic()); // valid XET file?
+    ASSERT(fileHeader.m_version = XetFileHeader::GetVersion()); // correct XET version?
+
+    std::vector<XetFileHeader::SubresourceInfo> mipInfo;
+    mipInfo.resize(fileHeader.m_ddsHeader.mipMapCount);
+    inFile.read((char*)mipInfo.data(), mipInfo.size() * sizeof(mipInfo[0]));
+    ASSERT(inFile.good()); // Unexpected Error reading subresource info
+
+    out_desc.m_standardMipInfo.resize(out_desc.m_mipInfo.m_numStandardMips);
+    for (UINT i = 0; i < out_desc.m_mipInfo.m_numStandardMips; i++)
+    {
+        out_desc.m_standardMipInfo[i] =
+        {
+        .m_widthTiles = mipInfo[i].m_standardMipInfo.m_widthTiles,
+        .m_heightTiles = mipInfo[i].m_standardMipInfo.m_heightTiles,
+        .m_depthTiles = mipInfo[i].m_standardMipInfo.m_depthTiles,
+
+        // convenience value, can be computed from sum of previous subresource dimensions
+        .m_subresourceTileIndex = mipInfo[i].m_standardMipInfo.m_subresourceTileIndex
+        };
+    }
+
+    std::vector<XetFileHeader::TileData> tileData;
+    tileData.resize(fileHeader.m_mipInfo.m_numTilesForStandardMips + 1); // plus 1 for the packed mips offset & size
+    inFile.read((char*)tileData.data(), tileData.size() * sizeof(tileData[0]));
+    ASSERT(inFile.good()); // Unexpected Error reading packed mip info
+    inFile.close();
+
+    out_desc.m_packedMipData =
+    {
+        .m_offset = tileData.back().m_offset,
+        .m_numBytes = tileData.back().m_numBytes
+    };
+
+    out_desc.m_tileData.resize(out_desc.m_mipInfo.m_numTilesForStandardMips);
+    for (UINT i = 0; i < out_desc.m_mipInfo.m_numTilesForStandardMips; i++)
+    {
+        out_desc.m_tileData[i] =
+        {
+            .m_offset = tileData[i].m_offset,
+            .m_numBytes = tileData[i].m_numBytes
+        };
     }
 }
 

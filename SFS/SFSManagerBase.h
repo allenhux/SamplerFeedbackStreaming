@@ -63,8 +63,8 @@ namespace SFS
         //-----------------------------------------------------------------
         virtual void Destroy() override;
         virtual SFSHeap* CreateHeap(UINT in_maxNumTilesHeap) override;
-        virtual SFSResource* CreateResource(const std::wstring& in_filename, SFSHeap* in_pHeap,
-            const XetFileHeader* in_pFileHeader) override;
+        virtual SFSResource* CreateResource(const struct SFSResourceDesc& in_desc,
+            SFSHeap* in_pHeap, const std::wstring& in_filename) override;
         virtual void BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap, D3D12_CPU_DESCRIPTOR_HANDLE in_minmipmapDescriptorHandle) override;
         virtual CommandLists EndFrame() override;
         virtual void UseDirectStorage(bool in_useDS) override;

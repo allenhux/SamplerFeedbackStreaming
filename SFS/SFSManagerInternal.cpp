@@ -28,7 +28,6 @@
 
 #include "SFSManagerBase.h"
 #include "SFSResourceBase.h"
-#include "XeTexture.h"
 #include "SFSHeap.h"
 #include "BitVector.h"
 

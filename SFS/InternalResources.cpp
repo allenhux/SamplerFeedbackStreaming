@@ -27,13 +27,12 @@
 #include "pch.h"
 
 #include "InternalResources.h"
-#include "XeTexture.h"
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 SFS::InternalResources::InternalResources(
     ID3D12Device8* in_pDevice,
-    const XeTexture& m_textureFileInfo,
+    const SFSResourceDesc& in_resourceDesc,
     // need the swap chain count so we can create per-frame upload buffers
     UINT in_swapChainBufferCount) :
     m_packedMipInfo{}, m_tileShape{}, m_numTilesTotal(0)
@@ -41,10 +40,10 @@ SFS::InternalResources::InternalResources(
     // create reserved resource
     {
         D3D12_RESOURCE_DESC rd = CD3DX12_RESOURCE_DESC::Tex2D(
-            m_textureFileInfo.GetFormat(),
-            m_textureFileInfo.GetImageWidth(),
-            m_textureFileInfo.GetImageHeight(), 1,
-            (UINT16)m_textureFileInfo.GetMipCount()
+            (DXGI_FORMAT)in_resourceDesc.m_textureFormat,
+            in_resourceDesc.m_width,
+            in_resourceDesc.m_height, 1,
+            (UINT16)in_resourceDesc.m_mipInfo.m_numStandardMips + (UINT16)in_resourceDesc.m_mipInfo.m_numPackedMips
         );
 
         // Layout must be D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE when creating reserved resources
