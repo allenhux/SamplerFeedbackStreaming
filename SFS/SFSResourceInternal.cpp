@@ -692,18 +692,15 @@ void SFS::ResourceBase::QueuePendingTileLoads(SFS::UpdateList* out_pUpdateList)
 // if something has changed: traverses residency status, generates min mip map, writes to upload buffer
 // returns true if update performed, indicating SFSM should upload the results
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::UpdateMinMipMap()
+bool SFS::ResourceBase::UpdateMinMipMap()
 {
     // m_tileResidencyChanged is an atomic that forms a happens-before relationship between this thread and DataUploader Notify* routines
     // m_tileResidencyChanged is also set when ClearAll() evicts everything
     bool expected = true;
-    if (!m_tileResidencyChanged.compare_exchange_weak(expected, false)) return;
+    if (!m_tileResidencyChanged.compare_exchange_weak(expected, false)) return false;
 
     // NOTE: packed mips status is not atomic, but m_tileResidencyChanged is sufficient
     ASSERT(Drawable());
-
-    auto& outBuffer = m_pSFSManager->GetResidencyMap();
-    UINT8* pResidencyMap = m_residencyMapOffsetBase + (UINT8*)outBuffer.GetData();
 
     if (m_tileMappingState.GetAnyRefCount())
     {
@@ -762,7 +759,7 @@ void SFS::ResourceBase::UpdateMinMipMap()
     {
         memset(m_minMipMap.data(), m_maxMip, m_minMipMap.size());
     }
-    memcpy(pResidencyMap, m_minMipMap.data(), m_minMipMap.size());
+    return true;
 }
 
 //=============================================================================

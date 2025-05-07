@@ -51,7 +51,6 @@ Implementation of SFS Manager
 namespace SFS
 {
     class ResourceBase;
-    class DataUploader;
     class Heap;
     struct UpdateList;
 
@@ -117,6 +116,8 @@ namespace SFS
             UINT m_bytesUsed{ 0 };
         } m_residencyMap;
 
+        std::set<ResourceBase*> m_removeResources;
+
         SFS::SynchronizationFlag m_residencyChangedFlag;
 
         // after initialized, call AllocateResidencyMap() and AllocateSharedClearUavHeap()
@@ -130,12 +131,10 @@ namespace SFS
         std::vector<ResourceBase*> m_pendingSharePFT; // resources to be shared with ProcessFeedbackThread
         Lock m_pendingLockPFT;   // lock between ProcessFeedbackThread and main thread
 
-        // save old residency maps. Let the residency thread release them.
-        std::vector<ID3D12Resource*> m_oldResidencyMapRT; // if non-empty, ResidencyThread should release all
         std::vector<ResourceBase*> m_newResourcesShareRT; // resources to be shared with ResidencyThread
         Lock m_newResourcesLockRT; // lock between ResidencyThread and main thread
 
-        std::set<ResourceBase*> m_removeResources;
+        Lock m_residencyMapLock; // lock between ResidencyThread and main thread around shared residency map
     private:
 #ifdef _DEBUG
         std::atomic<bool> m_processFeedbackThreadRunning{ false };
@@ -155,8 +154,6 @@ namespace SFS
             D3D12_GPU_DESCRIPTOR_HANDLE m_gpuDescriptor;
         };
         std::vector<FeedbackReadback> m_feedbackReadbacks;
-
-        ComPtr<ID3D12Resource> m_residencyMapLocal; // GPU copy of residency state
 
         SFS::SynchronizationFlag m_processFeedbackFlag;
 
@@ -216,7 +213,7 @@ namespace SFS
         void CreateMinMipMapView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor);
 
         // returns old resource if a new resource was created
-        ID3D12Resource* AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle,
+        void AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle,
             std::vector<ResourceBase*>& in_newResources);
 
         // heap to clear feedback resources, shared by all

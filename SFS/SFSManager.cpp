@@ -223,7 +223,6 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
         StartThreads();
     }
 
-    ID3D12Resource* pOldResidencyMapRT = nullptr;
     if (m_packedMipTransitionResources.size())
     {
         std::vector<ResourceBase*> tmpResources;
@@ -247,7 +246,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
         }
         if (tmpResources.size())
         {
-            pOldResidencyMapRT = AllocateSharedResidencyMap(in_minmipmapDescriptorHandle, tmpResources);
+            AllocateSharedResidencyMap(in_minmipmapDescriptorHandle, tmpResources);
             AllocateSharedClearUavHeap();
         }
     }
@@ -262,7 +261,6 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
             m_newResourcesLockPFT.Release();
 
             m_newResourcesLockRT.Acquire();
-            if (pOldResidencyMapRT) { m_oldResidencyMapRT.push_back(pOldResidencyMapRT); }
             m_newResourcesShareRT.insert(m_newResourcesShareRT.end(), m_newResources.begin(), m_newResources.end());
             m_newResourcesLockRT.Release();
 

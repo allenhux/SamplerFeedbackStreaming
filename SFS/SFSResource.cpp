@@ -98,11 +98,13 @@ UINT SFS::ResourceBase::GetMinMipMapOffset() const
 }
 
 //-----------------------------------------------------------------------------
-// // check if the packed mips are loaded. application should not use this texture before they have loaded
+// application should not use this texture before packed mips are loaded AND
+// an offset into the shared residency map buffer has been assigned
 //-----------------------------------------------------------------------------
 bool SFS::ResourceBase::Drawable() const
 {
     bool drawable = (UINT(-1) != m_residencyMapOffsetBase) && (PackedMipStatus::RESIDENT == m_packedMipStatus);
+
     return drawable;
 }
 

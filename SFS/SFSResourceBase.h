@@ -94,7 +94,11 @@ namespace SFS
 
         // Called on every object every frame
         // exits fast if tile residency has not changed (due to addmap or decmap)
-        void UpdateMinMipMap();
+        bool UpdateMinMipMap();
+        inline void WriteMinMipMap(UINT8* out_pDest) // do this fast!! inside lock
+        {
+            memcpy(m_residencyMapOffsetBase + out_pDest, m_minMipMap.data(), m_minMipMap.size());
+        }
 
         // returns true if packed mips are loaded
         // NOTE: this query will only return true one time

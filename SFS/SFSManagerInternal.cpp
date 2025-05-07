@@ -133,18 +133,26 @@ void SFS::ManagerBase::StartThreads()
                 if (m_newResourcesShareRT.size() && m_newResourcesLockRT.TryAcquire())
                 {
                     std::vector<ResourceBase*> newResources;
-                    std::vector<ID3D12Resource*> oldResidencyMaps;
                     newResources.swap(m_newResourcesShareRT);
-                    oldResidencyMaps.swap(m_oldResidencyMapRT);
                     m_newResourcesLockRT.Release();
 
                     streamingResources.insert(streamingResources.end(), newResources.begin(), newResources.end());
-                    for (auto p : oldResidencyMaps) { p->Release(); }
                 }
 
+                std::vector<ResourceBase*> updated;
                 for (auto p : streamingResources)
                 {
-                    p->UpdateMinMipMap();
+                    if (p->UpdateMinMipMap())
+                    {
+                        updated.push_back(p);
+                    }
+                }
+                if (updated.size())
+                {
+                    // only blocks if resource buffer is being re-allocated (effectively never)
+                    m_residencyMapLock.Acquire();
+                    for (auto p : updated) { p->WriteMinMipMap((UINT8*)m_residencyMap.GetData()); }
+                    m_residencyMapLock.Release();
                 }
             }
 #ifdef _DEBUG
@@ -372,11 +380,9 @@ void SFS::ManagerBase::Finish()
 // assign offsets to new resources and update all resources on resource allocation
 // descriptor handle required to update the assoiated shader resource view
 //-----------------------------------------------------------------------------
-ID3D12Resource* SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle,
+void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle,
     std::vector<ResourceBase*>& in_newResources)
 {
-    ID3D12Resource* pOldResource = nullptr; // return old resource if a new one was allocated
-
     static constexpr UINT alignment = 32; // align to SIMD32
     static constexpr UINT gpuPageSize = 64 * 1024;
 
@@ -397,9 +403,15 @@ ID3D12Resource* SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTO
     UINT offset = m_residencyMap.m_bytesUsed;
     auto* updateArray = &in_newResources;
 
-    // allocate residency map buffer large enough for all SFSResources
+    // changing offsets or the residency resource necessitates halting the residency thread
+    bool lockAcquired = false;
+
+     // allocate residency map buffer large enough for all SFSResources
     if (requiredSize > bufferSize)
     {
+        lockAcquired = true;
+        m_residencyMapLock.Acquire();
+
         // before we allocate, see if re-arranging will work
         requiredSize = 0;
         for (auto r : m_streamingResources)
@@ -411,6 +423,7 @@ ID3D12Resource* SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTO
         // definitely doesn't fit, allocate new buffer
         if (requiredSize > bufferSize)
         {
+
             // if available, use GPU Upload Heaps
             auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
             {
@@ -424,13 +437,9 @@ ID3D12Resource* SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTO
                     uploadHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
                     uploadHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
                 }
-
             }
 
-            bufferSize = (2 * requiredSize + gpuPageSize - 1) & ~(gpuPageSize - 1);
-
-            // let thread de-allocate the old resource.
-            pOldResource = m_residencyMap.Detach();
+            bufferSize = (requiredSize + gpuPageSize - 1) & ~(gpuPageSize - 1);
 
             m_residencyMap.Allocate(m_device.Get(), bufferSize, uploadHeapProperties);
 
@@ -450,9 +459,12 @@ ID3D12Resource* SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTO
         UINT minMipMapSize = r->GetMinMipMapSize();
         offset += (minMipMapSize + alignment - 1) & ~(alignment - 1);
     }
-    m_residencyMap.m_bytesUsed = offset;
+    if (lockAcquired)
+    {
+        m_residencyMapLock.Release();
+    }
 
-    return pOldResource;
+    m_residencyMap.m_bytesUsed = offset;
 }
 
 //-----------------------------------------------------------------------------
