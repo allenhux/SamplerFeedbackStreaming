@@ -61,6 +61,8 @@ SFS::ResourceBase::ResourceBase(
     , m_filename(in_filename)
 {
     // all internal allocation deferred
+    m_tileReferencesWidth = m_resourceDesc.m_standardMipInfo[0].m_widthTiles;
+    m_tileReferencesHeight = m_resourceDesc.m_standardMipInfo[0].m_heightTiles;
 }
 
 //-----------------------------------------------------------------------------
@@ -89,8 +91,8 @@ void SFS::ResourceBase::DeferredInitialize2()
 
     // initialize a structure that holds ref counts with dimensions equal to min-mip-map
     // set the bottom-most bits, representing the packed mips as being resident
-    m_tileReferencesWidth = m_resources->GetNumTilesWidth();
-    m_tileReferencesHeight = m_resources->GetNumTilesHeight();
+    ASSERT(m_tileReferencesWidth == m_resources->GetNumTilesWidth());
+    ASSERT(m_tileReferencesHeight == m_resources->GetNumTilesHeight());
 
     m_tileReferences.resize(m_tileReferencesWidth * m_tileReferencesHeight, m_maxMip);
     m_minMipMap.resize(m_tileReferences.size(), m_maxMip);

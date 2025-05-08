@@ -170,7 +170,6 @@ namespace SFS
         UINT GetNumTilesHeight() const { return m_tileReferencesHeight; }
         UINT GetMinMipMapSize() const { return GetNumTilesWidth() * GetNumTilesHeight(); }
     protected:
-        // object that streams data from a file
         const SFSResourceDesc m_resourceDesc;
         std::wstring m_filename; // only used so we can dynamically change file streamer type :/
         std::unique_ptr<SFS::InternalResources> m_resources;

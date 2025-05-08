@@ -206,6 +206,16 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     m_directCommandQueue->Signal(m_frameFence.Get(), m_frameFenceValue);
     m_frameFenceValue++;
 
+    {
+        auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
+        auto p = m_oldSharedResidencyMaps[i];
+        if (p)
+        {
+            p->Release();
+            m_oldSharedResidencyMaps[i] = nullptr;
+        }
+    }
+
     // need to (re) StartThreads() if resources were deleted
     if (!m_threadsRunning)
     {

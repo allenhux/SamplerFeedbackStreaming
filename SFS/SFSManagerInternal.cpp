@@ -52,6 +52,7 @@ m_numSwapBuffers(in_desc.m_swapChainBufferCount)
 , m_threadPriority((int)in_desc.m_threadPriority)
 , m_dataUploader(in_pDevice, in_desc.m_maxNumCopyBatches, in_desc.m_stagingBufferSizeMB, in_desc.m_maxTileMappingUpdatesPerApiCall, (int)in_desc.m_threadPriority)
 , m_traceCaptureMode{in_desc.m_traceCaptureMode}
+, m_oldSharedResidencyMaps(in_desc.m_swapChainBufferCount + 1, nullptr)
 {
     ASSERT(D3D12_COMMAND_LIST_TYPE_DIRECT == m_directCommandQueue->GetDesc().Type);
 
@@ -394,7 +395,7 @@ void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in
 
     UINT requiredSize = m_residencyMap.m_bytesUsed;
     ASSERT(0 == (requiredSize & (alignment - 1)));
-    for (const auto& r : in_newResources)
+    for (const auto r : in_newResources)
     {
         UINT minMipMapSize = r->GetMinMipMapSize();
         requiredSize += (minMipMapSize + alignment - 1) & ~(alignment - 1);
@@ -417,13 +418,13 @@ void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in
         for (auto r : m_streamingResources)
         {
             UINT minMipMapSize = r->GetMinMipMapSize();
+            ASSERT(0 != minMipMapSize);
             requiredSize += (minMipMapSize + alignment - 1) & ~(alignment - 1);
         }
 
         // definitely doesn't fit, allocate new buffer
         if (requiredSize > bufferSize)
         {
-
             // if available, use GPU Upload Heaps
             auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
             {
@@ -441,6 +442,12 @@ void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in
 
             bufferSize = (requiredSize + gpuPageSize - 1) & ~(gpuPageSize - 1);
 
+            {
+                auto p = m_residencyMap.Detach();
+                auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
+                m_oldSharedResidencyMaps[i] = p;
+            }
+
             m_residencyMap.Allocate(m_device.Get(), bufferSize, uploadHeapProperties);
 
             CreateMinMipMapView(in_descriptorHandle);
@@ -452,13 +459,15 @@ void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in
     }
 
     // set offsets AFTER allocating resource. allows SFSResource to initialize buffer state
-    // assign all if we allocated above. if re-using, just assign in_newResources 
+    // assign all if we allocated above. if re-using, just assign in_newResources
     for (auto r : *updateArray)
     {
         r->SetResidencyMapOffset(offset);
         UINT minMipMapSize = r->GetMinMipMapSize();
         offset += (minMipMapSize + alignment - 1) & ~(alignment - 1);
     }
+    ASSERT(offset <= requiredSize);
+
     if (lockAcquired)
     {
         m_residencyMapLock.Release();
