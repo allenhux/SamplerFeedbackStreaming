@@ -89,7 +89,7 @@ namespace SFS
         //--------------------------------------------
         void Finish();
 
-        // delete Remove()d resources (m_removeResources)
+        // delete resources that have been requested via Remove()
         void RemoveResources();
 
         ManagerBase(const struct SFSManagerDesc& in_desc, ID3D12Device8* in_pDevice); // required for constructor
@@ -221,6 +221,7 @@ namespace SFS
         // heap to clear feedback resources, shared by all
         ComPtr<ID3D12DescriptorHeap> m_sharedClearUavHeap;
         void AllocateSharedClearUavHeap();
+        void CreateClearDescriptors();
 
         //-------------------------------------------
         // statistics

@@ -195,6 +195,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
 {
     ASSERT(!GetWithinFrame());
 
+    // delete resources that have been requested via Remove()
     RemoveResources();
 
     m_withinFrame = true;
@@ -206,6 +207,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     m_directCommandQueue->Signal(m_frameFence.Get(), m_frameFenceValue);
     m_frameFenceValue++;
 
+    // release old shared residency map
     {
         auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
         auto p = m_oldSharedResidencyMaps[i];
@@ -226,44 +228,20 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
         // no need to lock
         // treat all the resources as "new"
         m_newResourcesShareRT = m_streamingResources;
-        m_newResourcesSharePFT = m_newResourcesShareRT;
+        m_newResourcesSharePFT = m_streamingResources;
         // also treat all the resources as potentially having pending loads/evictions
-        m_pendingSharePFT = m_newResourcesShareRT;
+        m_pendingSharePFT = m_streamingResources;
 
         StartThreads();
-    }
-
-    if (m_packedMipTransitionResources.size())
-    {
-        std::vector<ResourceBase*> tmpResources;
-        for (UINT i = 0; i < m_packedMipTransitionResources.size();)
-        {
-            auto p = m_packedMipTransitionResources[i];
-            if (p->GetPackedMipsNeedTransition())
-            {
-                D3D12_RESOURCE_BARRIER b = CD3DX12_RESOURCE_BARRIER::Transition(
-                    p->GetTiledResource(),
-                    D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-                m_packedMipTransitionBarriers.push_back(b);
-                tmpResources.push_back(p);
-                m_packedMipTransitionResources[i] = m_packedMipTransitionResources.back();
-                m_packedMipTransitionResources.pop_back();
-            }
-            else
-            {
-                i++;
-            }
-        }
-        if (tmpResources.size())
-        {
-            AllocateSharedResidencyMap(in_minmipmapDescriptorHandle, tmpResources);
-            AllocateSharedClearUavHeap();
-        }
     }
 
     // if new StreamingResources have been created...
     if (m_newResources.size())
     {
+        AllocateSharedResidencyMap(in_minmipmapDescriptorHandle, m_newResources);
+        AllocateSharedClearUavHeap();
+        CreateClearDescriptors(); // if new shared heap, need to set clear uav heap descriptors on existing resources
+
         // share new resources with running threads
         {
             m_newResourcesLockPFT.Acquire();
@@ -273,9 +251,36 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
             m_newResourcesLockRT.Acquire();
             m_newResourcesShareRT.insert(m_newResourcesShareRT.end(), m_newResources.begin(), m_newResources.end());
             m_newResourcesLockRT.Release();
+        }
 
-            m_packedMipTransitionResources.insert(m_packedMipTransitionResources.end(), m_newResources.begin(), m_newResources.end());
-            m_newResources.clear();
+        // monitor new resources for when they need packed mip transition barriers
+        m_packedMipTransitionResources.insert(m_packedMipTransitionResources.end(), m_newResources.begin(), m_newResources.end());
+        m_newResources.clear();
+    }
+
+    if (m_packedMipTransitionResources.size())
+    {
+        for (UINT i = 0; i < m_packedMipTransitionResources.size();)
+        {
+            auto p = m_packedMipTransitionResources[i];
+            if (p->GetPackedMipsNeedTransition())
+            {
+                D3D12_RESOURCE_BARRIER b = CD3DX12_RESOURCE_BARRIER::Transition(
+                    p->GetTiledResource(),
+                    D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                m_packedMipTransitionBarriers.push_back(b);
+                m_packedMipTransitionResources[i] = m_packedMipTransitionResources.back();
+                m_packedMipTransitionResources.pop_back();
+            }
+            else
+            {
+                i++;
+            }
+        }
+        // if resources have become drawable, set their clear uav heap descriptors
+        if (m_packedMipTransitionBarriers.size())
+        {
+            CreateClearDescriptors();
         }
     }
 
@@ -290,6 +295,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
 
     m_processFeedbackFlag.Set(); // every frame, process feedback (also steps eviction history from prior frames)
 
+    // start command list for this frame
     m_renderFrameIndex = (m_renderFrameIndex + 1) % m_numSwapBuffers;
     for (auto& cl : m_commandLists)
     {

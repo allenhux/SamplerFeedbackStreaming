@@ -107,7 +107,7 @@ namespace SFS
         // the following are called only if the application made a feedback request for the object:
 
         // called after feedback map has been copied to the cpu
-        D3D12_CPU_DESCRIPTOR_HANDLE  m_clearUavDescriptor{};
+        D3D12_CPU_DESCRIPTOR_HANDLE  m_clearUavDescriptor{ 0 };
         void SetClearUavDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE in_cpuDescriptor) { m_clearUavDescriptor = in_cpuDescriptor; }
         void ClearFeedback(ID3D12GraphicsCommandList* in_pCmdList, const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor);
 

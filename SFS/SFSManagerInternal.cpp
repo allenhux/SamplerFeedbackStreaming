@@ -91,6 +91,14 @@ SFS::ManagerBase::~ManagerBase()
 {
     // force DataUploader to flush now, rather than waiting for its destructor
     Finish();
+
+    for (auto r : m_oldSharedResidencyMaps)
+    {
+        if (r)
+        {
+            r->Release();
+        }
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -152,7 +160,8 @@ void SFS::ManagerBase::StartThreads()
                 {
                     // only blocks if resource buffer is being re-allocated (effectively never)
                     m_residencyMapLock.Acquire();
-                    for (auto p : updated) { p->WriteMinMipMap((UINT8*)m_residencyMap.GetData()); }
+                    UINT8* pDest = (UINT8*)m_residencyMap.GetData();
+                    for (auto p : updated) { p->WriteMinMipMap(pDest); }
                     m_residencyMapLock.Release();
                 }
             }
@@ -492,18 +501,25 @@ void SFS::ManagerBase::AllocateSharedClearUavHeap()
         ThrowIfFailed(m_device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_sharedClearUavHeap)));
         m_sharedClearUavHeap->SetName(L"m_sharedClearUavHeap");
     }
+}
 
-    UINT sharedClearUavHeapIndex = 0;
+//-----------------------------------------------------------------------------
+// create uav descriptors in the clear uav heap
+// could optimize this for just the new resources, but CreateResourceView() is designed to be fast
+//     and this function is expected to be called very infrequently
+//-----------------------------------------------------------------------------
+void SFS::ManagerBase::CreateClearDescriptors()
+{
     auto srvUavCbvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    CD3DX12_CPU_DESCRIPTOR_HANDLE clearHandle(m_sharedClearUavHeap->GetCPUDescriptorHandleForHeapStart(), 0, srvUavCbvDescriptorSize);
     for (const auto& r : m_streamingResources)
     {
         // only update resources that are sufficiently initialized
         if (r->Drawable())
         {
-            CD3DX12_CPU_DESCRIPTOR_HANDLE clearHandle(m_sharedClearUavHeap->GetCPUDescriptorHandleForHeapStart(), sharedClearUavHeapIndex, srvUavCbvDescriptorSize);
-            sharedClearUavHeapIndex++;
             r->CreateFeedbackView(clearHandle);
             r->SetClearUavDescriptor(clearHandle);
+            clearHandle.ptr += srvUavCbvDescriptorSize;
         }
     }
 }

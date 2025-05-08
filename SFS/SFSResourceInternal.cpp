@@ -60,20 +60,22 @@ SFS::ResourceBase::ResourceBase(
     , m_resourceDesc(in_desc)
     , m_filename(in_filename)
 {
-    // all internal allocation deferred
+    // most internal allocation deferred
     m_tileReferencesWidth = m_resourceDesc.m_standardMipInfo[0].m_widthTiles;
     m_tileReferencesHeight = m_resourceDesc.m_standardMipInfo[0].m_heightTiles;
+    m_maxMip = (UINT8)m_resourceDesc.m_mipInfo.m_numStandardMips;
+    // there had better be standard mips, otherwise, why stream?
+    ASSERT(m_maxMip);
+    m_minMipMap.assign(GetMinMipMapSize(), m_maxMip);
 }
 
 //-----------------------------------------------------------------------------
-// create internal D3D resources. This is rather expensive, so deferred from main thread
-// load tile offsets etc. to cpu memory
-// open a file handle for streaming to gpu
+// allocating internal d3d resources is expensive, so moved from main thread to internal threads
+// first, create just the tiled resource and the streaming file handle
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::DeferredInitialize1()
 {
     m_resources = std::make_unique<SFS::InternalResources>(m_pSFSManager->GetDevice(), m_resourceDesc, (UINT)m_queuedFeedback.size());
-
     m_pFileHandle.reset(m_pSFSManager->OpenFile(m_filename));
 }
 
@@ -82,11 +84,6 @@ void SFS::ResourceBase::DeferredInitialize1()
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::DeferredInitialize2()
 {
-    m_maxMip = UINT8(m_resources->GetPackedMipInfo().NumStandardMips);
-
-    // there had better be standard mips, otherwise, why stream?
-    ASSERT(m_maxMip);
-
     m_tileMappingState.Init(m_maxMip, m_resources->GetTiling());
 
     // initialize a structure that holds ref counts with dimensions equal to min-mip-map
@@ -94,8 +91,9 @@ void SFS::ResourceBase::DeferredInitialize2()
     ASSERT(m_tileReferencesWidth == m_resources->GetNumTilesWidth());
     ASSERT(m_tileReferencesHeight == m_resources->GetNumTilesHeight());
 
-    m_tileReferences.resize(m_tileReferencesWidth * m_tileReferencesHeight, m_maxMip);
-    m_minMipMap.resize(m_tileReferences.size(), m_maxMip);
+    // m_tileReferences tracks what tiles we want to have
+    // m_minMipMap represents the tiles we actually have, and is read directly by pixel shaders
+    m_tileReferences.resize(GetMinMipMapSize(), m_maxMip);
 
     // make sure my heap has an atlas corresponding to my format
     m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), (DXGI_FORMAT)m_resourceDesc.m_textureFormat);
