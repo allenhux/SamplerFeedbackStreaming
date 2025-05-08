@@ -393,7 +393,7 @@ void SFS::ManagerBase::Finish()
 void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle,
     std::vector<ResourceBase*>& in_newResources)
 {
-    static constexpr UINT alignment = 32; // align to SIMD32
+    static constexpr UINT alignment = std::hardware_destructive_interference_size; // cache line size
     static constexpr UINT gpuPageSize = 64 * 1024;
 
     UINT bufferSize = 0;
