@@ -53,6 +53,7 @@ m_numSwapBuffers(in_desc.m_swapChainBufferCount)
 , m_dataUploader(in_pDevice, in_desc.m_maxNumCopyBatches, in_desc.m_stagingBufferSizeMB, in_desc.m_maxTileMappingUpdatesPerApiCall, (int)in_desc.m_threadPriority)
 , m_traceCaptureMode{in_desc.m_traceCaptureMode}
 , m_oldSharedResidencyMaps(in_desc.m_swapChainBufferCount + 1, nullptr)
+, m_residencyThread(this, (int)in_desc.m_threadPriority)
 {
     ASSERT(D3D12_COMMAND_LIST_TYPE_DIRECT == m_directCommandQueue->GetDesc().Type);
 
@@ -118,52 +119,9 @@ void SFS::ManagerBase::StartThreads()
 #endif
         });
 
-    // modify residency maps as a result of gpu completion events
-    m_updateResidencyThread = std::thread([&]
-        {
-#ifdef _DEBUG
-            m_residencyThreadRunning = true;
-#endif
-
-            std::vector<ResourceBase*> streamingResources;
-
-            while (m_threadsRunning)
-            {
-                m_residencyChangedFlag.Wait();
-
-                if (m_newResourcesShareRT.size() && m_newResourcesLockRT.TryAcquire())
-                {
-                    std::vector<ResourceBase*> newResources;
-                    newResources.swap(m_newResourcesShareRT);
-                    m_newResourcesLockRT.Release();
-
-                    streamingResources.insert(streamingResources.end(), newResources.begin(), newResources.end());
-                }
-
-                std::vector<ResourceBase*> updated;
-                for (auto p : streamingResources)
-                {
-                    if (p->UpdateMinMipMap())
-                    {
-                        updated.push_back(p);
-                    }
-                }
-                if (updated.size())
-                {
-                    // only blocks if resource buffer is being re-allocated (effectively never)
-                    m_residencyMapLock.Acquire();
-                    UINT8* pDest = (UINT8*)m_residencyMap.GetData();
-                    for (auto p : updated) { p->WriteMinMipMap(pDest); }
-                    m_residencyMapLock.Release();
-                }
-            }
-#ifdef _DEBUG
-            m_residencyThreadRunning = false;
-#endif
-        });
+    m_residencyThread.Start();
 
     SFS::SetThreadPriority(m_processFeedbackThread, m_threadPriority);
-    SFS::SetThreadPriority(m_updateResidencyThread, m_threadPriority);
 }
 
 //-----------------------------------------------------------------------------
@@ -346,20 +304,15 @@ void SFS::ManagerBase::StopThreads()
 
         // wake up threads so they can exit
         m_processFeedbackFlag.Set();
-        m_residencyChangedFlag.Set();
 
         if (m_processFeedbackThread.joinable())
         {
             m_processFeedbackThread.join();
         }
 
-        if (m_updateResidencyThread.joinable())
-        {
-            m_updateResidencyThread.join();
-        }
         ASSERT(false == m_processFeedbackThreadRunning);
-        ASSERT(false == m_residencyThreadRunning);
     }
+    m_residencyThread.Stop();
 }
 
 //-----------------------------------------------------------------------------

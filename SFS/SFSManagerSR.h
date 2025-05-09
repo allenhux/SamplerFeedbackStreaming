@@ -70,6 +70,7 @@ namespace SFS
             return m_dataUploader.AllocateUpdateList((SFS::ResourceDU*)in_pStreamingResource);
         }
 
+        // called exclusively within ProcessFeedback
         void SubmitUpdateList(SFS::UpdateList& in_updateList)
         {
             m_dataUploader.SubmitUpdateList(in_updateList);
@@ -83,7 +84,7 @@ namespace SFS
             return m_dataUploader.GetMappingQueue();
         }
 
-        void SetResidencyChanged() { m_residencyChangedFlag.Set(); }
+        void SetResidencyChanged() { m_residencyThread.Wake(); }
 
         FileHandle* OpenFile(const std::wstring& in_filename) { return m_dataUploader.OpenFile(in_filename); }
 

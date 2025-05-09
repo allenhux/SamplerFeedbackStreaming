@@ -106,7 +106,19 @@ namespace SFS
     };
 
     //==================================================
-    // a single thread may wait on this flag, which may be set by any number of threads
+    //==================================================
+    inline void SetThreadPriority(std::thread& in_thread, int in_priority)
+    {
+        if (in_priority) // 0 = default (do nothing). -1 = efficiency. otherwise, performance.
+        {
+            THREAD_POWER_THROTTLING_STATE throttlingState{ THREAD_POWER_THROTTLING_CURRENT_VERSION, THREAD_POWER_THROTTLING_EXECUTION_SPEED, 0 };
+            if (-1 == in_priority) { throttlingState.StateMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED; } // speed, speed = prefer e cores
+            ::SetThreadInformation(in_thread.native_handle(), ThreadPowerThrottling, &throttlingState, sizeof(throttlingState));
+        }
+    }
+
+    //==================================================
+    // multiple threads may wait on this flag, which may be set by any number of threads
     //==================================================
     class SynchronizationFlag
     {
@@ -114,7 +126,7 @@ namespace SFS
         void Set()
         {
             m_flag = true;
-            WakeByAddressSingle(&m_flag);
+            WakeByAddressAll(&m_flag);
         }
 
         void Wait()
@@ -128,20 +140,10 @@ namespace SFS
         bool m_flag{ false };
     };
 
-    inline void SetThreadPriority(std::thread& in_thread, int in_priority)
-    {
-        if (in_priority) // 0 = default (do nothing). -1 = efficiency. otherwise, performance.
-        {
-            THREAD_POWER_THROTTLING_STATE throttlingState{ THREAD_POWER_THROTTLING_CURRENT_VERSION, THREAD_POWER_THROTTLING_EXECUTION_SPEED, 0 };
-            if (-1 == in_priority) { throttlingState.StateMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED; } // speed, speed = prefer e cores
-            ::SetThreadInformation(in_thread.native_handle(), ThreadPowerThrottling, &throttlingState, sizeof(throttlingState));
-        }
-    }
-
     //==================================================
-    // unused
+    // Spin Lock using expensive wait
     //==================================================
-    class Lock
+    class SpinLock
     {
     public:
         void Acquire()
@@ -172,6 +174,52 @@ namespace SFS
         std::atomic<uint32_t> m_lock{ 0 };
     };
 
+    //==================================================
+    // Efficient Lock using Sync Flag
+    //==================================================
+    class Lock
+    {
+    public:
+        void Acquire()
+        {
+            const std::uint32_t desired = 1;
+            bool waiting = true;
+
+            while (waiting)
+            {
+                std::uint32_t expected = 0;
+                waiting = !m_lock.compare_exchange_weak(expected, desired);
+                if (waiting)
+                {
+                    m_flag.Wait();
+                }
+            }
+        }
+
+        void Release()
+        {
+            ASSERT(0 != m_lock);
+            bool wake = (m_lock == 1); // only Set for Acquire()
+            m_lock = 0;
+            if (wake)
+            {
+                m_flag.Set();
+            }
+        }
+
+        bool TryAcquire()
+        {
+            std::uint32_t expected = 0;
+            const std::uint32_t desired = 2; //  different value if just trying
+            return m_lock.compare_exchange_weak(expected, desired);
+        }
+    private:
+        std::atomic<uint32_t> m_lock{ 0 };
+        SynchronizationFlag m_flag;
+    };
+
+    //==================================================
+    //==================================================
     // quick remove from container: find element, overwrite with last value, then shrink the container
     template<typename C, typename V> void ContainerRemove(C& container, V value)
     {

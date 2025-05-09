@@ -166,7 +166,7 @@ void SFS::ManagerBase::CaptureTraceFile(bool in_captureTrace)
 
 //-----------------------------------------------------------------------------
 // delete resources that have been requested via Remove()
-// used by BeginFrame() and ~Heap
+// used by BeginFrame() and, in debug mode only, ~Heap
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::RemoveResources()
 {
@@ -174,12 +174,21 @@ void SFS::ManagerBase::RemoveResources()
 
     if (m_removeResources.size())
     {
-        // stop other threads from accessing the resource
-        Finish();
+        m_threadsRunning = false;
+        m_processFeedbackFlag.Set();
+        if (m_processFeedbackThread.joinable())
+        {
+            m_processFeedbackThread.join();
+        }
+
+        // pauses this thread while affected updatelists are freed
+        m_dataUploader.EvictWork(m_removeResources);
 
         ContainerRemove(m_streamingResources, m_removeResources);
         ContainerRemove(m_pendingResources, m_removeResources);
         ContainerRemove(m_packedMipTransitionResources, m_removeResources);
+
+        m_residencyThread.RemoveResources(m_removeResources);
 
         for (auto r : m_removeResources) { delete r; }
         m_removeResources.clear();
@@ -218,11 +227,9 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     {
         ASSERT(0 == m_newResources.size());
         ASSERT(false == m_processFeedbackThreadRunning);
-        ASSERT(false == m_residencyThreadRunning);
 
         // no need to lock
         // treat all the resources as "new"
-        m_newResourcesShareRT = m_streamingResources;
         m_newResourcesSharePFT = m_streamingResources;
         // also treat all the resources as potentially having pending loads/evictions
         m_pendingSharePFT = m_streamingResources;
@@ -243,9 +250,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
             m_newResourcesSharePFT.insert(m_newResourcesSharePFT.end(), m_newResources.begin(), m_newResources.end());
             m_newResourcesLockPFT.Release();
 
-            m_newResourcesLockRT.Acquire();
-            m_newResourcesShareRT.insert(m_newResourcesShareRT.end(), m_newResources.begin(), m_newResources.end());
-            m_newResourcesLockRT.Release();
+            m_residencyThread.ShareNewResources(m_newResources);
         }
 
         // monitor new resources for when they need packed mip transition barriers

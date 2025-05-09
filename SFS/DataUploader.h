@@ -40,7 +40,8 @@
 //=============================================================================
 namespace SFS
 {
-    class StreamingResourceDU;
+    class ResourceDU;
+    class ResourceBase;
 
     class DataUploader
     {
@@ -56,6 +57,8 @@ namespace SFS
 
         FileHandle* OpenFile(const std::wstring& in_path) const { return m_pFileStreamer->OpenFile(in_path); }
  
+        void EvictWork(const std::set<ResourceBase*>& in_resources);
+
         // wait for all outstanding commands to complete. 
         void FlushCommands();
 
@@ -145,6 +148,11 @@ namespace SFS
         UINT64 m_memoryFenceValue{ 0 };
         void LoadTextureFromMemory(UpdateList& out_updateList);
         void SubmitTextureLoadsFromMemory();
+
+        const std::set<ResourceBase*>* m_pEvictWork{ nullptr };
+        SynchronizationFlag m_evictWorkFlag;
+        Lock m_evictWorkLock;
+        void EvictWork();
 
         //-------------------------------------------
         // statistics

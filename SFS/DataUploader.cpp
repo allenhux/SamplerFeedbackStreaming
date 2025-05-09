@@ -182,6 +182,7 @@ void SFS::DataUploader::StartThreads()
             while (m_threadsRunning)
             {
                 m_submitFlag.Wait();
+                EvictWork();
                 SubmitThread();
             }
         });
@@ -200,7 +201,7 @@ void SFS::DataUploader::StartThreads()
                 {
                     m_fenceMonitorFlag.Wait();
                 }
-
+                EvictWork();
                 FenceMonitorThread();
             }
         });
@@ -327,6 +328,73 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
 }
 
 //-----------------------------------------------------------------------------
+// free all UpdateLists using a resource from this set
+//-----------------------------------------------------------------------------
+void SFS::DataUploader::EvictWork(const std::set<ResourceBase*>& in_resources)
+{
+    m_pEvictWork = &in_resources;
+    m_fenceMonitorFlag.Set();
+    m_submitFlag.Set();
+    m_evictWorkFlag.Wait();
+}
+
+void SFS::DataUploader::EvictWork()
+{
+    if (nullptr == m_pEvictWork)
+    {
+        return;
+    }
+
+    // the thread that succeeds must wait for the other thread
+    if (m_evictWorkLock.TryAcquire())
+    {
+        m_evictWorkFlag.Wait();
+    }
+    else
+    {
+        {
+            for (UINT i = 0; i < m_monitorTaskAlloc.GetReadyToRead();)
+            {
+                UINT index = m_monitorTaskAlloc.GetReadIndex(i);
+                auto pUpdateList = m_monitorTasks[index];
+                if (m_pEvictWork->contains((ResourceBase*)pUpdateList->m_pResource))
+                {
+                    m_monitorTasks[index] = m_monitorTasks[m_monitorTaskAlloc.GetReadIndex()];
+                    m_monitorTaskAlloc.Free();
+                    FreeUpdateList(*pUpdateList);
+                }
+                else
+                {
+                    i++;
+                }
+            }
+        }
+
+        {
+            for (UINT i = 0; i < m_submitTaskAlloc.GetReadyToRead(); )
+            {
+                UINT index = m_submitTaskAlloc.GetReadIndex(i);
+                auto pUpdateList = m_submitTasks[index];
+                if (m_pEvictWork->contains((ResourceBase*)pUpdateList->m_pResource))
+                {
+                    m_submitTasks[index] = m_submitTasks[m_monitorTaskAlloc.GetReadIndex()];
+                    m_submitTaskAlloc.Free();
+                }
+                else
+                {
+                    i++;
+                }
+            }
+        }
+
+        m_pEvictWork = nullptr;
+
+        // resumes both the "other" thread and the main thread
+        m_evictWorkFlag.Set();
+    }
+}
+
+//-----------------------------------------------------------------------------
 // check necessary fences to determine completion status
 // possibilities:
 // 1. packed tiles, submitted state, mapping done, move to uploading state
@@ -339,17 +407,10 @@ void SFS::DataUploader::FenceMonitorThread()
 {
     bool loadPackedMips = false;
 
-    const UINT numTasks = m_monitorTaskAlloc.GetReadyToRead();
-    if (0 == numTasks)
+    for (UINT i = 0; i < m_monitorTaskAlloc.GetReadyToRead();)
     {
-        return;
-    }
-
-    const UINT startIndex = m_monitorTaskAlloc.GetReadIndex();
-    for (UINT i = startIndex; i < (startIndex + numTasks); i++)
-    {
-        ASSERT(numTasks != 0);
-        auto& updateList = *m_monitorTasks[i % m_monitorTasks.size()];
+        UINT taskIndex = m_monitorTaskAlloc.GetReadIndex(i);
+        auto& updateList = *m_monitorTasks[taskIndex];
 
         bool freeUpdateList = false;
 
@@ -444,9 +505,13 @@ void SFS::DataUploader::FenceMonitorThread()
         if (freeUpdateList)
         {
             // O(1) array compaction: move the first element to the position of the element to be freed, then reduce size by 1.
-            m_monitorTasks[i % m_monitorTasks.size()] = m_monitorTasks[m_monitorTaskAlloc.GetReadIndex()];
+            m_monitorTasks[taskIndex] = m_monitorTasks[m_monitorTaskAlloc.GetReadIndex()];
             m_monitorTaskAlloc.Free();
             FreeUpdateList(updateList);
+        }
+        else
+        {
+            i++;
         }
     } // end loop over updatelists
 
@@ -475,7 +540,7 @@ void SFS::DataUploader::SubmitThread()
         signalMap = true;
 
         auto& updateList = *m_submitTasks[m_submitTaskAlloc.GetReadIndex()]; // get the next task
-        m_submitTaskAlloc.Free(); // consume this task
+        m_submitTaskAlloc.Free(); // consume this task. not FREE yet, just no longer tracking in this thread
 
         ASSERT(UpdateList::State::STATE_SUBMITTED == updateList.m_executionState);
 

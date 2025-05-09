@@ -858,30 +858,28 @@ bool SFS::ResourceBase::InitPackedMips()
         return true;
     }
 
-    if (nullptr == m_pFileHandle)
+    UINT numTilesForPackedMips = m_resourceDesc.m_mipInfo.m_numTilesForPackedMips;
+
+    // no packed mips? odd, but possible. no need to check/update this variable again.
+    // NOTE: in this case, for simplicity, initialize now (usually deferred)
+    if (0 == numTilesForPackedMips)
     {
         DeferredInitialize1();
-
-        // no packed mips? odd, but possible. no need to check/update this variable again.
-        // NOTE: in this case, for simplicity, initialize now (usually deferred)
-        if (0 == m_resources->GetPackedMipInfo().NumTilesForPackedMips)
-        {
-            DeferredInitialize2();
-            m_packedMipStatus = PackedMipStatus::RESIDENT;
-            return true;
-        }
+        DeferredInitialize2();
+        m_packedMipStatus = PackedMipStatus::RESIDENT;
+        return true;
     }
 
     // allocate heap space
     // only allocate if all required tiles can be allocated at once
     if ((PackedMipStatus::HEAP_RESERVED > m_packedMipStatus) &&
-        (m_pHeap->GetAllocator().GetAvailable() >= m_resources->GetPackedMipInfo().NumTilesForPackedMips))
+        (m_pHeap->GetAllocator().GetAvailable() >= numTilesForPackedMips))
     {
-        m_pHeap->GetAllocator().Allocate(m_packedMipHeapIndices, m_resources->GetPackedMipInfo().NumTilesForPackedMips);
+        m_pHeap->GetAllocator().Allocate(m_packedMipHeapIndices, numTilesForPackedMips);
         m_packedMipStatus = PackedMipStatus::HEAP_RESERVED;
     }
 
-    ASSERT(m_packedMipHeapIndices.size() == m_resources->GetPackedMipInfo().NumTilesForPackedMips);
+    ASSERT(m_packedMipHeapIndices.size() == numTilesForPackedMips);
 
     // attempt to upload by acquiring an update list. may take many tries.
     SFS::UpdateList* pUpdateList = m_pSFSManager->AllocateUpdateList(this);

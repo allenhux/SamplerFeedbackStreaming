@@ -91,6 +91,7 @@
     <ClInclude Include="InternalResources.h" />
     <ClInclude Include="MappingUpdater.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="ResidencyThread.h" />
     <ClInclude Include="SamplerFeedbackStreaming.h" />
     <ClInclude Include="SimpleAllocator.h" />
     <ClInclude Include="Streaming.h" />
@@ -112,6 +113,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="ResidencyThread.cpp" />
     <ClCompile Include="SimpleAllocator.cpp" />
     <ClCompile Include="SFSHeap.cpp" />
     <ClCompile Include="SFSResource.cpp" />

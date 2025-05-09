@@ -41,6 +41,7 @@ Implementation of SFS Manager
 #include "Timer.h"
 #include "Streaming.h" // for ComPtr
 #include "DataUploader.h"
+#include "ResidencyThread.h"
 
 //=============================================================================
 // manager for tiled resources
@@ -96,6 +97,14 @@ namespace SFS
 
         virtual ~ManagerBase();
 
+        // only used by ResidencyThread
+        UINT8* ResidencyMapAcquire()
+        {
+            m_residencyMapLock.Acquire();
+            return (UINT8*)m_residencyMap.GetData();
+        }
+        void ResidencyMapRelease() { m_residencyMapLock.Release(); }
+
     protected:
         ComPtr<ID3D12Device8> m_device;
 
@@ -116,12 +125,12 @@ namespace SFS
             UINT m_bytesUsed{ 0 };
         } m_residencyMap;
 
+        ResidencyThread m_residencyThread;
+
         // do not delete in-use resources - wait until swapchaincount frames have passed
         std::vector<ComPtr<ID3D12Resource>> m_oldSharedResidencyMaps;
 
         std::set<ResourceBase*> m_removeResources;
-
-        SFS::SynchronizationFlag m_residencyChangedFlag;
 
         // after initialized, call AllocateResidencyMap() and AllocateSharedClearUavHeap()
         std::vector<ResourceBase*> m_packedMipTransitionResources;
@@ -134,14 +143,11 @@ namespace SFS
         std::vector<ResourceBase*> m_pendingSharePFT; // resources to be shared with ProcessFeedbackThread
         Lock m_pendingLockPFT;   // lock between ProcessFeedbackThread and main thread
 
-        std::vector<ResourceBase*> m_newResourcesShareRT; // resources to be shared with ResidencyThread
-        Lock m_newResourcesLockRT; // lock between ResidencyThread and main thread
-
         Lock m_residencyMapLock; // lock between ResidencyThread and main thread around shared residency map
+
     private:
 #ifdef _DEBUG
         std::atomic<bool> m_processFeedbackThreadRunning{ false };
-        std::atomic<bool> m_residencyThreadRunning{ false };
 #endif
 
         // direct queue is used to monitor progress of render frames so we know when feedback buffers are ready to be used
@@ -208,9 +214,6 @@ namespace SFS
 
         // a thread to process feedback (when available) and queue tile loads / evictions to datauploader
         std::thread m_processFeedbackThread;
-
-        // UpdateResidency thread's lifetime is bound to m_processFeedbackThread
-        std::thread m_updateResidencyThread;
 
         // the min mip map is shared. it must be created (at least) every time a SFSResource is created/destroyed
         void CreateMinMipMapView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor);
