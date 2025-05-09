@@ -210,12 +210,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     // release old shared residency map
     {
         auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
-        auto p = m_oldSharedResidencyMaps[i];
-        if (p)
-        {
-            p->Release();
-            m_oldSharedResidencyMaps[i] = nullptr;
-        }
+        m_oldSharedResidencyMaps[i] = nullptr;
     }
 
     // need to (re) StartThreads() if resources were deleted
