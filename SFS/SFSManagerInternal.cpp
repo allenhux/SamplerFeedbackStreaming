@@ -91,14 +91,6 @@ SFS::ManagerBase::~ManagerBase()
 {
     // force DataUploader to flush now, rather than waiting for its destructor
     Finish();
-
-    for (auto r : m_oldSharedResidencyMaps)
-    {
-        if (r)
-        {
-            r->Release();
-        }
-    }
 }
 
 //-----------------------------------------------------------------------------
@@ -454,7 +446,7 @@ void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in
             {
                 auto p = m_residencyMap.Detach();
                 auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
-                m_oldSharedResidencyMaps[i] = p;
+                m_oldSharedResidencyMaps[i].Attach(p);
             }
 
             m_residencyMap.Allocate(m_device.Get(), bufferSize, uploadHeapProperties);

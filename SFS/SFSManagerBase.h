@@ -117,7 +117,8 @@ namespace SFS
         } m_residencyMap;
 
         // do not delete in-use resources - wait until swapchaincount frames have passed
-        std::vector<ID3D12Resource*> m_oldSharedResidencyMaps;
+        std::vector<ComPtr<ID3D12Resource>> m_oldSharedResidencyMaps;
+
         std::set<ResourceBase*> m_removeResources;
 
         SFS::SynchronizationFlag m_residencyChangedFlag;
