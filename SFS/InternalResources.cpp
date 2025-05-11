@@ -59,6 +59,15 @@ SFS::InternalResources::InternalResources(
         NameStreamingTexture();
     }
 
+    m_readbackStride = in_swapChainBufferCount; // temporary storage until allocation
+}
+
+//-----------------------------------------------------------------------------
+// Defer creating some resources until after packed mips arrive
+// to reduce impact of creating an SFS Resource
+//-----------------------------------------------------------------------------
+void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice)
+{
     // query the reserved resource for its tile properties
     // allocate data structure according to tile properties
     {
@@ -66,8 +75,6 @@ SFS::InternalResources::InternalResources(
         m_tiling.resize(subresourceCount);
         in_pDevice->GetResourceTiling(GetTiledResource(), &m_numTilesTotal, &m_packedMipInfo, &m_tileShape, &subresourceCount, 0, m_tiling.data());
     }
-
-    m_readbackStride = in_swapChainBufferCount; // temporary storage until allocation
 
     // create the feedback map
     // the dimensions of the feedback map must match the size of the streaming texture
@@ -90,14 +97,7 @@ SFS::InternalResources::InternalResources(
             nullptr, IID_PPV_ARGS(&m_feedbackResource)));
         m_feedbackResource->SetName(L"m_feedbackResource");
     }
-}
 
-//-----------------------------------------------------------------------------
-// Defer creating some resources until after packed mips arrive
-// to reduce impact of creating an SFS Resource
-//-----------------------------------------------------------------------------
-void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice)
-{
 #if RESOLVE_TO_TEXTURE
     // create gpu-side resolve destination
     {
@@ -127,7 +127,7 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice)
         // CopyTextureRegion requires pitch multiple of D3D12_TEXTURE_DATA_PITCH_ALIGNMENT = 256
         UINT pitch = GetNumTilesWidth();
         pitch = (pitch + 0x0ff) & ~0x0ff;
-        UINT swapchainCount = m_readbackStride;
+        UINT swapchainCount = m_readbackStride; // swapchain count stored here during constructor
         m_readbackStride = pitch * (UINT)GetNumTilesHeight();
         rd.Width = m_readbackStride * swapchainCount;
 #endif

@@ -435,12 +435,13 @@ void SFS::DataUploader::FenceMonitorThread()
                 m_pFileStreamer->StreamPackedMips(updateList);
 
                 loadPackedMips = true;  // set flag so we signal fence below
-                updateList.m_executionState = UpdateList::State::STATE_PACKED_COPY_PENDING;
+                updateList.m_executionState = UpdateList::State::STATE_PACKED_INITIALIZE;
             }
-            else
-            {
-                break;
-            }
+            break; // give other resources a chance to start streaming
+
+        case UpdateList::State::STATE_PACKED_INITIALIZE:
+            updateList.m_pResource->DeferredInitialize();
+            updateList.m_executionState = UpdateList::State::STATE_PACKED_COPY_PENDING;
             [[fallthrough]];
 
         case UpdateList::State::STATE_PACKED_COPY_PENDING:

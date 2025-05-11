@@ -111,7 +111,7 @@ void SFS::ResourceDU::NotifyEvicted(const std::vector<D3D12_TILED_RESOURCE_COORD
 //-----------------------------------------------------------------------------
 void SFS::ResourceDU::NotifyPackedMips()
 {
-    DeferredInitialize2();
+    //DeferredInitialize2();
 
     m_packedMipStatus = PackedMipStatus::NEEDS_TRANSITION;
 }

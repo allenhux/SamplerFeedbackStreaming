@@ -106,6 +106,11 @@ void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRI
 {
     auto pResource = (SFS::ResourceBase*)in_pResource;
 
+    if (pResource->FirstUse())
+    {
+        m_firstTimeClears.push_back({ pResource, in_gpuDescriptor });
+    }
+
     m_feedbackReadbacks.push_back({ pResource, in_gpuDescriptor });
 
     // NOTE: feedback buffers will be cleared will happen after readback, in CommandListName::After
@@ -182,7 +187,8 @@ void SFS::ManagerBase::RemoveResources()
         }
 
         // pauses this thread while affected updatelists are freed
-        m_dataUploader.EvictWork(m_removeResources);
+        m_dataUploader.FlushCommands();
+        //m_dataUploader.EvictWork(m_removeResources);
 
         ContainerRemove(m_streamingResources, m_removeResources);
         ContainerRemove(m_pendingResources, m_removeResources);
@@ -353,6 +359,15 @@ SFSManager::CommandLists SFS::ManagerBase::EndFrame()
         if (m_feedbackReadbacks.size())
         {
             m_gpuTimerResolve.BeginTimer(pCommandList, m_renderFrameIndex);
+
+            if (m_firstTimeClears.size())
+            {
+                for (auto& t : m_firstTimeClears)
+                {
+                    t.m_pStreamingResource->ClearFeedback(GetCommandList(CommandListName::After), t.m_gpuDescriptor);
+                }
+                m_firstTimeClears.clear();
+            }
 
             // transition all feedback resources UAV->RESOLVE_SOURCE
             // also transition the (non-opaque) resolved resources COPY_SOURCE->RESOLVE_DEST

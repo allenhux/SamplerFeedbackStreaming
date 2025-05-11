@@ -164,6 +164,9 @@ namespace SFS
         };
         std::vector<FeedbackReadback> m_feedbackReadbacks;
 
+        // should clear feedback buffer before first use
+        std::vector<FeedbackReadback> m_firstTimeClears;
+
         SFS::SynchronizationFlag m_processFeedbackFlag;
 
         void StartThreads();

@@ -86,7 +86,7 @@ void SFS::ResourceBase::DeferredInitialize1()
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::DeferredInitialize2()
 {
-    m_tileMappingState.Init(m_maxMip, m_resources->GetTiling());
+    m_tileMappingState.Init(m_resourceDesc.m_standardMipInfo);
 
     // initialize a structure that holds ref counts with dimensions equal to min-mip-map
     // set the bottom-most bits, representing the packed mips as being resident
@@ -199,17 +199,17 @@ void SFS::ResourceBase::DecTileRef(UINT in_x, UINT in_y, UINT in_s)
 //-----------------------------------------------------------------------------
 // initialize data structure afther creating the reserved resource and querying its tiling properties
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::TileMappingState::Init(UINT in_numMips, const D3D12_SUBRESOURCE_TILING* in_pTiling)
+void SFS::ResourceBase::TileMappingState::Init(const std::vector<SFSResourceDesc::StandardMipInfo>& in_standardMipInfo)
 {
-    ASSERT(in_numMips);
-    m_refcounts.resize(in_numMips);
-    m_heapIndices.resize(in_numMips);
-    m_resident.resize(in_numMips);
+    UINT numMips = (UINT)in_standardMipInfo.size();
+    m_refcounts.resize(numMips);
+    m_heapIndices.resize(numMips);
+    m_resident.resize(numMips);
 
-    for (UINT mip = 0; mip < in_numMips; mip++)
+    for (UINT mip = 0; mip < numMips; mip++)
     {
-        UINT width = in_pTiling[mip].WidthInTiles;
-        UINT height = in_pTiling[mip].HeightInTiles;
+        UINT width = in_standardMipInfo[mip].m_widthTiles;
+        UINT height = in_standardMipInfo[mip].m_heightTiles;
 
         m_dimensions.push_back({ width, height });
 
@@ -958,7 +958,7 @@ void SFS::ResourceBase::ClearAllocations()
     m_pSFSManager->Finish();
 
     m_tileMappingState.FreeHeapAllocations(m_pHeap);
-    m_tileMappingState.Init(m_resources->GetPackedMipInfo().NumStandardMips, m_resources->GetTiling());
+    m_tileMappingState.Init(m_resourceDesc.m_standardMipInfo);
     m_tileReferences.assign(m_tileReferences.size(), m_maxMip);
     m_minMipMap.assign(m_minMipMap.size(), m_maxMip);
 

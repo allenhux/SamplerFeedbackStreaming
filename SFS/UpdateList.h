@@ -49,6 +49,7 @@ namespace SFS
             STATE_MAP_PENDING,           // check for mapping complete
 
             STATE_PACKED_MAPPING,        // wait for packed mips to be mapped before uploading
+            STATE_PACKED_INITIALIZE,     // initialize while packed mips are uploading
             STATE_PACKED_COPY_PENDING    // wait for upload of packed mips to complete
         };
 

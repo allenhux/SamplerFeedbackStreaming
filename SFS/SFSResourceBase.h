@@ -127,6 +127,12 @@ namespace SFS
         // SFSM needs this for barrier on packed mips
         ID3D12Resource* GetTiledResource() const override { return m_resources->GetTiledResource(); }
 
+        bool FirstUse()
+        {
+            if (m_firstUse) { m_firstUse = false; return true; }
+            return false;
+        }
+
         //-------------------------------------
         // end called by SFSM::EndFrame()
         //-------------------------------------
@@ -175,6 +181,7 @@ namespace SFS
         const UINT8 m_maxMip{ 0 }; // equals num standard mips
         const UINT m_tileReferencesWidth{ 0 };  // function of resource tiling
         const UINT m_tileReferencesHeight{ 0 }; // function of resource tiling
+        bool m_firstUse{ true }; // queried on first call to queue feedback
 
         std::unique_ptr<SFS::InternalResources> m_resources;
         std::unique_ptr<SFS::FileHandle> m_pFileHandle;
@@ -202,7 +209,7 @@ namespace SFS
         class TileMappingState
         {
         public:
-            void Init(UINT in_numMips, const D3D12_SUBRESOURCE_TILING* in_pTiling);
+            void Init(const std::vector<SFSResourceDesc::StandardMipInfo>& in_standardMipInfo);
 
             // 4 states are encoded by the residency state and ref count:
             // residency | refcount | tile state

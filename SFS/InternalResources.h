@@ -56,12 +56,6 @@ namespace SFS
 
         ID3D12Resource* GetOpaqueFeedback() const { return m_feedbackResource.Get(); }
 
-        UINT GetNumTilesWidth() const { return m_tiling[0].WidthInTiles; }
-        UINT GetNumTilesHeight() const { return m_tiling[0].HeightInTiles; }
-        UINT GetTileTexelWidth() const { return m_tileShape.WidthInTexels; }
-        UINT GetTileTexelHeight() const { return m_tileShape.HeightInTexels; }
-        const D3D12_PACKED_MIP_INFO& GetPackedMipInfo() const { return m_packedMipInfo; }
-        const D3D12_SUBRESOURCE_TILING* GetTiling() const { return m_tiling.data(); }
         UINT GetNumTilesVirtual() const { return m_numTilesTotal; }
 
         void ClearFeedback(ID3D12GraphicsCommandList* out_pCmdList, const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor,
@@ -91,5 +85,9 @@ namespace SFS
         std::vector<D3D12_SUBRESOURCE_TILING> m_tiling;
 
         void NameStreamingTexture();
+        UINT GetNumTilesWidth() const { return m_tiling[0].WidthInTiles; }
+        UINT GetNumTilesHeight() const { return m_tiling[0].HeightInTiles; }
+        UINT GetTileTexelWidth() const { return m_tileShape.WidthInTexels; }
+        UINT GetTileTexelHeight() const { return m_tileShape.HeightInTexels; }
     };
 }
