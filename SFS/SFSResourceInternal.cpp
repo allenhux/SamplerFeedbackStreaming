@@ -59,13 +59,15 @@ SFS::ResourceBase::ResourceBase(
     , m_pHeap(in_pHeap)
     , m_resourceDesc(in_desc)
     , m_filename(in_filename)
+    , m_maxMip((UINT8)m_resourceDesc.m_mipInfo.m_numStandardMips)
+    , m_tileReferencesWidth(m_resourceDesc.m_standardMipInfo[0].m_widthTiles)
+    , m_tileReferencesHeight(m_resourceDesc.m_standardMipInfo[0].m_heightTiles)
 {
     // most internal allocation deferred
-    m_tileReferencesWidth = m_resourceDesc.m_standardMipInfo[0].m_widthTiles;
-    m_tileReferencesHeight = m_resourceDesc.m_standardMipInfo[0].m_heightTiles;
-    m_maxMip = (UINT8)m_resourceDesc.m_mipInfo.m_numStandardMips;
     // there had better be standard mips, otherwise, why stream?
     ASSERT(m_maxMip);
+
+    // with m_maxMip and m_minMipMap, SFSManager will be able allocate/init the shared residency map
     m_minMipMap.assign(GetMinMipMapSize(), m_maxMip);
 }
 

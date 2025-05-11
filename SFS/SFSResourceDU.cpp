@@ -34,7 +34,9 @@
 void SFS::ResourceDU::LoadPackedMipInfo(UpdateList& out_updateList)
 {
     UpdateList::PackedMip packedMip;
-    GetPackedMipInfo(packedMip.m_mipInfo.offset, packedMip.m_mipInfo.numBytes, packedMip.m_mipInfo.uncompressedSize);
+    packedMip.m_mipInfo.offset = m_resourceDesc.m_packedMipData.m_offset;
+    packedMip.m_mipInfo.numBytes = m_resourceDesc.m_packedMipData.m_numBytes;
+    packedMip.m_mipInfo.uncompressedSize = m_resourceDesc.m_mipInfo.m_numUncompressedBytesForPackedMips;
     out_updateList.m_coords.push_back(packedMip.m_coord);
 }
 
@@ -45,10 +47,10 @@ void SFS::ResourceDU::MapPackedMips(ID3D12CommandQueue* in_pCommandQueue)
 {
     DeferredInitialize1();
 
-    UINT firstSubresource = GetPackedMipInfo().NumStandardMips;
+    UINT firstSubresource = m_resourceDesc.m_mipInfo.m_numStandardMips;
 
     // mapping packed mips is different from regular tiles: must be mapped before we can use copytextureregion() instead of copytiles()
-    UINT numTiles = GetPackedMipInfo().NumTilesForPackedMips;
+    UINT numTiles = m_resourceDesc.m_mipInfo.m_numTilesForPackedMips;
 
     std::vector<D3D12_TILE_RANGE_FLAGS> rangeFlags(numTiles, D3D12_TILE_RANGE_FLAG_NONE);
 

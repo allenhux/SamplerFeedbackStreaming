@@ -41,7 +41,7 @@ namespace SFS
         SFS::Heap* GetHeap() const { return m_pHeap; }
 
         // just for packed mips
-        const D3D12_PACKED_MIP_INFO& GetPackedMipInfo() const { return m_resources->GetPackedMipInfo(); }
+        const UINT GetPackedMipsFirstSubresource() const { return m_maxMip; }
 
         void NotifyCopyComplete(const std::vector<D3D12_TILED_RESOURCE_COORDINATE>& in_coords);
         void NotifyPackedMips();
@@ -63,13 +63,6 @@ namespace SFS
         SFSResourceDesc::TileData GetFileOffset(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) const
         {
             return m_resourceDesc.m_tileData[m_resourceDesc.GetLinearIndex(in_coord.X, in_coord.Y, in_coord.Subresource)];
-        }
-
-        void GetPackedMipInfo(UINT& out_fileOffset, UINT& out_numBytes, UINT& out_numUncompressedBytes)
-        {
-            out_fileOffset = m_resourceDesc.m_packedMipData.m_offset;
-            out_numBytes = m_resourceDesc.m_packedMipData.m_numBytes;
-            out_numUncompressedBytes = m_resourceDesc.m_mipInfo.m_numUncompressedBytesForPackedMips;
         }
     };
 }

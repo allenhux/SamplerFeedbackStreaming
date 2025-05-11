@@ -100,7 +100,7 @@ void SFS::FileStreamerDS::StreamPackedMips(SFS::UpdateList& in_updateList)
     request.Source.File.Offset = packedMip.m_mipInfo.offset;
     request.UncompressedSize = packedMip.m_mipInfo.uncompressedSize;
     request.Destination.MultipleSubresources.Resource = in_updateList.m_pResource->GetTiledResource();
-    request.Destination.MultipleSubresources.FirstSubresource = in_updateList.m_pResource->GetPackedMipInfo().NumStandardMips;
+    request.Destination.MultipleSubresources.FirstSubresource = in_updateList.m_pResource->GetPackedMipsFirstSubresource();
     request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)in_updateList.m_pResource->GetCompressionFormat();
 
     m_fileQueue->EnqueueRequest(&request);

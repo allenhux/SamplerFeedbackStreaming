@@ -172,6 +172,10 @@ namespace SFS
     protected:
         const SFSResourceDesc m_resourceDesc;
         std::wstring m_filename; // only used so we can dynamically change file streamer type :/
+        const UINT8 m_maxMip{ 0 }; // equals num standard mips
+        const UINT m_tileReferencesWidth{ 0 };  // function of resource tiling
+        const UINT m_tileReferencesHeight{ 0 }; // function of resource tiling
+
         std::unique_ptr<SFS::InternalResources> m_resources;
         std::unique_ptr<SFS::FileHandle> m_pFileHandle;
         SFS::Heap* m_pHeap{ nullptr };
@@ -319,10 +323,7 @@ namespace SFS
         // with a 16kx16k limit, DX will never see 255 mip levels. but, we want a byte so we can modify cache-coherently
         using TileReference = UINT8;
         std::vector<TileReference> m_tileReferences;
-        UINT m_tileReferencesWidth{ 0 };  // function of resource tiling
-        UINT m_tileReferencesHeight{ 0 }; // function of resource tiling
 
-        UINT8 m_maxMip{ 0 }; // FIXME: equals num standard mips, should be const known at constructor time
         std::vector<BYTE, SFS::AlignedAllocator<BYTE>> m_minMipMap; // local version of min mip map, rectified in UpdateMinMipMap()
 
         // drop pending loads that are no longer relevant
