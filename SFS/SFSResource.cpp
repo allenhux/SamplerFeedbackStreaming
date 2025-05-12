@@ -46,13 +46,13 @@ void SFS::ResourceBase::Destroy()
 void SFS::ResourceBase::CreateFeedbackView(D3D12_CPU_DESCRIPTOR_HANDLE out_descriptorHandle)
 {
     m_pSFSManager->GetDevice()->CreateSamplerFeedbackUnorderedAccessView(
-        m_resources->GetTiledResource(),
-        m_resources->GetOpaqueFeedback(),
+        m_resources.GetTiledResource(),
+        m_resources.GetOpaqueFeedback(),
         out_descriptorHandle);
 #if 0
     // FIXME? instead of create, could copy m_clearUavDescriptor, except this is method is used to create that descriptor also
     in_pDevice->CopyDescriptorsSimple(1, in_descriptorHandle,
-        m_resources->GetClearUavHeap()->GetCPUDescriptorHandleForHeapStart(),
+        m_resources.GetClearUavHeap()->GetCPUDescriptorHandleForHeapStart(),
         m_clearUavDescriptor);
 #endif
 }
@@ -62,10 +62,10 @@ void SFS::ResourceBase::CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE in_
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
     srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     srvDesc.Texture2D.MipLevels = UINT(-1);
-    srvDesc.Format = m_resources->GetTiledResource()->GetDesc().Format;
+    srvDesc.Format = m_resources.GetTiledResource()->GetDesc().Format;
     srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
-    m_pSFSManager->GetDevice()->CreateShaderResourceView(m_resources->GetTiledResource(), &srvDesc, in_descriptorHandle);
+    m_pSFSManager->GetDevice()->CreateShaderResourceView(m_resources.GetTiledResource(), &srvDesc, in_descriptorHandle);
 }
 
 //-----------------------------------------------------------------------------
@@ -132,5 +132,6 @@ void SFS::ResourceBase::QueueEviction()
 //-----------------------------------------------------------------------------
 UINT SFS::ResourceBase::GetNumTilesVirtual() const
 {
-    return m_resources->GetNumTilesVirtual();
+    return m_resourceDesc.m_mipInfo.m_numTilesForPackedMips +
+        m_resourceDesc.m_mipInfo.m_numTilesForStandardMips;
 }

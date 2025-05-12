@@ -30,50 +30,45 @@
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-SFS::InternalResources::InternalResources(
-    ID3D12Device8* in_pDevice,
-    const SFSResourceDesc& in_resourceDesc,
-    // need the swap chain count so we can create per-frame upload buffers
-    UINT in_swapChainBufferCount) :
-    m_packedMipInfo{}, m_tileShape{}, m_numTilesTotal(0)
+SFS::InternalResources::InternalResources()
+{}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void SFS::InternalResources::CreateTiledResource(ID3D12Device8* in_pDevice, const SFSResourceDesc& in_resourceDesc)
 {
-    // create reserved resource
-    {
-        D3D12_RESOURCE_DESC rd = CD3DX12_RESOURCE_DESC::Tex2D(
-            (DXGI_FORMAT)in_resourceDesc.m_textureFormat,
-            in_resourceDesc.m_width,
-            in_resourceDesc.m_height, 1,
-            (UINT16)in_resourceDesc.m_mipInfo.m_numStandardMips + (UINT16)in_resourceDesc.m_mipInfo.m_numPackedMips
-        );
+    D3D12_RESOURCE_DESC rd = CD3DX12_RESOURCE_DESC::Tex2D(
+        (DXGI_FORMAT)in_resourceDesc.m_textureFormat,
+        in_resourceDesc.m_width,
+        in_resourceDesc.m_height, 1,
+        (UINT16)in_resourceDesc.m_mipInfo.m_numStandardMips + (UINT16)in_resourceDesc.m_mipInfo.m_numPackedMips
+    );
 
-        // Layout must be D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE when creating reserved resources
-        rd.Layout = D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
+    // Layout must be D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE when creating reserved resources
+    rd.Layout = D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
 
-        ThrowIfFailed(in_pDevice->CreateReservedResource(
-            &rd,
-            // application is allowed to use before packed mips are loaded, but it's really a copy dest
-            D3D12_RESOURCE_STATE_COMMON,
-            nullptr,
-            IID_PPV_ARGS(&m_tiledResource)));
+    ThrowIfFailed(in_pDevice->CreateReservedResource(
+        &rd,
+        // application is allowed to use before packed mips are loaded, but it's really a copy dest
+        D3D12_RESOURCE_STATE_COMMON,
+        nullptr,
+        IID_PPV_ARGS(&m_tiledResource)));
 
-        NameStreamingTexture();
-    }
-
-    m_readbackStride = in_swapChainBufferCount; // temporary storage until allocation
+    NameStreamingTexture();
 }
 
 //-----------------------------------------------------------------------------
 // Defer creating some resources until after packed mips arrive
 // to reduce impact of creating an SFS Resource
 //-----------------------------------------------------------------------------
-void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice)
+void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_swapChainBufferCount)
 {
     // query the reserved resource for its tile properties
     // allocate data structure according to tile properties
     {
         UINT subresourceCount = GetTiledResource()->GetDesc().MipLevels;
         m_tiling.resize(subresourceCount);
-        in_pDevice->GetResourceTiling(GetTiledResource(), &m_numTilesTotal, &m_packedMipInfo, &m_tileShape, &subresourceCount, 0, m_tiling.data());
+        in_pDevice->GetResourceTiling(GetTiledResource(), nullptr, &m_packedMipInfo, &m_tileShape, &subresourceCount, 0, m_tiling.data());
     }
 
     // create the feedback map
@@ -127,9 +122,8 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice)
         // CopyTextureRegion requires pitch multiple of D3D12_TEXTURE_DATA_PITCH_ALIGNMENT = 256
         UINT pitch = GetNumTilesWidth();
         pitch = (pitch + 0x0ff) & ~0x0ff;
-        UINT swapchainCount = m_readbackStride; // swapchain count stored here during constructor
         m_readbackStride = pitch * (UINT)GetNumTilesHeight();
-        rd.Width = m_readbackStride * swapchainCount;
+        rd.Width = m_readbackStride * in_swapChainBufferCount;
 #endif
 
         ThrowIfFailed(in_pDevice->CreateCommittedResource(

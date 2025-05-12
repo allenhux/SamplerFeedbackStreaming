@@ -770,6 +770,8 @@ void Scene::SetSphereMatrix(float in_minDistance)
 //-----------------------------------------------------------------------------
 void Scene::LoadSpheres()
 {
+    bool updateNumTiles = (m_objects.size() != (UINT)m_args.m_numSpheres);
+
     if (m_objects.size() < (UINT)m_args.m_numSpheres)
     {
         UINT textureIndex = (UINT)m_objects.size();
@@ -826,6 +828,14 @@ void Scene::LoadSpheres()
 
             delete pObject;
             m_objects.resize(m_objects.size() - 1);
+        }
+    }
+    if (updateNumTiles)
+    {
+        m_numTilesVirtual = 0;
+        for (auto& o : m_objects)
+        {
+            m_numTilesVirtual += o->GetStreamingResource()->GetNumTilesVirtual();
         }
     }
 }
@@ -1734,15 +1744,6 @@ void Scene::DrawUI()
         ID3D12DescriptorHeap* ppHeaps[] = { m_srvHeap.Get(), m_samplerHeap.Get() };
         m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
-        UINT numTilesVirtual = 0;
-        for (auto& o : m_objects)
-        {
-            if (o->Drawable())
-            {
-                numTilesVirtual += o->GetStreamingResource()->GetNumTilesVirtual();
-            }
-        }
-
         UINT numTilesCommitted = 0;
         for (auto h : m_sharedHeaps)
         {
@@ -1766,7 +1767,7 @@ void Scene::DrawUI()
         guiDrawParams.m_numTilesUploaded = m_numUploadsPreviousFrame;
         guiDrawParams.m_numTilesEvicted = m_numEvictionsPreviousFrame;
         guiDrawParams.m_numTilesCommitted = numTilesCommitted;
-        guiDrawParams.m_numTilesVirtual = numTilesVirtual;
+        guiDrawParams.m_numTilesVirtual = m_numTilesVirtual;
         guiDrawParams.m_totalHeapSize = m_args.m_streamingHeapSize * (UINT)m_sharedHeaps.size();
         guiDrawParams.m_windowHeight = m_args.m_windowHeight;
 

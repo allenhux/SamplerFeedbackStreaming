@@ -111,7 +111,7 @@ namespace SFS
         void SetClearUavDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE in_cpuDescriptor) { m_clearUavDescriptor = in_cpuDescriptor; }
         void ClearFeedback(ID3D12GraphicsCommandList* in_pCmdList, const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor);
 
-        ID3D12Resource* GetOpaqueFeedback() { return m_resources->GetOpaqueFeedback(); }
+        ID3D12Resource* GetOpaqueFeedback() { return m_resources.GetOpaqueFeedback(); }
 
         // call after drawing to get feedback
         void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList);
@@ -121,11 +121,11 @@ namespace SFS
         void ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList);
 
         // SFSM needs this for barrier before/after copy
-        ID3D12Resource* GetResolvedFeedback() const override { return m_resources->GetResolvedFeedback(); }
+        ID3D12Resource* GetResolvedFeedback() const override { return m_resources.GetResolvedFeedback(); }
 #endif
 
         // SFSM needs this for barrier on packed mips
-        ID3D12Resource* GetTiledResource() const override { return m_resources->GetTiledResource(); }
+        ID3D12Resource* GetTiledResource() const override { return m_resources.GetTiledResource(); }
 
         bool FirstUse()
         {
@@ -183,7 +183,7 @@ namespace SFS
         const UINT m_tileReferencesHeight{ 0 }; // function of resource tiling
         bool m_firstUse{ true }; // queried on first call to queue feedback
 
-        std::unique_ptr<SFS::InternalResources> m_resources;
+        SFS::InternalResources m_resources;
         std::unique_ptr<SFS::FileHandle> m_pFileHandle;
         SFS::Heap* m_pHeap{ nullptr };
 

@@ -37,12 +37,13 @@ namespace SFS
     class InternalResources
     {
     public:
-        InternalResources(ID3D12Device8* in_pDevice, const SFSResourceDesc& in_resourceDesc,
-            // need the swap chain count so we can create per-frame upload buffers
-            UINT in_swapChainBufferCount);
+        InternalResources();
+
+        void CreateTiledResource(ID3D12Device8* in_pDevice, const SFSResourceDesc& in_resourceDesc);
 
         // finish some initialization until when the packed mips arrive
-        void Initialize(ID3D12Device8* in_pDevice);
+        // need the swap chain count so we can create per-frame readback buffers
+        void Initialize(ID3D12Device8* in_pDevice, UINT in_swapChainBufferCount);
 
         ID3D12Resource* GetTiledResource() const { return m_tiledResource.Get(); }
 
@@ -55,8 +56,6 @@ namespace SFS
 #endif
 
         ID3D12Resource* GetOpaqueFeedback() const { return m_feedbackResource.Get(); }
-
-        UINT GetNumTilesVirtual() const { return m_numTilesTotal; }
 
         void ClearFeedback(ID3D12GraphicsCommandList* out_pCmdList, const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor,
             const D3D12_CPU_DESCRIPTOR_HANDLE in_cpuDescriptor);
@@ -79,9 +78,8 @@ namespace SFS
         ComPtr<ID3D12Resource> m_resolvedReadback;
         UINT8* m_resolvedReadbackCpuAddress{ nullptr };
 
-        D3D12_PACKED_MIP_INFO m_packedMipInfo; // last n mips may be packed into a single tile
-        D3D12_TILE_SHAPE m_tileShape;          // e.g. a 64K tile may contain 128x128 texels @ 4B/pixel
-        UINT m_numTilesTotal;
+        D3D12_PACKED_MIP_INFO m_packedMipInfo{}; // last n mips may be packed into a single tile
+        D3D12_TILE_SHAPE m_tileShape{};          // e.g. a 64K tile may contain 128x128 texels @ 4B/pixel
         std::vector<D3D12_SUBRESOURCE_TILING> m_tiling;
 
         void NameStreamingTexture();

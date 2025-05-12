@@ -77,7 +77,7 @@ SFS::ResourceBase::ResourceBase(
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::DeferredInitialize1()
 {
-    m_resources = std::make_unique<SFS::InternalResources>(m_pSFSManager->GetDevice(), m_resourceDesc, (UINT)m_queuedFeedback.size());
+    m_resources.CreateTiledResource(m_pSFSManager->GetDevice(), m_resourceDesc);
     m_pFileHandle.reset(m_pSFSManager->OpenFile(m_filename));
 }
 
@@ -90,8 +90,8 @@ void SFS::ResourceBase::DeferredInitialize2()
 
     // initialize a structure that holds ref counts with dimensions equal to min-mip-map
     // set the bottom-most bits, representing the packed mips as being resident
-    ASSERT(m_tileReferencesWidth == m_resources->GetNumTilesWidth());
-    ASSERT(m_tileReferencesHeight == m_resources->GetNumTilesHeight());
+    ASSERT(m_tileReferencesWidth == m_resources.GetNumTilesWidth());
+    ASSERT(m_tileReferencesHeight == m_resources.GetNumTilesHeight());
 
     // m_tileReferences tracks what tiles we want to have
     // m_minMipMap represents the tiles we actually have, and is read directly by pixel shaders
@@ -100,7 +100,7 @@ void SFS::ResourceBase::DeferredInitialize2()
     // make sure my heap has an atlas corresponding to my format
     m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), (DXGI_FORMAT)m_resourceDesc.m_textureFormat);
 
-    m_resources->Initialize(m_pSFSManager->GetDevice());
+    m_resources.Initialize(m_pSFSManager->GetDevice(), (UINT)m_queuedFeedback.size());
 }
 
 //-----------------------------------------------------------------------------
@@ -410,7 +410,7 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
             const UINT height = GetNumTilesHeight();
 
             // mapped host feedback buffer
-            UINT8* pResolvedData = (UINT8*)m_resources->MapResolvedReadback(feedbackIndex);
+            UINT8* pResolvedData = (UINT8*)m_resources.MapResolvedReadback(feedbackIndex);
 
             TileReference* pTileRow = m_tileReferences.data();
             for (UINT y = 0; y < height; y++)
@@ -433,7 +433,7 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
 #endif
 
             } // end loop over y
-            m_resources->UnmapResolvedReadback(feedbackIndex);
+            m_resources.UnmapResolvedReadback(feedbackIndex);
         }
 
         // if refcount changed, there's a new pending upload or eviction
@@ -914,7 +914,7 @@ bool SFS::ResourceBase::GetPackedMipsNeedTransition()
 
 void SFS::ResourceBase::ClearFeedback(ID3D12GraphicsCommandList* in_pCmdList, const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor)
 {
-    m_resources->ClearFeedback(in_pCmdList, in_gpuDescriptor, m_clearUavDescriptor);
+    m_resources.ClearFeedback(in_pCmdList, in_gpuDescriptor, m_clearUavDescriptor);
 }
 
 //-----------------------------------------------------------------------------
@@ -933,7 +933,7 @@ void SFS::ResourceBase::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList
     f.m_renderFenceForFeedback = m_pSFSManager->GetFrameFenceValue();
     f.m_feedbackQueued = true;
 
-    m_resources->ResolveFeedback(out_pCmdList, m_readbackIndex);
+    m_resources.ResolveFeedback(out_pCmdList, m_readbackIndex);
 }
 
 #if RESOLVE_TO_TEXTURE
@@ -943,7 +943,7 @@ void SFS::ResourceBase::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList
 void SFS::ResourceBase::ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList)
 {
     // write readback command to command list if resolving to texture
-    m_resources->ReadbackFeedback(out_pCmdList, m_readbackIndex);
+    m_resources.ReadbackFeedback(out_pCmdList, m_readbackIndex);
 }
 #endif
 

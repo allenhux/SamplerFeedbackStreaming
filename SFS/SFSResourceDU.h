@@ -47,7 +47,7 @@ namespace SFS
         void NotifyPackedMips();
         void NotifyEvicted(const std::vector<D3D12_TILED_RESOURCE_COORDINATE>& in_coords);
 
-        ID3D12Resource* GetTiledResource() const { return m_resources->GetTiledResource(); }
+        ID3D12Resource* GetTiledResource() const { return m_resources.GetTiledResource(); }
 
         const FileHandle* GetFileHandle() const { return m_pFileHandle.get(); }
         const std::wstring& GetFileName() const { return m_filename; }

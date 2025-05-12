@@ -127,7 +127,6 @@ private:
     // e.g. rotate by radians*m_framenumber
     // frameNumber can optionally be stalled while waiting for initial resource load
     UINT m_frameNumber{ 0 };
-    bool m_allLoaded{ true }; // set to false when new objects added. set to true when packed mips have loaded.
 
     std::default_random_engine m_gen;
 
@@ -298,6 +297,7 @@ private:
     UINT m_startSubmitCount{ 0 };
     float m_totalTileLatency{ 0 }; // per-tile upload latency. NOT the same as per-UpdateList
     Timer m_cpuTimer;
+    UINT m_numTilesVirtual{ 0 };
 
     void HandleUIchanges();
     bool WaitForAssetLoad();
