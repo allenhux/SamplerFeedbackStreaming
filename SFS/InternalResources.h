@@ -78,14 +78,6 @@ namespace SFS
         ComPtr<ID3D12Resource> m_resolvedReadback;
         UINT8* m_resolvedReadbackCpuAddress{ nullptr };
 
-        D3D12_PACKED_MIP_INFO m_packedMipInfo{}; // last n mips may be packed into a single tile
-        D3D12_TILE_SHAPE m_tileShape{};          // e.g. a 64K tile may contain 128x128 texels @ 4B/pixel
-        std::vector<D3D12_SUBRESOURCE_TILING> m_tiling;
-
         void NameStreamingTexture();
-        UINT GetNumTilesWidth() const { return m_tiling[0].WidthInTiles; }
-        UINT GetNumTilesHeight() const { return m_tiling[0].HeightInTiles; }
-        UINT GetTileTexelWidth() const { return m_tileShape.WidthInTexels; }
-        UINT GetTileTexelHeight() const { return m_tileShape.HeightInTexels; }
     };
 }

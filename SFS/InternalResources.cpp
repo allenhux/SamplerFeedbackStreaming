@@ -65,11 +65,15 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_swapC
 {
     // query the reserved resource for its tile properties
     // allocate data structure according to tile properties
-    {
-        UINT subresourceCount = GetTiledResource()->GetDesc().MipLevels;
-        m_tiling.resize(subresourceCount);
-        in_pDevice->GetResourceTiling(GetTiledResource(), nullptr, &m_packedMipInfo, &m_tileShape, &subresourceCount, 0, m_tiling.data());
-    }
+    D3D12_TILE_SHAPE tileShape{}; // e.g. a 64K tile may contain 128x128 texels @ 4B/pixel
+    UINT subresourceCount = 1; // only care about the topmost mip level
+    D3D12_SUBRESOURCE_TILING tiling;
+    in_pDevice->GetResourceTiling(GetTiledResource(), nullptr, nullptr, &tileShape, &subresourceCount, 0, &tiling);
+
+    UINT numTilesWidth = tiling.WidthInTiles;
+    UINT numTilesHeight = tiling.HeightInTiles;
+    UINT tileTexelWidth = tileShape.WidthInTexels;
+    UINT tileTexelHeight = tileShape.HeightInTexels;
 
     // create the feedback map
     // the dimensions of the feedback map must match the size of the streaming texture
@@ -79,7 +83,7 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_swapC
             DXGI_FORMAT_SAMPLER_FEEDBACK_MIN_MIP_OPAQUE,
             desc.Width, desc.Height, desc.DepthOrArraySize, desc.MipLevels);
         sfbDesc.SamplerFeedbackMipRegion = D3D12_MIP_REGION{
-            GetTileTexelWidth(), GetTileTexelHeight(), 1 };
+            tileTexelWidth, tileTexelHeight, 1 };
 
         // the feedback texture must be in the unordered state to be written, then transitioned to RESOLVE_SOURCE
         sfbDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
@@ -96,10 +100,10 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_swapC
 #if RESOLVE_TO_TEXTURE
     // create gpu-side resolve destination
     {
-        D3D12_RESOURCE_DESC rd = CD3DX12_RESOURCE_DESC::Buffer(GetNumTilesWidth() * GetNumTilesHeight());
+        D3D12_RESOURCE_DESC rd = CD3DX12_RESOURCE_DESC::Buffer(numTilesWidth * numTilesHeight);
         const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 
-        const auto textureDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8_UINT, GetNumTilesWidth(), GetNumTilesHeight(), 1, 1);
+        const auto textureDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8_UINT, numTilesWidth, numTilesHeight, 1, 1);
 
         ThrowIfFailed(in_pDevice->CreateCommittedResource(
             &heapProperties,
@@ -115,14 +119,14 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_swapC
 #endif
 
     {
-        D3D12_RESOURCE_DESC rd = CD3DX12_RESOURCE_DESC::Buffer(GetNumTilesWidth() * GetNumTilesHeight());
+        D3D12_RESOURCE_DESC rd = CD3DX12_RESOURCE_DESC::Buffer(numTilesWidth * numTilesHeight);
         const auto resolvedHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK);
 
 #if RESOLVE_TO_TEXTURE
         // CopyTextureRegion requires pitch multiple of D3D12_TEXTURE_DATA_PITCH_ALIGNMENT = 256
-        UINT pitch = GetNumTilesWidth();
+        UINT pitch = numTilesWidth;
         pitch = (pitch + 0x0ff) & ~0x0ff;
-        m_readbackStride = pitch * (UINT)GetNumTilesHeight();
+        m_readbackStride = pitch * (UINT)numTilesHeight;
         rd.Width = m_readbackStride * in_swapChainBufferCount;
 #endif
 

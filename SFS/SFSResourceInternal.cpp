@@ -89,13 +89,9 @@ void SFS::ResourceBase::DeferredInitialize2()
     m_tileMappingState.Init(m_resourceDesc.m_standardMipInfo);
 
     // initialize a structure that holds ref counts with dimensions equal to min-mip-map
-    // set the bottom-most bits, representing the packed mips as being resident
-    ASSERT(m_tileReferencesWidth == m_resources.GetNumTilesWidth());
-    ASSERT(m_tileReferencesHeight == m_resources.GetNumTilesHeight());
-
     // m_tileReferences tracks what tiles we want to have
     // m_minMipMap represents the tiles we actually have, and is read directly by pixel shaders
-    m_tileReferences.resize(GetMinMipMapSize(), m_maxMip);
+    m_tileReferences.assign(GetMinMipMapSize(), m_maxMip);
 
     // make sure my heap has an atlas corresponding to my format
     m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), (DXGI_FORMAT)m_resourceDesc.m_textureFormat);
