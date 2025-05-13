@@ -42,6 +42,7 @@ Implementation of SFS Manager
 #include "Streaming.h" // for ComPtr
 #include "DataUploader.h"
 #include "ResidencyThread.h"
+#include "ProcessFeedbackThread.h"
 
 //=============================================================================
 // manager for tiled resources
@@ -105,6 +106,9 @@ namespace SFS
         }
         void ResidencyMapRelease() { m_residencyMapLock.Release(); }
 
+        // only used by ProcessFeedbackThread
+        UINT64 GetFrameFenceCompletedValue() { return m_frameFence->GetCompletedValue(); }
+
     protected:
         ComPtr<ID3D12Device8> m_device;
 
@@ -125,7 +129,11 @@ namespace SFS
             UINT m_bytesUsed{ 0 };
         } m_residencyMap;
 
+        // a thread to update residency maps based on feedback
         ResidencyThread m_residencyThread;
+
+        // a thread to process feedback (when available) and queue tile loads / evictions to datauploader
+        ProcessFeedbackThread m_processFeedbackThread;
 
         // do not delete in-use resources - wait until swapchaincount frames have passed
         std::vector<ComPtr<ID3D12Resource>> m_oldSharedResidencyMaps;
@@ -136,12 +144,8 @@ namespace SFS
         std::vector<ResourceBase*> m_packedMipTransitionResources;
 
         std::vector<ResourceBase*> m_newResources; // list of newly created resources
-        std::vector<ResourceBase*> m_newResourcesSharePFT; // resources to be shared with ProcessFeedbackThread
-        Lock m_newResourcesLockPFT;   // lock between ProcessFeedbackThread and main thread
 
         std::vector<ResourceBase*> m_pendingResources; // resources where feedback or eviction requested
-        std::vector<ResourceBase*> m_pendingSharePFT; // resources to be shared with ProcessFeedbackThread
-        Lock m_pendingLockPFT;   // lock between ProcessFeedbackThread and main thread
 
         Lock m_residencyMapLock; // lock between ResidencyThread and main thread around shared residency map
 
@@ -167,8 +171,6 @@ namespace SFS
         // should clear feedback buffer before first use
         std::vector<FeedbackReadback> m_firstTimeClears;
 
-        SFS::SynchronizationFlag m_processFeedbackFlag;
-
         void StartThreads();
         void ProcessFeedbackThread();
         void StopThreads(); // stop only SFSManager threads. Used by Finish()
@@ -193,7 +195,6 @@ namespace SFS
         D3D12GpuTimer m_gpuTimerResolve; // time for feedback resolve
 
         RawCpuTimer m_cpuTimer;
-        std::atomic<INT64> m_processFeedbackTime{ 0 }; // sum of cpu timer times since start
         INT64 m_previousFeedbackTime{ 0 }; // m_processFeedbackTime at time of last query
         float m_processFeedbackFrameTime{ 0 }; // cpu time spent processing feedback for the most recent frame
 
@@ -207,16 +208,7 @@ namespace SFS
         };
         std::vector<CommandList> m_commandLists;
 
-        const UINT m_maxTileMappingUpdatesPerApiCall;
-
-        const UINT m_minNumUploadRequests{ 2000 }; // heuristic to reduce Submit()s
-        void SignalFileStreamer();
-
-        std::atomic<bool> m_threadsRunning{ false };
-        int m_threadPriority{ 0 };
-
-        // a thread to process feedback (when available) and queue tile loads / evictions to datauploader
-        std::thread m_processFeedbackThread;
+        bool m_threadsRunning{ false };
 
         // the min mip map is shared. it must be created (at least) every time a SFSResource is created/destroyed
         void CreateMinMipMapView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor);
@@ -233,7 +225,6 @@ namespace SFS
         //-------------------------------------------
         // statistics
         //-------------------------------------------
-        std::atomic<UINT> m_numTotalSubmits{ 0 };
         const bool m_traceCaptureMode{ false };
     };
 }

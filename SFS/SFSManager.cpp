@@ -149,7 +149,9 @@ float SFS::ManagerBase::GetTotalTileCopyLatency() const { return m_dataUploader.
 float SFS::ManagerBase::GetGpuTime() const { return m_gpuTimerResolve.GetTimes()[m_renderFrameIndex].first; }
 UINT SFS::ManagerBase::GetTotalNumUploads() const { return m_dataUploader.GetTotalNumUploads(); }
 UINT SFS::ManagerBase::GetTotalNumEvictions() const { return m_dataUploader.GetTotalNumEvictions(); }
-UINT SFS::ManagerBase::GetTotalNumSubmits() const { return m_numTotalSubmits; }
+
+// FIXME
+UINT SFS::ManagerBase::GetTotalNumSubmits() const { return m_processFeedbackThread.GetTotalNumSubmits(); }
 
 void SFS::ManagerBase::SetVisualizationMode(UINT in_mode)
 {
@@ -179,12 +181,7 @@ void SFS::ManagerBase::RemoveResources()
 
     if (m_removeResources.size())
     {
-        m_threadsRunning = false;
-        m_processFeedbackFlag.Set();
-        if (m_processFeedbackThread.joinable())
-        {
-            m_processFeedbackThread.join();
-        }
+        m_processFeedbackThread.RemoveResources(m_removeResources);
 
         // pauses this thread while affected updatelists are freed
         m_dataUploader.FlushCommands();
@@ -228,17 +225,12 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
         m_oldSharedResidencyMaps[i] = nullptr;
     }
 
-    // need to (re) StartThreads() if resources were deleted
+    // need to re-StartThreads() if stopped
+    // (change in visualization mode or file streamer)
     if (!m_threadsRunning)
     {
         ASSERT(0 == m_newResources.size());
         ASSERT(false == m_processFeedbackThreadRunning);
-
-        // no need to lock
-        // treat all the resources as "new"
-        m_newResourcesSharePFT = m_streamingResources;
-        // also treat all the resources as potentially having pending loads/evictions
-        m_pendingSharePFT = m_streamingResources;
 
         StartThreads();
     }
@@ -252,10 +244,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
 
         // share new resources with running threads
         {
-            m_newResourcesLockPFT.Acquire();
-            m_newResourcesSharePFT.insert(m_newResourcesSharePFT.end(), m_newResources.begin(), m_newResources.end());
-            m_newResourcesLockPFT.Release();
-
+            m_processFeedbackThread.ShareNewResources(m_newResources);
             m_residencyThread.ShareNewResources(m_newResources);
         }
 
@@ -293,13 +282,12 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     // if feedback requested last frame, post affected resources
     if (m_pendingResources.size())
     {
-        m_pendingLockPFT.Acquire();
-        m_pendingSharePFT.insert(m_pendingSharePFT.end(), m_pendingResources.begin(), m_pendingResources.end());
-        m_pendingLockPFT.Release();
+        m_processFeedbackThread.SharePendingResources(m_pendingResources);
         m_pendingResources.clear();
     }
 
-    m_processFeedbackFlag.Set(); // every frame, process feedback (also steps eviction history from prior frames)
+    // every frame, process feedback (also steps eviction history from prior frames)
+    m_processFeedbackThread.Wake();
 
     // start command list for this frame
     m_renderFrameIndex = (m_renderFrameIndex + 1) % m_numSwapBuffers;
@@ -316,7 +304,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
 
     // capture cpu time spent processing feedback
     {
-        INT64 processFeedbackTime = m_processFeedbackTime; // snapshot of live counter
+        INT64 processFeedbackTime = m_processFeedbackThread.GetTotalProcessTime(); // snapshot of live counter
         m_processFeedbackFrameTime = m_cpuTimer.GetSecondsFromDelta(processFeedbackTime - m_previousFeedbackTime);
         m_previousFeedbackTime = processFeedbackTime; // remember current time for next call
     }

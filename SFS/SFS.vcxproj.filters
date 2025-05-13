@@ -65,6 +65,9 @@
     <ClInclude Include="ResidencyThread.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ProcessFeedbackThread.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -113,6 +116,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ResidencyThread.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ProcessFeedbackThread.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

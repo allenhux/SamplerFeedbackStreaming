@@ -5,8 +5,9 @@
 #include <set>
 #include "Streaming.h"
 
-// modify residency maps as a result of gpu completion events
-
+//=============================================================================
+// a thread to update residency maps as a result of feedback
+//=============================================================================
 namespace SFS
 {
     class ManagerBase;

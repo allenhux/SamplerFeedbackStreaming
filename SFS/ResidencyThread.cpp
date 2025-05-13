@@ -71,6 +71,7 @@ void SFS::ResidencyThread::Stop()
 }
 
 //-----------------------------------------------------------------------------
+// SFSManager acquires staging area and adds new resources
 //-----------------------------------------------------------------------------
 void SFS::ResidencyThread::ShareNewResources(const std::vector<ResourceBase*>& in_resources)
 {
@@ -85,4 +86,5 @@ void SFS::ResidencyThread::RemoveResources(const std::set<ResourceBase*>& in_res
 {
     Stop();
     ContainerRemove(m_streamingResources, in_resources);
+    Start();
 }
