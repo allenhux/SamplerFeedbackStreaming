@@ -3,6 +3,7 @@
 #include <vector>
 #include <thread>
 #include <set>
+#include <atomic>
 #include "Streaming.h"
 
 //=============================================================================
@@ -10,13 +11,13 @@
 //=============================================================================
 namespace SFS
 {
-    class ManagerBase;
+    class ManagerRT;
     class ResourceBase;
 
     class ResidencyThread
     {
     public:
-        ResidencyThread(ManagerBase* in_pSFSManager, int in_threadPriority);
+        ResidencyThread(ManagerRT* in_pSFSManager, int in_threadPriority);
 
         void Start();
         void Stop();
@@ -27,7 +28,7 @@ namespace SFS
         void ShareNewResources(const std::vector<ResourceBase*>& in_resources);
         void RemoveResources(const std::set<ResourceBase*>& in_resources);
     private:
-        ManagerBase* const m_pSFSManager;
+        ManagerRT* const m_pSFSManager;
         const int m_threadPriority;
 
         std::thread m_thread;

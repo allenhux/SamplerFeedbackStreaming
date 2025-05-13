@@ -34,6 +34,7 @@ Implementation of SFS Manager
 #include <vector>
 #include <thread>
 #include <set>
+#include <atomic>
 #include "Streaming.h"
 #include "Timer.h"
 
@@ -42,17 +43,15 @@ Implementation of SFS Manager
 //=============================================================================
 namespace SFS
 {
-    class ManagerBase;
+    class ManagerPFT;
     class ResourceBase;
-    class Heap;
-    struct UpdateList;
     class DataUploader;
 
     class ProcessFeedbackThread
     {
     public:
-        ProcessFeedbackThread(ManagerBase* in_pSFSManager, DataUploader& in_dataUploader,
-            int in_threadPriority, UINT in_minNumUploadRequests);
+        ProcessFeedbackThread(ManagerPFT* in_pSFSManager, DataUploader& in_dataUploader,
+            UINT in_minNumUploadRequests, int in_threadPriority);
 
         void Start();
         void Stop();
@@ -67,7 +66,7 @@ namespace SFS
         UINT GetTotalNumSubmits() const { return m_numTotalSubmits; }
         UINT64 GetTotalProcessTime() const { return m_processFeedbackTime; }
     private:
-        ManagerBase* const m_pSFSManager;
+        ManagerPFT* const m_pSFSManager;
         DataUploader& m_dataUploader;
         const int m_threadPriority;
 

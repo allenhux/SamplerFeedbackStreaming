@@ -36,7 +36,7 @@ Usage:
 Draw loop:
 1. BeginFrame() with the SFSManager (SFSM)
 2. Draw your assets using the streaming textures, min-mip-map, and sampler feedback SRVs
-    Optionally call SFSM::QueueFeedback() to get sampler feedback for this draw.
+    Optionally call Resource::QueueFeedback() to get sampler feedback for this draw.
     SRVs can be created using SFSResource methods
 3. EndFrame() (with the SFSM) returns 1 command list: afterDrawCommands
 4. ExecuteCommandLists() with [yourCommandList, afterDrawCommands] command lists.
@@ -86,10 +86,12 @@ struct SFSResource
     // application should not use this texture before it is ready
     virtual bool Drawable() const = 0;
 
-    // convenience function that behaves like the SFS Manager API of the same name
+    // application must explicitly request feedback for each resource each frame
+    // this allows the application to limit how much time is spent on feedback, or stop processing e.g. for off-screen objects
+    // descriptor required to create Clear() and Resolve() commands
     virtual void QueueFeedback(D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor) = 0;
 
-    // if a resource isn't visible, evict associated data
+    // evict all loaded tiles for this object, e.g. if not visible
     // call any time
     virtual void QueueEviction() = 0;
 
@@ -182,11 +184,6 @@ struct SFSManager
     // NOTE: the root signature should set the associated descriptor range as descriptor and data volatile
     //--------------------------------------------
     virtual void BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap, D3D12_CPU_DESCRIPTOR_HANDLE in_minmipmapDescriptorHandle) = 0;
-
-    // application must explicitly request feedback for each resource each frame
-    // this allows the application to limit how much time is spent on feedback, or stop processing e.g. for off-screen objects
-    // descriptor required to create Clear() and Resolve() commands
-    virtual void QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor) = 0;
 
     //--------------------------------------------
     // Call EndFrame() last, paired with each BeginFrame() and after all draw commands

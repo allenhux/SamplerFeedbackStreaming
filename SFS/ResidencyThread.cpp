@@ -4,9 +4,26 @@
 #include "SFSManagerBase.h"
 #include "SFSResourceBase.h"
 
+//=============================================================================
+// severely limited SFSManager interface
+//=============================================================================
+namespace SFS
+{
+    class ManagerRT : private ManagerBase
+    {
+    public:
+        UINT8* ResidencyMapAcquire()
+        {
+            m_residencyMapLock.Acquire();
+            return (UINT8*)m_residencyMap.GetData();
+        }
+        void ResidencyMapRelease() { m_residencyMapLock.Release(); }
+    };
+}
+
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-SFS::ResidencyThread::ResidencyThread(ManagerBase* in_pSFSManager, int in_threadPriority) :
+SFS::ResidencyThread::ResidencyThread(ManagerRT* in_pSFSManager, int in_threadPriority) :
     m_pSFSManager(in_pSFSManager)
     , m_threadPriority(in_threadPriority)
 {}

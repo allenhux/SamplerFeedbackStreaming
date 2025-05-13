@@ -50,8 +50,8 @@ m_numSwapBuffers(in_desc.m_swapChainBufferCount)
 , m_dataUploader(in_pDevice, in_desc.m_maxNumCopyBatches, in_desc.m_stagingBufferSizeMB, in_desc.m_maxTileMappingUpdatesPerApiCall, (int)in_desc.m_threadPriority)
 , m_traceCaptureMode{in_desc.m_traceCaptureMode}
 , m_oldSharedResidencyMaps(in_desc.m_swapChainBufferCount + 1, nullptr)
-, m_residencyThread(this, (int)in_desc.m_threadPriority)
-, m_processFeedbackThread(this, m_dataUploader, (int)in_desc.m_threadPriority, in_desc.m_minNumUploadRequests)
+, m_residencyThread((ManagerRT*)this, (int)in_desc.m_threadPriority)
+, m_processFeedbackThread((ManagerPFT*)this, m_dataUploader, in_desc.m_minNumUploadRequests, (int)in_desc.m_threadPriority)
 {
     ASSERT(D3D12_COMMAND_LIST_TYPE_DIRECT == m_directCommandQueue->GetDesc().Type);
 

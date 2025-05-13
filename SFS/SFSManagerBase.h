@@ -83,12 +83,11 @@ namespace SFS
     public:
         // external api, but also used internally
         virtual bool GetWithinFrame() const override { return m_withinFrame; }
-        virtual void QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor) override;
 
-        //--------------------------------------------
+        void QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor);
+
         // force all outstanding commands to complete.
         // used by ~ManagerBase() and to delete an SFSResource
-        //--------------------------------------------
         void Finish();
 
         // delete resources that have been requested via Remove()
@@ -98,27 +97,16 @@ namespace SFS
 
         virtual ~ManagerBase();
 
-        // only used by ResidencyThread
-        UINT8* ResidencyMapAcquire()
-        {
-            m_residencyMapLock.Acquire();
-            return (UINT8*)m_residencyMap.GetData();
-        }
-        void ResidencyMapRelease() { m_residencyMapLock.Release(); }
-
-        // only used by ProcessFeedbackThread
-        UINT64 GetFrameFenceCompletedValue() { return m_frameFence->GetCompletedValue(); }
-
     protected:
         ComPtr<ID3D12Device8> m_device;
 
+        // the frame fence is used to optimize readback of feedback by SFSResource
+        // only read back the feedback after the frame that writes to it has completed
+        ComPtr<ID3D12Fence> m_frameFence;
+        UINT64 m_frameFenceValue{ 0 };
+
         const UINT m_numSwapBuffers;
         const UINT m_evictionDelay;
-
-        // track the objects that this resource created
-        // used to discover which resources have been updated within a frame
-        std::vector<ResourceBase*> m_streamingResources;
-        UINT64 m_frameFenceValue{ 0 };
 
         SFS::DataUploader m_dataUploader;
 
@@ -129,37 +117,25 @@ namespace SFS
             UINT m_bytesUsed{ 0 };
         } m_residencyMap;
 
+        // lock between ResidencyThread and main thread around shared residency map
+        Lock m_residencyMapLock;
+
+        // track the objects that this resource created
+        // used to discover which resources have been updated within a frame
+        std::vector<ResourceBase*> m_streamingResources;
+
+        std::set<ResourceBase*> m_removeResources; // resources that are to be removed (deleted)
+        std::vector<ResourceBase*> m_pendingResources; // resources where feedback or eviction requested
+
         // a thread to update residency maps based on feedback
         ResidencyThread m_residencyThread;
 
         // a thread to process feedback (when available) and queue tile loads / evictions to datauploader
         ProcessFeedbackThread m_processFeedbackThread;
 
-        // do not delete in-use resources - wait until swapchaincount frames have passed
-        std::vector<ComPtr<ID3D12Resource>> m_oldSharedResidencyMaps;
-
-        std::set<ResourceBase*> m_removeResources;
-
-        // after initialized, call AllocateResidencyMap() and AllocateSharedClearUavHeap()
-        std::vector<ResourceBase*> m_packedMipTransitionResources;
-
-        std::vector<ResourceBase*> m_newResources; // list of newly created resources
-
-        std::vector<ResourceBase*> m_pendingResources; // resources where feedback or eviction requested
-
-        Lock m_residencyMapLock; // lock between ResidencyThread and main thread around shared residency map
-
     private:
-#ifdef _DEBUG
-        std::atomic<bool> m_processFeedbackThreadRunning{ false };
-#endif
-
         // direct queue is used to monitor progress of render frames so we know when feedback buffers are ready to be used
         ComPtr<ID3D12CommandQueue> m_directCommandQueue;
-
-        // the frame fence is used to optimize readback of feedback by SFSResource
-        // only read back the feedback after the frame that writes to it has completed
-        ComPtr<ID3D12Fence> m_frameFence;
 
         struct FeedbackReadback
         {
@@ -171,8 +147,8 @@ namespace SFS
         // should clear feedback buffer before first use
         std::vector<FeedbackReadback> m_firstTimeClears;
 
+        bool m_threadsRunning{ false };
         void StartThreads();
-        void ProcessFeedbackThread();
         void StopThreads(); // stop only SFSManager threads. Used by Finish()
 
         //---------------------------------------------------------------------------
@@ -190,7 +166,7 @@ namespace SFS
         SFS::BarrierList m_barrierResolveSrcToUav; // transition resolve dest to copy source
         SFS::BarrierList m_packedMipTransitionBarriers; // transition packed-mips from common (copy dest)
 
-        UINT m_renderFrameIndex{ 0 };
+        UINT m_renderFrameIndex{ 0 }; // between 0 and # swap buffers
 
         D3D12GpuTimer m_gpuTimerResolve; // time for feedback resolve
 
@@ -208,12 +184,12 @@ namespace SFS
         };
         std::vector<CommandList> m_commandLists;
 
-        bool m_threadsRunning{ false };
-
         // the min mip map is shared. it must be created (at least) every time a SFSResource is created/destroyed
         void CreateMinMipMapView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor);
 
-        // returns old resource if a new resource was created
+        // do not delete in-use resources - wait until swapchaincount frames have passed
+        std::vector<ComPtr<ID3D12Resource>> m_oldSharedResidencyMaps;
+        // adds old resource to m_oldSharedResidencyMaps so it can be safely released after n frames
         void AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle,
             std::vector<ResourceBase*>& in_newResources);
 
@@ -221,6 +197,13 @@ namespace SFS
         ComPtr<ID3D12DescriptorHeap> m_sharedClearUavHeap;
         void AllocateSharedClearUavHeap();
         void CreateClearDescriptors();
+
+        // list of newly created resources
+        // for each, call AllocateResidencyMap() and AllocateSharedClearUavHeap()
+        std::vector<ResourceBase*> m_newResources;
+
+        // after packed mips have arrived for new resources, transition them from copy_dest
+        std::vector<ResourceBase*> m_packedMipTransitionResources;
 
         //-------------------------------------------
         // statistics

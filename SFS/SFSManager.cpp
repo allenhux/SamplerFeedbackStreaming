@@ -113,46 +113,26 @@ void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRI
 
     m_feedbackReadbacks.push_back({ pResource, in_gpuDescriptor });
 
-    // NOTE: feedback buffers will be cleared will happen after readback, in CommandListName::After
-
-    // barrier coalescing around blocks of commands in EndFrame():
-
-    // after drawing, transition the opaque feedback resources from UAV to resolve source
-    // transition the feedback decode target to resolve_dest
-    m_barrierUavToResolveSrc.push_back(CD3DX12_RESOURCE_BARRIER::Transition(pResource->GetOpaqueFeedback(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RESOLVE_SOURCE));
-
-    // after resolving, transition the opaque resources back to UAV. Transition the resolve destination to copy source for read back on cpu
-    m_barrierResolveSrcToUav.push_back(CD3DX12_RESOURCE_BARRIER::Transition(pResource->GetOpaqueFeedback(), D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-
-#if RESOLVE_TO_TEXTURE
-    // resolve to texture incurs a subsequent copy to linear buffer
-    m_barrierUavToResolveSrc.push_back(CD3DX12_RESOURCE_BARRIER::Transition(pResource->GetResolvedFeedback(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RESOLVE_DEST));
-    m_barrierResolveSrcToUav.push_back(CD3DX12_RESOURCE_BARRIER::Transition(pResource->GetResolvedFeedback(), D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE));
-#endif
+    // NOTE: feedback buffers will be cleared after readback, in CommandListName::After
 }
 
 //-----------------------------------------------------------------------------
 // returns (approximate) cpu time for processing feedback in the previous frame
 // since processing happens asynchronously, this time should be averaged
 //-----------------------------------------------------------------------------
-float SFS::ManagerBase::GetCpuProcessFeedbackTime()
-{
-    return m_processFeedbackFrameTime;
-}
+float SFS::ManagerBase::GetCpuProcessFeedbackTime() { return m_processFeedbackFrameTime; }
 
 //-----------------------------------------------------------------------------
 // performance and visualization
 //-----------------------------------------------------------------------------
 float SFS::ManagerBase::GetTotalTileCopyLatency() const { return m_dataUploader.GetApproximateTileCopyLatency(); }
-
-// the total time the GPU spent resolving feedback during the previous frame
 float SFS::ManagerBase::GetGpuTime() const { return m_gpuTimerResolve.GetTimes()[m_renderFrameIndex].first; }
 UINT SFS::ManagerBase::GetTotalNumUploads() const { return m_dataUploader.GetTotalNumUploads(); }
 UINT SFS::ManagerBase::GetTotalNumEvictions() const { return m_dataUploader.GetTotalNumEvictions(); }
-
-// FIXME
 UINT SFS::ManagerBase::GetTotalNumSubmits() const { return m_processFeedbackThread.GetTotalNumSubmits(); }
 
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 void SFS::ManagerBase::SetVisualizationMode(UINT in_mode)
 {
     ASSERT(!GetWithinFrame());
@@ -165,6 +145,8 @@ void SFS::ManagerBase::SetVisualizationMode(UINT in_mode)
     m_dataUploader.SetVisualizationMode(in_mode);
 }
 
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 void SFS::ManagerBase::CaptureTraceFile(bool in_captureTrace)
 {
     ASSERT(m_traceCaptureMode); // must enable at creation time by setting SFSManagerDesc::m_traceCaptureMode
@@ -230,7 +212,6 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     if (!m_threadsRunning)
     {
         ASSERT(0 == m_newResources.size());
-        ASSERT(false == m_processFeedbackThreadRunning);
 
         StartThreads();
     }
@@ -348,6 +329,7 @@ SFSManager::CommandLists SFS::ManagerBase::EndFrame()
         {
             m_gpuTimerResolve.BeginTimer(pCommandList, m_renderFrameIndex);
 
+            // pre-clear feedback buffers on first use to work around non-clear initial state on some hardware
             if (m_firstTimeClears.size())
             {
                 for (auto& t : m_firstTimeClears)
@@ -357,10 +339,39 @@ SFSManager::CommandLists SFS::ManagerBase::EndFrame()
                 m_firstTimeClears.clear();
             }
 
+            // barrier coalescing
+            UINT barrierArraySize = (UINT)m_feedbackReadbacks.size();
+#if RESOLVE_TO_TEXTURE
+            barrierArraySize *= 2;
+#endif
+            if (m_barrierResolveSrcToUav.size() < barrierArraySize)
+            {
+                m_barrierUavToResolveSrc.assign(barrierArraySize, {});
+                m_barrierResolveSrcToUav.assign(barrierArraySize, {});
+            }
+
+            // resolve to texture incurs a subsequent copy to linear buffer
+            UINT numFeedbackReadbacks = (UINT)m_feedbackReadbacks.size();
+            for (UINT i = 0; i < numFeedbackReadbacks; i++)
+            {
+                auto pResource = m_feedbackReadbacks[i].m_pStreamingResource;
+                // after drawing, transition the opaque feedback resources from UAV to resolve source
+                // transition the feedback decode target to resolve_dest
+                m_barrierUavToResolveSrc[i] = CD3DX12_RESOURCE_BARRIER::Transition(pResource->GetOpaqueFeedback(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+
+                // after resolving, transition the opaque resources back to UAV. Transition the resolve destination to copy source for read back on cpu
+                m_barrierResolveSrcToUav[i] = CD3DX12_RESOURCE_BARRIER::Transition(pResource->GetOpaqueFeedback(), D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+#if RESOLVE_TO_TEXTURE
+                // resolve to texture incurs a subsequent copy to linear buffer
+                m_barrierUavToResolveSrc[numFeedbackReadbacks + i] = CD3DX12_RESOURCE_BARRIER::Transition(pResource->GetResolvedFeedback(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RESOLVE_DEST);
+                m_barrierResolveSrcToUav[numFeedbackReadbacks + i] = CD3DX12_RESOURCE_BARRIER::Transition(pResource->GetResolvedFeedback(), D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE);
+#endif
+            } // end barrier coalescing
+
             // transition all feedback resources UAV->RESOLVE_SOURCE
             // also transition the (non-opaque) resolved resources COPY_SOURCE->RESOLVE_DEST
-            pCommandList->ResourceBarrier((UINT)m_barrierUavToResolveSrc.size(), m_barrierUavToResolveSrc.data());
-            m_barrierUavToResolveSrc.clear();
+            pCommandList->ResourceBarrier(barrierArraySize, m_barrierUavToResolveSrc.data());
 
             // do the feedback resolves
             for (auto& t : m_feedbackReadbacks)
@@ -370,8 +381,7 @@ SFSManager::CommandLists SFS::ManagerBase::EndFrame()
 
             // transition all feedback resources RESOLVE_SOURCE->UAV
             // also transition the (non-opaque) resolved resources RESOLVE_DEST->COPY_SOURCE
-            pCommandList->ResourceBarrier((UINT)m_barrierResolveSrcToUav.size(), m_barrierResolveSrcToUav.data());
-            m_barrierResolveSrcToUav.clear();
+            pCommandList->ResourceBarrier(barrierArraySize, m_barrierResolveSrcToUav.data());
 
 #if RESOLVE_TO_TEXTURE
             // copy readable feedback buffers to cpu

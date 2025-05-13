@@ -4,15 +4,28 @@
 #include "SFSManagerBase.h"
 #include "SFSResourceBase.h"
 
+//=============================================================================
+// severely limited SFSManager interface
+//=============================================================================
+namespace SFS
+{
+    class ManagerPFT : private ManagerBase
+    {
+    public:
+        UINT64 GetFrameFenceCompletedValue() { return m_frameFence->GetCompletedValue(); }
+    };
+}
+
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-SFS::ProcessFeedbackThread::ProcessFeedbackThread(ManagerBase* in_pSFSManager,
-    DataUploader& in_dataUploader, int in_threadPriority, UINT in_minNumUploadRequests) :
+SFS::ProcessFeedbackThread::ProcessFeedbackThread(ManagerPFT* in_pSFSManager,
+    DataUploader& in_dataUploader, UINT in_minNumUploadRequests, int in_threadPriority) :
     m_pSFSManager(in_pSFSManager)
     , m_dataUploader(in_dataUploader)
     , m_threadPriority(in_threadPriority)
     , m_minNumUploadRequests(in_minNumUploadRequests)
-{}
+{
+}
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
