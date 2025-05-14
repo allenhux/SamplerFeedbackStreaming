@@ -147,7 +147,7 @@ namespace SFS
 
         // try to load/evict tiles.
         // returns # tiles requested for upload
-        UINT QueueTiles();
+        UINT QueuePendingTileLoads();
 
         // returns # tiles evicted
         UINT QueuePendingTileEvictions();
@@ -358,8 +358,6 @@ namespace SFS
 
         // DecRef may decline
         void DecTileRef(UINT in_x, UINT in_y, UINT in_s);
-
-        void QueuePendingTileLoads(SFS::UpdateList* out_pUpdateList); // returns # tiles queued
 
         // standard tile copy complete notification (not packed mips)
         // exchanged by UpdateMinMip()

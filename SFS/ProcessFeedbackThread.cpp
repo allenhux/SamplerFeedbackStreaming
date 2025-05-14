@@ -157,7 +157,7 @@ void SFS::ProcessFeedbackThread::Start()
                             && (m_pSFSManager->GetFrameFenceCompletedValue() == previousFrameFenceValue)
                             && m_threadRunning) // don't add work while exiting
                         {
-                            uploadsRequested += pResource->QueueTiles();
+                            uploadsRequested += pResource->QueuePendingTileLoads();
                         }
 
                         if (pResource->IsStale()) // still have work to do?

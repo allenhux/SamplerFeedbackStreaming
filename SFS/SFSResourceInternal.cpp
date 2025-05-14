@@ -489,40 +489,6 @@ void SFS::ResourceBase::AbandonPendingLoads()
     m_pendingTileLoads.resize(numPending);
 }
 
-//-----------------------------------------------------------------------------
-// submit evictions and loads to be processed
-//
-// note: queues as many new tiles as possible
-//-----------------------------------------------------------------------------
-UINT SFS::ResourceBase::QueueTiles()
-{
-    UINT uploadsRequested = 0;
-
-    // pushes as many tiles as it can into a single UpdateList
-    if (m_pendingTileLoads.size() && m_pHeap->GetAllocator().GetAvailable())
-    {
-        UpdateList scratchUL;
-
-        // queue as many new tiles as possible
-        QueuePendingTileLoads(&scratchUL);
-        uploadsRequested = (UINT)scratchUL.m_coords.size(); // number of uploads in UpdateList
-
-        // only allocate an UpdateList if we have updates
-        if (scratchUL.m_coords.size())
-        {
-            // calling function checked for availability, so UL allocation must succeed
-            UpdateList* pUpdateList = m_pSFSManager->AllocateUpdateList(this);
-            ASSERT(pUpdateList);
-
-            pUpdateList->m_coords.swap(scratchUL.m_coords);
-            pUpdateList->m_heapIndices.swap(scratchUL.m_heapIndices);
-
-            m_pSFSManager->SubmitUpdateList(*pUpdateList);
-        }
-    }
-
-    return uploadsRequested;
-}
 
 /*-----------------------------------------------------------------------------
 This technique depends on a logic table that prevents race conditions
@@ -622,44 +588,37 @@ UINT SFS::ResourceBase::QueuePendingTileEvictions()
 
 //-----------------------------------------------------------------------------
 // queue one UpdateList worth of uploads
-// FIFO order: work from the front of the array
-// NOTE: greedy, takes every available UpdateList if it can
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::QueuePendingTileLoads(SFS::UpdateList* out_pUpdateList)
+UINT SFS::ResourceBase::QueuePendingTileLoads()
 {
-    ASSERT(out_pUpdateList);
-    ASSERT(m_pHeap->GetAllocator().GetAvailable());
-
     // clamp to heap availability
     UINT maxCopies = std::min((UINT)m_pendingTileLoads.size(), m_pHeap->GetAllocator().GetAvailable());
 
+    if (0 == maxCopies)
+    {
+        return 0;
+    }
+
+    std::vector<D3D12_TILED_RESOURCE_COORDINATE> uploads;
+    uploads.reserve(maxCopies);
+
     UINT skippedIndex = 0;
     UINT numConsumed = 0;
-    for (auto& coord : m_pendingTileLoads)
+    for (const auto& coord : m_pendingTileLoads)
     {
         numConsumed++;
 
-        // if the heap index is not valid, but the tile is resident, there's a /pending eviction/
-        // a pending eviction might be streaming
-
-        // NOTE! assumes refcount is non-zero
-        // ProcessFeedback() clears all pending loads with refcount == 0
-        // Hence, ProcessFeedback() must be called before this function
+        // expect refcount is non-zero
         ASSERT(m_tileMappingState.GetRefCount(coord));
 
         auto residency = m_tileMappingState.GetResidency(coord);
+
         // only load if definitely not resident
         if (TileMappingState::Residency::NotResident == residency)
         {
-            UINT heapIndex = m_pHeap->GetAllocator().Allocate();
-
             m_tileMappingState.SetResidency(coord, TileMappingState::Residency::Loading);
-            m_tileMappingState.GetHeapIndex(coord) = heapIndex;
+            uploads.push_back(coord);
 
-            out_pUpdateList->m_coords.push_back(coord);
-            out_pUpdateList->m_heapIndices.push_back(heapIndex);
-
-            // limit # of copies in a single updatelist
             maxCopies--;
             if (0 == maxCopies)
             {
@@ -673,16 +632,32 @@ void SFS::ResourceBase::QueuePendingTileLoads(SFS::UpdateList* out_pUpdateList)
             m_pendingTileLoads[skippedIndex] = coord;
             skippedIndex++;
         }
-        // if loading or resident, drop
-
-        // else: refcount 0 or tile was rescued by QueuePendingTileEvictions()? abandon this load. also drops duplicate adds.
+        // if loading or resident, abandon this load
+        // can happen if Rescue()d or duplicate (latter shouldn't happen)
     }
 
     // delete consumed tiles, which are in-between the skipped tiles and the still-pending tiles
-    if (numConsumed)
+    m_pendingTileLoads.erase(m_pendingTileLoads.begin() + skippedIndex, m_pendingTileLoads.begin() + numConsumed);
+
+    UINT numUploads = (UINT)uploads.size();
+    if (numUploads)
     {
-        m_pendingTileLoads.erase(m_pendingTileLoads.begin() + skippedIndex, m_pendingTileLoads.begin() + numConsumed);
+        // calling function checked for availability, so UL allocation must succeed
+        UpdateList* pUpdateList = m_pSFSManager->AllocateUpdateList(this);
+        ASSERT(pUpdateList);
+
+        auto& heapIndices = pUpdateList->m_heapIndices;
+        heapIndices.resize(numUploads);
+        // uploads was clamped to heap availability, so heap allocate will succeed
+        m_pHeap->GetAllocator().Allocate(heapIndices.data(), numUploads);
+        for (UINT i = 0; i < numUploads; i++)
+        {
+            m_tileMappingState.GetHeapIndex(uploads[i]) = heapIndices[i];
+        }
+        pUpdateList->m_coords.swap(uploads);
+        m_pSFSManager->SubmitUpdateList(*pUpdateList);
     }
+    return numUploads;
 }
 
 //-----------------------------------------------------------------------------
