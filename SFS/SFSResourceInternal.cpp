@@ -333,34 +333,36 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
         memset(m_tileReferences.data(), m_maxMip, m_tileReferences.size());
 
         // queue all resident tiles for eviction
-        for (UINT flipS = 0; flipS < m_maxMip; flipS++)
+        for (INT s = m_maxMip - 1; s >= 0; s--)
         {
-            UINT s = (m_maxMip - 1) - flipS; // traverse bottom up. ok because everything will be evicted
+            bool layerChanged = false;
 
-            for (UINT y = 0; y < m_tileMappingState.GetHeight(s); y++)
+            auto& l = m_tileMappingState.GetRefLayer(s); // directly access data for performance
+            UINT width = m_tileMappingState.GetWidth(s);
+
+            for (UINT i = 0; i < (UINT)l.size(); i++)
             {
-                for (UINT x = 0; x < m_tileMappingState.GetWidth(s); x++)
+                auto& refCount = l[i];
+                if (refCount)
                 {
-                    auto& refCount = m_tileMappingState.GetRefCount(x, y, s);
-                    if (refCount)
-                    {
-                        changed = true;
-                        refCount = 0;
-                        m_pendingEvictions.Append(D3D12_TILED_RESOURCE_COORDINATE{ x, y, 0, s });
-                    }
+                    layerChanged = true;
+                    refCount = 0;
+                    m_pendingEvictions.Append(D3D12_TILED_RESOURCE_COORDINATE{ i % width, i / width, 0, (UINT)s });
                 }
             }
+
             // if no tiles had refcounts (to change to 0) on this mip layer, won't be any tiles on higher-res mip layers
-            if (!changed)
+            if (!layerChanged)
             {
                 break; // if refcount of all tiles on this layer = 0, early out
             }
-        }
+            changed = true;
+        } // end loop over layers
 
         // abandon all pending loads - all refcounts are 0
         m_pendingTileLoads.clear();
 
-        // FIXME: could zero the min mip map now, avoiding updateminmipmap via setresidencychanged. any chance of a race?
+        // FIXME: could reset the min mip map now, avoiding updateminmipmap via setresidencychanged. any chance of a race?
     }
     else
     {
@@ -949,10 +951,6 @@ void SFS::ResourceBase::ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::ClearAllocations()
 {
-    ASSERT(!m_pSFSManager->GetWithinFrame());
-
-    m_pSFSManager->Finish();
-
     m_tileMappingState.FreeHeapAllocations(m_pHeap);
     m_tileMappingState.Init(m_resourceDesc.m_standardMipInfo);
     m_tileReferences.assign(m_tileReferences.size(), m_maxMip);
@@ -960,9 +958,4 @@ void SFS::ResourceBase::ClearAllocations()
 
     m_pendingEvictions.Clear();
     m_pendingTileLoads.clear();
-
-    // want to upload a residency of all maxMip
-    // NOTE: UpdateMinMipMap() will see there are no tiles resident,
-    //       clear all tile mappings, and upload a cleared min mip map
-    SetResidencyChanged();
 }

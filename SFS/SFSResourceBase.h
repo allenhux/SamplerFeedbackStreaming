@@ -253,6 +253,8 @@ namespace SFS
             UINT GetWidth(UINT in_s) const { return m_dimensions[in_s].m_width; }
             UINT GetHeight(UINT in_s) const { return m_dimensions[in_s].m_height; }
 
+            std::vector<UINT32>& GetRefLayer(UINT s) { return m_refcounts[s].m_tiles; }
+
             static const UINT InvalidIndex{ UINT(-1) };
         private:
             template<typename T> struct Layer
