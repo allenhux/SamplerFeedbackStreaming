@@ -13,6 +13,11 @@ namespace SFS
     {
     public:
         UINT64 GetFrameFenceCompletedValue() { return m_frameFence->GetCompletedValue(); }
+        void BroadcastRemoveResources(GroupRemoveResources* pR)
+        {
+            m_residencyThread.WakeRemoveResources(pR);
+            m_dataUploader.WakeRemoveResources(pR);
+        }
     };
 }
 
@@ -62,6 +67,8 @@ void SFS::ProcessFeedbackThread::Start()
                     m_newResources.insert(m_newResources.end(), tmpResources.begin(), tmpResources.end());
                 }
 
+                CheckRemoveResourcesPFT();
+
                 // FIXME: TODO while packed mips are loading, process evictions on stale resources
 
                 // prioritize loading packed mips, as objects shouldn't be displayed until packed mips load
@@ -94,6 +101,13 @@ void SFS::ProcessFeedbackThread::Start()
 
                 if (m_newResources.size())
                 {
+                    UINT64 frameFenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
+                    if (previousFrameFenceValue != frameFenceValue)
+                    {
+                        previousFrameFenceValue = frameFenceValue;
+                        SignalFileStreamer();
+                    }
+
                     continue; // still working on loading packed mips. don't move on to other streaming tasks yet.
                 }
 
@@ -239,33 +253,102 @@ void SFS::ProcessFeedbackThread::SharePendingResources(const std::vector<Resourc
     m_pendingLock.Release();
 }
 
-
 //-----------------------------------------------------------------------------
+// called by SFSManager on the main thread
+// swaps contents of in_resources into internal object
+// state of object is Process Feedback thread | initialize state, then messages thread
+// initialization state sets state to all clients, then messages other threads
+// NOTE! other threads retain a pointer to the object, so they will act as soon as the client flags are set
+// each thread does work and clears its flag
+// process feedback thread will act again when it is the only flag left, deleting resources
 //-----------------------------------------------------------------------------
-void SFS::ProcessFeedbackThread::RemoveResources(const std::set<ResourceBase*>& in_resources)
+void SFS::ProcessFeedbackThread::AsyncDestroyResources(std::set<ResourceBase*>& in_resources)
 {
-    Stop();
-    for (auto i = m_newResources.begin(); i != m_newResources.end();)
+    ASSERT(0 != in_resources.size());
+
+    // NOTE! prevents adding any more resources to remove until current ones removed
+    if (m_removeResourcesLock.TryAcquire())
     {
-        if (in_resources.contains(*i))
+        // it is possible SFSManager stages a new resource, but is told to delete it
+        // before ProcessFeedbackThread has a change to unstage it - because it's a TryAcquire operation
+        // remove those resources and let them be deleted later
+        m_newResourcesLock.Acquire();
+        ContainerRemove(m_newResourcesStaging, in_resources);
+        m_newResourcesLock.Release();
+
+        // likewise, resources may have been staged/queued for feedback
+        // don't actually want to do that, so unstage and delete later
+        m_pendingLock.Acquire();
+        ContainerRemove(m_pendingResourceStaging, in_resources);
+        m_pendingLock.Release();
+
+        if (0 == m_removeResources.size())
         {
-            i = m_newResources.erase(i);
+            m_removeResources.swap(in_resources);
         }
         else
         {
-            i++;
+            // main thread managed to delete multiple sets of resources
+            // before ProcessFeedbackThread could wake up and start deleting
+            m_removeResources.insert(in_resources.begin(), in_resources.end());
+            in_resources.clear();
         }
+        m_removeResourcesLock.Release();
+
+        m_removeResources.SetFlags(GroupRemoveResources::Client::ProcessFeedback | GroupRemoveResources::Client::Initialize);
+        Wake();
     }
-    for (auto r : in_resources)
+}
+
+void SFS::ProcessFeedbackThread::CheckRemoveResourcesPFT()
+{
+    UINT flags = m_removeResources.GetFlags();
+    if (0 == (GroupRemoveResources::Client::ProcessFeedback & flags))
     {
-        if (m_activeResources.contains(r))
-        {
-            m_activeResources.erase(r);
-        }
-        if (m_pendingResources.contains(r))
-        {
-            m_activeResources.erase(r);
-        }
+        return;
     }
-    Start();
+
+    if (GroupRemoveResources::Client::ProcessFeedback == flags) // if the other threads have done their thing..
+    {
+        // delete the resources
+        // because ProcessFeedbackThread allocates from tile heap(s) (Atlases),
+        // it must be this thread that releases tiles back into the heap
+        // the streaming resource destructor releases all tile indices, including packed mip tiles
+        for (auto p : m_removeResources)
+        {
+            delete(p);
+        }
+        m_removeResources.clear();
+        m_removeResources.ClearFlag(GroupRemoveResources::Client::ProcessFeedback);
+        m_removeResourcesLock.Release();
+        return;
+    }
+
+    if (GroupRemoveResources::Client::Initialize & flags)
+    {
+        // hold this lock until resources have been deleted
+        m_removeResourcesLock.Acquire();
+
+        // remove from my vectors
+        // do not delete any resources yet; deletion will happen once all clients have removed
+        ContainerRemove(m_newResources, m_removeResources);
+        ContainerRemove(m_activeResources, m_removeResources);
+        ContainerRemove(m_pendingResources, m_removeResources);
+
+        m_removeResources.SetFlags(GroupRemoveResources::Client::AllClients);
+
+        // send a message to the other threads
+        m_pSFSManager->BroadcastRemoveResources(&m_removeResources);
+    }
+
+    // don't sleep until this is clear
+    Wake();
+}
+
+SFS::ProcessFeedbackThread::~ProcessFeedbackThread()
+{
+    for (auto p : m_removeResources)
+    {
+        delete p;
+    }
 }

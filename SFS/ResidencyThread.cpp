@@ -3,6 +3,7 @@
 #include "ResidencyThread.h"
 #include "SFSManagerBase.h"
 #include "SFSResourceBase.h"
+#include "ProcessFeedbackThread.h"
 
 //=============================================================================
 // severely limited SFSManager interface
@@ -52,6 +53,14 @@ void SFS::ResidencyThread::Start()
                     m_streamingResources.insert(m_streamingResources.end(), newResources.begin(), newResources.end());
                 }
 
+                // remove resources?
+                if ((nullptr != m_pRemoveResources) &&
+                    (m_pRemoveResources->GetFlags() & GroupRemoveResources::Client::Residency))
+                {
+                    ContainerRemove(m_streamingResources, *m_pRemoveResources);
+                    m_pRemoveResources->ClearFlag(GroupRemoveResources::Client::Residency);
+                }
+
                 std::vector<ResourceBase*> updated;
                 for (auto p : m_streamingResources)
                 {
@@ -95,13 +104,4 @@ void SFS::ResidencyThread::ShareNewResources(const std::vector<ResourceBase*>& i
     m_newResourcesLock.Acquire();
     m_newResourcesStaging.insert(m_newResourcesStaging.end(), in_resources.begin(), in_resources.end());
     m_newResourcesLock.Release();
-}
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-void SFS::ResidencyThread::RemoveResources(const std::set<ResourceBase*>& in_resources)
-{
-    Stop();
-    ContainerRemove(m_streamingResources, in_resources);
-    Start();
 }

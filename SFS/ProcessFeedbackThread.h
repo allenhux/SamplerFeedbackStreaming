@@ -47,11 +47,31 @@ namespace SFS
     class ResourceBase;
     class DataUploader;
 
+    class GroupRemoveResources : public std::set<ResourceBase*>
+    {
+    public:
+        enum Client : UINT32
+        {
+            Initialize = 1 << 0,
+            ProcessFeedback = 1 << 1,
+            Residency = 1 << 2,
+            Fence = 1 << 3,
+            Submit = 1 << 4,
+            AllClients = ProcessFeedback | Residency | Fence | Submit
+        };
+        UINT32 GetFlags() const { return m_flags; }
+        void ClearFlag(Client c) { m_flags &= ~c; }
+        void SetFlags(UINT32 f) { m_flags = f; }
+    private:
+        std::atomic<UINT32> m_flags;
+    };
+
     class ProcessFeedbackThread
     {
     public:
         ProcessFeedbackThread(ManagerPFT* in_pSFSManager, DataUploader& in_dataUploader,
             UINT in_minNumUploadRequests, int in_threadPriority);
+        ~ProcessFeedbackThread();
 
         void Start();
         void Stop();
@@ -61,7 +81,10 @@ namespace SFS
         void ShareNewResources(const std::vector<ResourceBase*>& in_resources);
         void SharePendingResources(const std::vector<ResourceBase*>& in_resources);
 
-        void RemoveResources(const std::set<ResourceBase*>& in_resources);
+        // attempts to indicate resources should be destroyed
+        // may not succeed if resources are already in the process of being deleted
+        // on success, in_resources will be cleared
+        void AsyncDestroyResources(std::set<ResourceBase*>& in_resources);
 
         UINT GetTotalNumSubmits() const { return m_numTotalSubmits; }
         UINT64 GetTotalProcessTime() const { return m_processFeedbackTime; }
@@ -87,6 +110,12 @@ namespace SFS
         std::vector<ResourceBase*> m_pendingResourceStaging; // resources to be shared with ProcessFeedbackThread
         Lock m_pendingLock;   // lock between ProcessFeedbackThread and main thread
 
+        // PFT: initializes this, removes its own resources, then sends pointer to other threads
+        // other threads: if (ptr != nullptr) remove resources, ClearFlag(self), ptr = nullptr
+        // PFT: if (0==GetFlags()) delete the resources.
+        GroupRemoveResources m_removeResources;
+        Lock m_removeResourcesLock;   // lock between ProcessFeedbackThread and main thread
+
         SFS::SynchronizationFlag m_processFeedbackFlag;
 
         RawCpuTimer m_cpuTimer;
@@ -98,5 +127,6 @@ namespace SFS
 
         const UINT m_minNumUploadRequests{ 2000 }; // heuristic to reduce Submit()s
         void SignalFileStreamer();
+        void CheckRemoveResourcesPFT();
     };
 }

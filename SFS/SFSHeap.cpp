@@ -34,11 +34,8 @@
 //-----------------------------------------------------------------------------
 void SFS::Heap::Destroy()
 {
-    // in debug mode, try to get all allocations freed
-#ifdef _DEBUG
-    m_pSfsManager->RemoveResources();
-#endif
-    delete this;
+    m_destroy = true;
+    // FIXME: tell sfsmanager this can be destroyed
 }
 
 //-----------------------------------------------------------------------------

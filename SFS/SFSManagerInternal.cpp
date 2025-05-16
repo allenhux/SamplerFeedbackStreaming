@@ -90,6 +90,15 @@ SFS::ManagerBase::~ManagerBase()
 {
     // force DataUploader to flush now, rather than waiting for its destructor
     Finish();
+    for (auto p : m_removeResources)
+    {
+        delete p;
+    }
+    for (auto p : m_streamingHeaps)
+    {
+        p->Destroy();
+    }
+    RemoveHeaps();
 }
 
 //-----------------------------------------------------------------------------
@@ -296,3 +305,46 @@ void SFS::ManagerBase::CreateMinMipMapView(D3D12_CPU_DESCRIPTOR_HANDLE in_descri
     m_device->CreateShaderResourceView(m_residencyMap.GetResource(), &srvDesc, in_descriptorHandle);
 }
 
+//-----------------------------------------------------------------------------
+// delete resources that have been requested via Remove()
+// used by BeginFrame()
+//-----------------------------------------------------------------------------
+void SFS::ManagerBase::RemoveResources()
+{
+    ASSERT(!GetWithinFrame());
+
+    if (m_removeResources.size())
+    {
+        ContainerRemove(m_streamingResources, m_removeResources);
+        ContainerRemove(m_pendingResources, m_removeResources);
+        ContainerRemove(m_packedMipTransitionResources, m_removeResources);
+
+        // theoretically possible? would have to create and destroy the same resource in the same frame
+        // can only delete if no tile memory has been allocated yet!
+#ifdef _DEBUG
+        for (auto p : m_newResources)
+        {
+            ASSERT(!m_removeResources.contains(p));
+        }
+        //ContainerRemove(m_newResources, m_removeResources);
+#endif
+        m_processFeedbackThread.AsyncDestroyResources(m_removeResources);
+    }
+}
+
+//-----------------------------------------------------------------------------
+// destroy heaps that are no longer depended upon
+// FIXME: when to call this during runtime? also keep an array of pending remove heaps?
+//-----------------------------------------------------------------------------
+void SFS::ManagerBase::RemoveHeaps()
+{
+    for (auto& p : m_streamingHeaps)
+    {
+        if (p->GetDestroyable() && (0 == p->GetAllocator().GetAllocated()))
+        {
+            delete p;
+            p = nullptr;
+        }
+    }
+    m_streamingHeaps.erase(std::remove(m_streamingHeaps.begin(), m_streamingHeaps.end(), nullptr), m_streamingHeaps.end());
+}

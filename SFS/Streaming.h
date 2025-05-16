@@ -220,29 +220,9 @@ namespace SFS
 
     //==================================================
     //==================================================
-    // quick remove from container: find element, overwrite with last value, then shrink the container
-    template<typename C, typename V> void ContainerRemove(C& container, V value)
+    // remove from container all values matching provided set
+    template<typename C, typename V> void ContainerRemove(C& container, const std::set<V>& values)
     {
-        auto i = std::find(container.begin(), container.end(), value);
-        if (i != container.end())
-        {
-            *i = container.back();
-            container.resize(container.size() - 1);
-        }
-    }
-    template<typename C, typename V> void ContainerRemove(std::vector<C>& container, std::set<V> values)
-    {
-        UINT numToFind = (UINT)values.size();
-
-        for (UINT i = (UINT)container.size(); (numToFind != 0) && (i != 0);)
-        {
-            i--;
-            if (values.contains(container[i]))
-            {
-                container[i] = container.back();
-                container.resize(container.size() - 1);
-                numToFind--;
-            }
-        }
+        std::erase_if(container, [&](auto p) { return values.contains(p); });
     }
 }

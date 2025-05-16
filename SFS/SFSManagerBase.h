@@ -90,9 +90,6 @@ namespace SFS
         // used by ~ManagerBase() and to delete an SFSResource
         void Finish();
 
-        // delete resources that have been requested via Remove()
-        void RemoveResources();
-
         ManagerBase(const struct SFSManagerDesc& in_desc, ID3D12Device8* in_pDevice); // required for constructor
 
         virtual ~ManagerBase();
@@ -108,6 +105,14 @@ namespace SFS
         const UINT m_numSwapBuffers;
         const UINT m_evictionDelay;
 
+        // track the objects that this resource created
+        // used to discover which resources have been updated within a frame
+        std::vector<ResourceBase*> m_streamingResources;
+
+        // track the heaps resources depend on
+        // even after a call to Destroy, keep alive until dependent resources are deleted
+        std::vector<Heap*> m_streamingHeaps;
+
         SFS::DataUploader m_dataUploader;
 
         // each SFSResource writes current uploaded tile state to min mip map, separate data for each frame
@@ -119,10 +124,6 @@ namespace SFS
 
         // lock between ResidencyThread and main thread around shared residency map
         Lock m_residencyMapLock;
-
-        // track the objects that this resource created
-        // used to discover which resources have been updated within a frame
-        std::vector<ResourceBase*> m_streamingResources;
 
         std::set<ResourceBase*> m_removeResources; // resources that are to be removed (deleted)
         std::vector<ResourceBase*> m_pendingResources; // resources where feedback or eviction requested
@@ -204,6 +205,11 @@ namespace SFS
 
         // after packed mips have arrived for new resources, transition them from copy_dest
         std::vector<ResourceBase*> m_packedMipTransitionResources;
+
+        // delete resources that have been requested via Remove()
+        void RemoveResources();
+        // delete heaps that have been requested via Destroy()
+        void RemoveHeaps();
 
         //-------------------------------------------
         // statistics

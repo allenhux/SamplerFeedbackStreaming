@@ -57,8 +57,6 @@ namespace SFS
 
         FileHandle* OpenFile(const std::wstring& in_path) const { return m_pFileStreamer->OpenFile(in_path); }
  
-        void EvictWork(const std::set<ResourceBase*>& in_resources);
-
         // wait for all outstanding commands to complete. 
         void FlushCommands();
 
@@ -81,6 +79,8 @@ namespace SFS
             DirectStorage
         };
         SFS::FileStreamer* SetStreamer(StreamerType in_streamerType, bool in_traceCaptureMode);
+
+        void WakeRemoveResources(class GroupRemoveResources* pR);
 
         //----------------------------------
         // statistics and visualization
@@ -149,10 +149,11 @@ namespace SFS
         void LoadTextureFromMemory(UpdateList& out_updateList);
         void SubmitTextureLoadsFromMemory();
 
-        const std::set<ResourceBase*>* m_pEvictWork{ nullptr };
-        SynchronizationFlag m_evictWorkFlag;
-        Lock m_evictWorkLock;
-        void EvictWork();
+        // can't remove resources, can only verify there are active GPU
+        // activities that target resources that are flagged for deletion
+        GroupRemoveResources* m_pRemoveResources{ nullptr };
+        void CheckRemoveResourcesFT();
+        void CheckRemoveResourcesST();
 
         //-------------------------------------------
         // statistics

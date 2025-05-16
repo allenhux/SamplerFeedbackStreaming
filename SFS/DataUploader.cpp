@@ -31,6 +31,7 @@
 #include "FileStreamerReference.h"
 #include "FileStreamerDS.h"
 #include "SFSHeap.h"
+#include "ProcessFeedbackThread.h"
 
 //=============================================================================
 // Internal class that uploads texture data into a reserved resource
@@ -182,7 +183,7 @@ void SFS::DataUploader::StartThreads()
             while (m_threadsRunning)
             {
                 m_submitFlag.Wait();
-                EvictWork();
+                CheckRemoveResourcesST();
                 SubmitThread();
             }
         });
@@ -201,7 +202,7 @@ void SFS::DataUploader::StartThreads()
                 {
                     m_fenceMonitorFlag.Wait();
                 }
-                EvictWork();
+                CheckRemoveResourcesFT();
                 FenceMonitorThread();
             }
         });
@@ -305,6 +306,7 @@ void SFS::DataUploader::FreeUpdateList(SFS::UpdateList& in_updateList)
 }
 
 //-----------------------------------------------------------------------------
+// called from ProcessFeedbackThread to request streaming and mapping
 //-----------------------------------------------------------------------------
 void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
 {
@@ -330,68 +332,58 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
 //-----------------------------------------------------------------------------
 // free all UpdateLists using a resource from this set
 //-----------------------------------------------------------------------------
-void SFS::DataUploader::EvictWork(const std::set<ResourceBase*>& in_resources)
+void SFS::DataUploader::WakeRemoveResources(class GroupRemoveResources* pR)
 {
-    m_pEvictWork = &in_resources;
+    m_pRemoveResources = pR;
     m_fenceMonitorFlag.Set();
     m_submitFlag.Set();
-    m_evictWorkFlag.Wait();
 }
 
-void SFS::DataUploader::EvictWork()
+void SFS::DataUploader::CheckRemoveResourcesST()
 {
-    if (nullptr == m_pEvictWork)
+    constexpr GroupRemoveResources::Client flag = GroupRemoveResources::Client::Submit;
+    if ((nullptr == m_pRemoveResources) || (0 == (m_pRemoveResources->GetFlags() & flag)))
     {
         return;
     }
 
-    // the thread that succeeds must wait for the other thread
-    if (m_evictWorkLock.TryAcquire())
+    // do any to-be-deleted resources have in-flight updatelists?
+    for (UINT i = 0; i < m_submitTaskAlloc.GetReadyToRead(); i++)
     {
-        m_evictWorkFlag.Wait();
+        UINT index = m_submitTaskAlloc.GetReadIndex(i);
+        auto pUpdateList = m_submitTasks[index];
+        if (m_pRemoveResources->contains((ResourceBase*)pUpdateList->m_pResource))
+        {
+            return; // found in-flight updatelist, do not clear flag
+        }
     }
-    else
+    
+    // not found, so clear my flag
+    m_pRemoveResources->ClearFlag(flag);
+}
+
+
+void SFS::DataUploader::CheckRemoveResourcesFT()
+{
+    constexpr GroupRemoveResources::Client flag = GroupRemoveResources::Client::Fence;
+    if ((nullptr == m_pRemoveResources) || (0 == (m_pRemoveResources->GetFlags() & flag)))
     {
-        {
-            for (UINT i = 0; i < m_monitorTaskAlloc.GetReadyToRead();)
-            {
-                UINT index = m_monitorTaskAlloc.GetReadIndex(i);
-                auto pUpdateList = m_monitorTasks[index];
-                if (m_pEvictWork->contains((ResourceBase*)pUpdateList->m_pResource))
-                {
-                    m_monitorTasks[index] = m_monitorTasks[m_monitorTaskAlloc.GetReadIndex()];
-                    m_monitorTaskAlloc.Free();
-                    FreeUpdateList(*pUpdateList);
-                }
-                else
-                {
-                    i++;
-                }
-            }
-        }
-
-        {
-            for (UINT i = 0; i < m_submitTaskAlloc.GetReadyToRead(); )
-            {
-                UINT index = m_submitTaskAlloc.GetReadIndex(i);
-                auto pUpdateList = m_submitTasks[index];
-                if (m_pEvictWork->contains((ResourceBase*)pUpdateList->m_pResource))
-                {
-                    m_submitTasks[index] = m_submitTasks[m_monitorTaskAlloc.GetReadIndex()];
-                    m_submitTaskAlloc.Free();
-                }
-                else
-                {
-                    i++;
-                }
-            }
-        }
-
-        m_pEvictWork = nullptr;
-
-        // resumes both the "other" thread and the main thread
-        m_evictWorkFlag.Set();
+        return;
     }
+
+    // do any to-be-deleted resources have in-flight updatelists?
+    for (UINT i = 0; i < m_monitorTaskAlloc.GetReadyToRead(); i++)
+    {
+        UINT index = m_monitorTaskAlloc.GetReadIndex(i);
+        auto pUpdateList = m_monitorTasks[index];
+        if (m_pRemoveResources->contains((ResourceBase*)pUpdateList->m_pResource))
+        {
+            return;  // found in-flight updatelist, do not clear flag
+        }
+    }
+
+    // not found, so clear my flag
+    m_pRemoveResources->ClearFlag(flag);
 }
 
 //-----------------------------------------------------------------------------

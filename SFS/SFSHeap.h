@@ -82,12 +82,13 @@ namespace SFS
         ID3D12Resource* ComputeCoordFromTileIndex(D3D12_TILED_RESOURCE_COORDINATE& out_coord, UINT in_index, const DXGI_FORMAT in_format);
         ID3D12Heap* GetHeap() const { return m_tileHeap.Get(); }
         SimpleAllocator& GetAllocator() { return m_heapAllocator; }
-
+        bool GetDestroyable() const { return m_destroy; }
     private:
         SimpleAllocator m_heapAllocator;
 
         std::vector<SFS::Atlas*> m_atlases;
         ComPtr<ID3D12Heap> m_tileHeap; // heap to hold tiles resident in GPU memory
         class ManagerBase* const m_pSfsManager{nullptr}; // used in debug mode to validate allocator
+        bool m_destroy{ false }; // if true, can be deleted when allocator GetAllocated() == 0 
     };
 }

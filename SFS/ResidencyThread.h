@@ -26,7 +26,7 @@ namespace SFS
 
         // blocking lock
         void ShareNewResources(const std::vector<ResourceBase*>& in_resources);
-        void RemoveResources(const std::set<ResourceBase*>& in_resources);
+        void WakeRemoveResources(class GroupRemoveResources* pR) { m_pRemoveResources = pR; Wake(); }
     private:
         ManagerRT* const m_pSFSManager;
         const int m_threadPriority;
@@ -43,5 +43,7 @@ namespace SFS
         std::vector<ResourceBase*> m_newResourcesStaging;
         // lock around staging area for new resources
         Lock m_newResourcesLock;
+
+        GroupRemoveResources* m_pRemoveResources{ nullptr };
     };
 }

@@ -105,9 +105,6 @@ void SFS::ResourceBase::DeferredInitialize2()
 //-----------------------------------------------------------------------------
 SFS::ResourceBase::~ResourceBase()
 {
-    // do not delete SFSResource between BeginFrame() and EndFrame(). It's complicated.
-    ASSERT(!m_pSFSManager->GetWithinFrame());
-
     // remove tile allocations from the heap
     m_tileMappingState.FreeHeapAllocations(m_pHeap);
 
@@ -773,8 +770,8 @@ void SFS::ResourceBase::EvictionDelay::MoveAllToPending()
     auto end = --m_mappings.end();
     for (auto i = m_mappings.begin(); i != end; i++)
     {
-        m_mappings.back().insert(m_mappings.back().end(), (*i).begin(),(*i).end());
-        (*i).clear();
+        m_mappings.back().insert(m_mappings.back().end(), i->begin(), i->end());
+        i->clear();
     }
 }
 
@@ -845,11 +842,17 @@ bool SFS::ResourceBase::InitPackedMips()
 
     // allocate heap space
     // only allocate if all required tiles can be allocated at once
-    if ((PackedMipStatus::HEAP_RESERVED > m_packedMipStatus) &&
-        (m_pHeap->GetAllocator().GetAvailable() >= numTilesForPackedMips))
+    if (PackedMipStatus::HEAP_RESERVED > m_packedMipStatus)
     {
-        m_pHeap->GetAllocator().Allocate(m_packedMipHeapIndices, numTilesForPackedMips);
-        m_packedMipStatus = PackedMipStatus::HEAP_RESERVED;
+        if (m_pHeap->GetAllocator().GetAvailable() >= numTilesForPackedMips)
+        {
+            m_pHeap->GetAllocator().Allocate(m_packedMipHeapIndices, numTilesForPackedMips);
+            m_packedMipStatus = PackedMipStatus::HEAP_RESERVED;
+        }
+        else
+        {
+            return false; // heap full
+        }
     }
 
     ASSERT(m_packedMipHeapIndices.size() == numTilesForPackedMips);

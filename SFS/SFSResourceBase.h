@@ -201,7 +201,7 @@ namespace SFS
         // heap indices for packed mips only
         std::vector<UINT> m_packedMipHeapIndices;
 
-        SFS::ManagerSR* const m_pSFSManager;
+        SFS::ManagerSR* const m_pSFSManager{ nullptr };
 
         //==================================================
         // TileMappingState keeps reference counts and heap indices for resources in a min-mip-map

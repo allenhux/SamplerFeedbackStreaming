@@ -58,6 +58,7 @@ void SFS::ManagerBase::Destroy()
 SFSHeap* SFS::ManagerBase::CreateHeap(UINT in_maxNumTilesHeap)
 {
     auto pStreamingHeap = new SFS::Heap(this, m_dataUploader.GetMappingQueue(), in_maxNumTilesHeap);
+    m_streamingHeaps.push_back(pStreamingHeap);
     return (SFSHeap*)pStreamingHeap;
 }
 
@@ -151,33 +152,6 @@ void SFS::ManagerBase::CaptureTraceFile(bool in_captureTrace)
 {
     ASSERT(m_traceCaptureMode); // must enable at creation time by setting SFSManagerDesc::m_traceCaptureMode
     m_dataUploader.CaptureTraceFile(in_captureTrace);
-}
-
-//-----------------------------------------------------------------------------
-// delete resources that have been requested via Remove()
-// used by BeginFrame() and, in debug mode only, ~Heap
-//-----------------------------------------------------------------------------
-void SFS::ManagerBase::RemoveResources()
-{
-    ASSERT(!GetWithinFrame());
-
-    if (m_removeResources.size())
-    {
-        m_processFeedbackThread.RemoveResources(m_removeResources);
-
-        // pauses this thread while affected updatelists are freed
-        m_dataUploader.FlushCommands();
-        //m_dataUploader.EvictWork(m_removeResources);
-
-        ContainerRemove(m_streamingResources, m_removeResources);
-        ContainerRemove(m_pendingResources, m_removeResources);
-        ContainerRemove(m_packedMipTransitionResources, m_removeResources);
-
-        m_residencyThread.RemoveResources(m_removeResources);
-
-        for (auto r : m_removeResources) { delete r; }
-        m_removeResources.clear();
-    }
 }
 
 //-----------------------------------------------------------------------------
