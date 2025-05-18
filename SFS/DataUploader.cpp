@@ -183,7 +183,6 @@ void SFS::DataUploader::StartThreads()
             while (m_threadsRunning)
             {
                 m_submitFlag.Wait();
-                CheckRemoveResourcesST();
                 SubmitThread();
             }
         });
@@ -202,7 +201,6 @@ void SFS::DataUploader::StartThreads()
                 {
                     m_fenceMonitorFlag.Wait();
                 }
-                CheckRemoveResourcesFT();
                 FenceMonitorThread();
             }
         });
@@ -327,63 +325,6 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
         m_submitTaskAlloc.Allocate();
         m_submitFlag.Set();
     }
-}
-
-//-----------------------------------------------------------------------------
-// free all UpdateLists using a resource from this set
-//-----------------------------------------------------------------------------
-void SFS::DataUploader::WakeRemoveResources(class GroupRemoveResources* pR)
-{
-    m_pRemoveResources = pR;
-    m_fenceMonitorFlag.Set();
-    m_submitFlag.Set();
-}
-
-void SFS::DataUploader::CheckRemoveResourcesST()
-{
-    constexpr GroupRemoveResources::Client flag = GroupRemoveResources::Client::Submit;
-    if ((nullptr == m_pRemoveResources) || (0 == (m_pRemoveResources->GetFlags() & flag)))
-    {
-        return;
-    }
-
-    // do any to-be-deleted resources have in-flight updatelists?
-    for (UINT i = 0; i < m_submitTaskAlloc.GetReadyToRead(); i++)
-    {
-        UINT index = m_submitTaskAlloc.GetReadIndex(i);
-        auto pUpdateList = m_submitTasks[index];
-        if (m_pRemoveResources->contains((ResourceBase*)pUpdateList->m_pResource))
-        {
-            return; // found in-flight updatelist, do not clear flag
-        }
-    }
-    
-    // not found, so clear my flag
-    m_pRemoveResources->ClearFlag(flag);
-}
-
-
-void SFS::DataUploader::CheckRemoveResourcesFT()
-{
-    constexpr GroupRemoveResources::Client flag = GroupRemoveResources::Client::Fence;
-    if ((nullptr == m_pRemoveResources) || (0 == (m_pRemoveResources->GetFlags() & flag)))
-    {
-        return;
-    }
-
-    // do any to-be-deleted resources have in-flight updatelists?
-    for (UINT i = 0; i < m_monitorTaskAlloc.GetReadyToRead(); i++)
-    {
-        UINT index = m_monitorTaskAlloc.GetReadIndex(i);
-        auto pUpdateList = m_monitorTasks[index];
-        if (m_pRemoveResources->contains((ResourceBase*)pUpdateList->m_pResource))
-        {
-            return;  // found in-flight updatelist, do not clear flag
-        }
-    }
-
-    // not found, so clear my flag
-    m_pRemoveResources->ClearFlag(flag);
 }
 
 //-----------------------------------------------------------------------------

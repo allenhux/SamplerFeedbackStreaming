@@ -13,10 +13,12 @@ namespace SFS
     {
     public:
         UINT64 GetFrameFenceCompletedValue() { return m_frameFence->GetCompletedValue(); }
-        void BroadcastRemoveResources(GroupRemoveResources* pR)
+
+        void WakeResidencyThread() { m_residencyThread.Wake(); }
+
+        void ShareNewResources(const std::vector<ResourceBase*>& in_resources)
         {
-            m_residencyThread.WakeRemoveResources(pR);
-            m_dataUploader.WakeRemoveResources(pR);
+            m_residencyThread.ShareNewResources(in_resources);
         }
     };
 }
@@ -30,6 +32,22 @@ SFS::ProcessFeedbackThread::ProcessFeedbackThread(ManagerPFT* in_pSFSManager,
     , m_threadPriority(in_threadPriority)
     , m_minNumUploadRequests(in_minNumUploadRequests)
 {
+}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+SFS::ProcessFeedbackThread::~ProcessFeedbackThread()
+{
+    // delete resources that were in the progress of deletion when the thread was stopped
+    for (auto p : m_removeResources)
+    {
+        delete p;
+    }
+
+    for (auto p : m_removeResourcesStaging)
+    {
+        delete p;
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -56,6 +74,15 @@ void SFS::ProcessFeedbackThread::Start()
 
             while (m_threadRunning)
             {
+
+                bool newFrame = false;
+                UINT64 frameFenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
+                if (previousFrameFenceValue != frameFenceValue)
+                {
+                    previousFrameFenceValue = frameFenceValue;
+                    newFrame = true;
+                }
+
                 // check for new resources
                 if (m_newResourcesStaging.size() && m_newResourcesLock.TryAcquire())
                 {
@@ -67,25 +94,35 @@ void SFS::ProcessFeedbackThread::Start()
                     m_newResources.insert(m_newResources.end(), tmpResources.begin(), tmpResources.end());
                 }
 
-                CheckRemoveResourcesPFT();
+                // compare active resources to resources that are to be removed
+                // NOTE: doing this before InitPackedMips, so m_newResources may contain resources
+                //       without packed mips and that have not been propagated to residency thread
+                CheckRemoveResources();
 
                 // FIXME: TODO while packed mips are loading, process evictions on stale resources
 
-                // prioritize loading packed mips, as objects shouldn't be displayed until packed mips load
+                // prioritize loading packed mips, as objects shouldn't be displayed until packed mips load                
+                // InitPackedMips() must be called on every resource that needs to load packed mips
+                // once packed mips are scheduled to load, can share that resource with the residency thread
                 if (m_newResources.size())
                 {
-                    for (auto i = m_newResources.begin(); i != m_newResources.end();)
+                    UINT num = (UINT)m_newResources.size();
+                    for (UINT i = 0; i < num;)
                     {
-                        // must call on every resource that needs to load packed mips
-                        if ((*i)->InitPackedMips())
+                        auto pResource = m_newResources[i];
+                        if (pResource->InitPackedMips())
                         {
-                            i = m_newResources.erase(i);
+                            m_residencyShareNewResources.push_back(pResource);
+                            // O(1) remove element from vector
+                            num--;
+                            m_newResources[i] = m_newResources[num];
                         }
                         else
                         {
                             i++;
                         }
                     }
+                    m_newResources.resize(num);
                 }
 
                 // check for existing resources that have feedback
@@ -99,14 +136,19 @@ void SFS::ProcessFeedbackThread::Start()
                     m_activeResources.insert(tmpResources.begin(), tmpResources.end());
                 }
 
-                if (m_newResources.size())
+                // propagate new resources to residency thread only after they have packed mips in-flight
+                if (m_residencyShareNewResources.size() && newFrame)
                 {
-                    UINT64 frameFenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
-                    if (previousFrameFenceValue != frameFenceValue)
-                    {
-                        previousFrameFenceValue = frameFenceValue;
-                        SignalFileStreamer();
-                    }
+#ifdef _DEBUG
+                    for (auto p : m_residencyShareNewResources) { ASSERT(p->GetInitialized()); }
+#endif
+                    m_pSFSManager->ShareNewResources(m_residencyShareNewResources);
+                    m_residencyShareNewResources.clear();
+                }
+
+                if (m_newResources.size() && newFrame)
+                {
+                    SignalFileStreamer();
 
                     continue; // still working on loading packed mips. don't move on to other streaming tasks yet.
                 }
@@ -114,38 +156,33 @@ void SFS::ProcessFeedbackThread::Start()
                 bool flushPendingUploadRequests = false;
 
                 // Once per frame: process feedback buffers
+                if (newFrame)
                 {
-                    UINT64 frameFenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
-                    if (previousFrameFenceValue != frameFenceValue)
+                    // start timer for this frame
+                    INT64 perFrameTime = m_cpuTimer.GetTime();
+
+                    // flush any pending uploads from previous frame
+                    if (uploadsRequested) { flushPendingUploadRequests = true; }
+
+                    for (auto i = m_activeResources.begin(); i != m_activeResources.end();)
                     {
-                        previousFrameFenceValue = frameFenceValue;
-
-                        // start timer for this frame
-                        INT64 perFrameTime = m_cpuTimer.GetTime();
-
-                        // flush any pending uploads from previous frame
-                        if (uploadsRequested) { flushPendingUploadRequests = true; }
-
-                        for (auto i = m_activeResources.begin(); i != m_activeResources.end();)
+                        auto pResource = *i;
+                        pResource->ProcessFeedback(frameFenceValue);
+                        if (pResource->HasAnyWork())
                         {
-                            auto pResource = *i;
-                            pResource->ProcessFeedback(frameFenceValue);
-                            if (pResource->HasAnyWork())
+                            if (pResource->IsStale())
                             {
-                                if (pResource->IsStale())
-                                {
-                                    m_pendingResources.insert(pResource);
-                                }
-                                i++;
+                                m_pendingResources.insert(pResource);
                             }
-                            else
-                            {
-                                i = m_activeResources.erase(i);
-                            }
+                            i++;
                         }
-                        // add the amount of time we just spent processing feedback for a single frame
-                        m_processFeedbackTime += UINT64(m_cpuTimer.GetTime() - perFrameTime);
+                        else
+                        {
+                            i = m_activeResources.erase(i);
+                        }
                     }
+                    // add the amount of time we just spent processing feedback for a single frame
+                    m_processFeedbackTime += UINT64(m_cpuTimer.GetTime() - perFrameTime);
                 }
 
                 // push uploads and evictions for stale resources
@@ -255,100 +292,152 @@ void SFS::ProcessFeedbackThread::SharePendingResources(const std::vector<Resourc
 
 //-----------------------------------------------------------------------------
 // called by SFSManager on the main thread
-// swaps contents of in_resources into internal object
-// state of object is Process Feedback thread | initialize state, then messages thread
-// initialization state sets state to all clients, then messages other threads
-// NOTE! other threads retain a pointer to the object, so they will act as soon as the client flags are set
-// each thread does work and clears its flag
-// process feedback thread will act again when it is the only flag left, deleting resources
+// shares the list of resources to remove with processfeedback thread
 //-----------------------------------------------------------------------------
 void SFS::ProcessFeedbackThread::AsyncDestroyResources(std::set<ResourceBase*>& in_resources)
 {
     ASSERT(0 != in_resources.size());
 
-    // NOTE! prevents adding any more resources to remove until current ones removed
-    if (m_removeResourcesLock.TryAcquire())
-    {
-        // it is possible SFSManager stages a new resource, but is told to delete it
-        // before ProcessFeedbackThread has a change to unstage it - because it's a TryAcquire operation
-        // remove those resources and let them be deleted later
-        m_newResourcesLock.Acquire();
-        ContainerRemove(m_newResourcesStaging, in_resources);
-        m_newResourcesLock.Release();
+    // should not be possible for only the one bit to be set:
+    ASSERT(GroupRemoveResources::Client::Residency != m_removeResources.GetFlags());
 
-        // likewise, resources may have been staged/queued for feedback
-        // don't actually want to do that, so unstage and delete later
-        m_pendingLock.Acquire();
-        ContainerRemove(m_pendingResourceStaging, in_resources);
-        m_pendingLock.Release();
+    // add resources to remove to staging
+    m_removeStagingLock.Acquire();
+    m_removeResourcesStaging.insert(m_removeResourcesStaging.end(), in_resources.begin(), in_resources.end());
+    m_removeResources.SetFlag(GroupRemoveResources::Client::Initialize);
+    m_removeStagingLock.Release();
 
-        if (0 == m_removeResources.size())
-        {
-            m_removeResources.swap(in_resources);
-        }
-        else
-        {
-            // main thread managed to delete multiple sets of resources
-            // before ProcessFeedbackThread could wake up and start deleting
-            m_removeResources.insert(in_resources.begin(), in_resources.end());
-            in_resources.clear();
-        }
-        m_removeResourcesLock.Release();
-
-        m_removeResources.SetFlags(GroupRemoveResources::Client::ProcessFeedback | GroupRemoveResources::Client::Initialize);
-        Wake();
-    }
+    Wake();
 }
 
-void SFS::ProcessFeedbackThread::CheckRemoveResourcesPFT()
+//-----------------------------------------------------------------------------
+// handle deleting resources asynchronously
+// can be deleted if no UpdateLists reference them and the residency thread isn't tracking them
+// to avoid race when resources are quickly created then deleted,
+//     withhold new resources from the residency thread until packed mips are scheduled
+// ultimately, two expensive phases:
+//     1) received a new list of resources to remove
+//     2) after other threads have removed resources, delete them
+//-----------------------------------------------------------------------------
+void SFS::ProcessFeedbackThread::CheckRemoveResources()
 {
     UINT flags = m_removeResources.GetFlags();
-    if (0 == (GroupRemoveResources::Client::ProcessFeedback & flags))
+    if (0 == flags)
     {
-        return;
-    }
-
-    if (GroupRemoveResources::Client::ProcessFeedback == flags) // if the other threads have done their thing..
-    {
-        // delete the resources
-        // because ProcessFeedbackThread allocates from tile heap(s) (Atlases),
-        // it must be this thread that releases tiles back into the heap
-        // the streaming resource destructor releases all tile indices, including packed mip tiles
-        for (auto p : m_removeResources)
-        {
-            delete(p);
-        }
-        m_removeResources.clear();
-        m_removeResources.ClearFlag(GroupRemoveResources::Client::ProcessFeedback);
-        m_removeResourcesLock.Release();
+        ASSERT(0 == m_removeResources.size());
         return;
     }
 
     if (GroupRemoveResources::Client::Initialize & flags)
     {
-        // hold this lock until resources have been deleted
-        m_removeResourcesLock.Acquire();
+        ASSERT(m_removeResourcesStaging.size());
+
+        // move the staged changes local
+        std::vector<ResourceBase*> tmp;
+        m_removeStagingLock.Acquire();
+        m_removeResourcesStaging.swap(tmp);
+        m_removeResources.ClearFlag(GroupRemoveResources::Client::Initialize);
+        m_removeStagingLock.Release();
+        ASSERT(tmp.size());
+
+        // 3 possibilities at this point:
+        // flags = 0, flags = pft, flags = pft | res
+        // technically init could be set again, meaning more work is in staging, but don't worry about it
+
+        // form what will be the future m_removeResources
+        std::set<ResourceBase*> tmpSet = m_removeResources;
+        tmpSet.insert(tmp.begin(), tmp.end());
 
         // remove from my vectors
-        // do not delete any resources yet; deletion will happen once all clients have removed
-        ContainerRemove(m_newResources, m_removeResources);
-        ContainerRemove(m_activeResources, m_removeResources);
-        ContainerRemove(m_pendingResources, m_removeResources);
+        ContainerRemove(m_residencyShareNewResources, tmpSet);
+        ContainerRemove(m_activeResources, tmpSet);
+        ContainerRemove(m_pendingResources, tmpSet);
 
-        m_removeResources.SetFlags(GroupRemoveResources::Client::AllClients);
+        // if new resources haven't got packed mips yet, then residency won't know about them
+        // therefore, they are safe to delete
+        UINT num = (UINT)m_newResources.size();
+        for (UINT i = 0; i < num;)
+        {
+            auto pResource = m_newResources[i];
+            // NOTE: this method is called before InitPackedMips
+            // there may be previously created resources that have not had packed mips scheduled
+            // all those resources are safe to delete, because no other internal threads are using them
+            auto t = tmpSet.find(pResource);
+            if (t != tmpSet.end())
+            {
+                ASSERT(!pResource->GetInitialized());
+                // if found: delete resource, remove from both new set and new resource
+                delete pResource;
+                tmpSet.erase(t);
+                num--;
+                m_newResources[i] = m_newResources[num];
+            }
+            else
+            {
+                i++;
+            }
+        }
+        m_newResources.resize(num);
 
-        // send a message to the other threads
-        m_pSFSManager->BroadcastRemoveResources(&m_removeResources);
+        m_removeResources.Acquire();
+        m_removeResources.swap(tmpSet);
+        m_removeResources.Release();
+
+        // tell residency thread if there's work to do. wait for it.
+        if (m_removeResources.size())
+        {
+            m_removeResources.SetFlag(GroupRemoveResources::Client::Residency);
+            // wake up residency thread (which may already be awake)
+            m_pSFSManager->WakeResidencyThread();
+            m_removeResources.SetFlag(GroupRemoveResources::Client::ProcessFeedback);
+            Wake(); // prevent self from going to sleep right away
+        }
+        else
+        {
+            // no other work required to remove resources
+            m_removeResources.ClearFlag(GroupRemoveResources::Client::ProcessFeedback);
+        }
     }
 
-    // don't sleep until this is clear
-    Wake();
-}
-
-SFS::ProcessFeedbackThread::~ProcessFeedbackThread()
-{
-    for (auto p : m_removeResources)
+    // if the residency thread has process removed resources,
+    // isolate the remaining resources that have pending work in DataUploader
+    // then delete them as they become available
+    if (GroupRemoveResources::Client::ProcessFeedback == m_removeResources.GetFlags())
     {
-        delete p;
+        std::set<ResourceBase*> remaining;
+        auto& updateLists = m_dataUploader.GetUpdateLists();
+        for (auto& u : updateLists)
+        {
+            if (UpdateList::State::STATE_FREE != u.m_executionState)
+            {
+                auto i = m_removeResources.find((ResourceBase*)u.m_pResource);
+                if (i != m_removeResources.end())
+                {
+                    // found a resource with in-flight activity
+                    remaining.insert((ResourceBase*)u.m_pResource);
+                    m_removeResources.erase(i);
+                }
+            }
+        }
+
+        // delete idle resources == m_removeResources
+        for (auto p : m_removeResources)
+        {
+            delete p;
+        }
+
+        // set removeResources to just the in-flight resources
+        m_removeResources.swap(remaining);
+
+        // nothing left to do, so this thread can return to normal
+        if (0 == m_removeResources.size())
+        {
+            m_removeResources.ClearFlag(GroupRemoveResources::Client::ProcessFeedback);
+        }
+        else
+        {
+            // prevent self from going to sleep until all remove resources have drained
+            Wake();
+        }
     }
 }

@@ -80,7 +80,7 @@ namespace SFS
         };
         SFS::FileStreamer* SetStreamer(StreamerType in_streamerType, bool in_traceCaptureMode);
 
-        void WakeRemoveResources(class GroupRemoveResources* pR);
+        const auto& GetUpdateLists() const { return m_updateLists; }
 
         //----------------------------------
         // statistics and visualization
@@ -148,12 +148,6 @@ namespace SFS
         UINT64 m_memoryFenceValue{ 0 };
         void LoadTextureFromMemory(UpdateList& out_updateList);
         void SubmitTextureLoadsFromMemory();
-
-        // can't remove resources, can only verify there are active GPU
-        // activities that target resources that are flagged for deletion
-        GroupRemoveResources* m_pRemoveResources{ nullptr };
-        void CheckRemoveResourcesFT();
-        void CheckRemoveResourcesST();
 
         //-------------------------------------------
         // statistics

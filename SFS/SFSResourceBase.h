@@ -164,6 +164,9 @@ namespace SFS
 
         bool InitPackedMips();
 
+#ifdef _DEBUG
+        bool GetInitialized() { return (m_packedMipStatus >= PackedMipStatus::REQUESTED); }
+#endif
         //-------------------------------------
         // end called by SFSM::ProcessFeedbackThread
         //-------------------------------------

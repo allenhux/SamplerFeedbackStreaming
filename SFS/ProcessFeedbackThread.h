@@ -47,21 +47,18 @@ namespace SFS
     class ResourceBase;
     class DataUploader;
 
-    class GroupRemoveResources : public std::set<ResourceBase*>
+    class GroupRemoveResources : public std::set<ResourceBase*>, public Lock
     {
     public:
         enum Client : UINT32
         {
             Initialize = 1 << 0,
             ProcessFeedback = 1 << 1,
-            Residency = 1 << 2,
-            Fence = 1 << 3,
-            Submit = 1 << 4,
-            AllClients = ProcessFeedback | Residency | Fence | Submit
+            Residency = 1 << 2
         };
         UINT32 GetFlags() const { return m_flags; }
         void ClearFlag(Client c) { m_flags &= ~c; }
-        void SetFlags(UINT32 f) { m_flags = f; }
+        void SetFlag(Client c) { m_flags |= c; }
     private:
         std::atomic<UINT32> m_flags;
     };
@@ -86,6 +83,9 @@ namespace SFS
         // on success, in_resources will be cleared
         void AsyncDestroyResources(std::set<ResourceBase*>& in_resources);
 
+        // called by SFSManager for Residency thread constructor
+        GroupRemoveResources& GetRemoveResources() { return m_removeResources; }
+
         UINT GetTotalNumSubmits() const { return m_numTotalSubmits; }
         UINT64 GetTotalProcessTime() const { return m_processFeedbackTime; }
     private:
@@ -96,7 +96,9 @@ namespace SFS
         std::thread m_thread;
 
         // new resources are prioritized until packed mips are in-flight
-        std::list<ResourceBase*> m_newResources;
+        std::vector<ResourceBase*> m_newResources;
+        // resources to be shared with residency thread (only after sufficient init, in case they are quickly deleted)
+        std::vector<ResourceBase*> m_residencyShareNewResources;
 
         // resources with any pending work, including evictions scheduled multiple frames later
         std::set<ResourceBase*> m_activeResources;
@@ -110,11 +112,13 @@ namespace SFS
         std::vector<ResourceBase*> m_pendingResourceStaging; // resources to be shared with ProcessFeedbackThread
         Lock m_pendingLock;   // lock between ProcessFeedbackThread and main thread
 
+        std::vector<ResourceBase*> m_removeResourcesStaging; // resources to be deleted
+        Lock m_removeStagingLock;   // lock between ProcessFeedbackThread and main thread
+
         // PFT: initializes this, removes its own resources, then sends pointer to other threads
         // other threads: if (ptr != nullptr) remove resources, ClearFlag(self), ptr = nullptr
         // PFT: if (0==GetFlags()) delete the resources.
         GroupRemoveResources m_removeResources;
-        Lock m_removeResourcesLock;   // lock between ProcessFeedbackThread and main thread
 
         SFS::SynchronizationFlag m_processFeedbackFlag;
 
@@ -127,6 +131,6 @@ namespace SFS
 
         const UINT m_minNumUploadRequests{ 2000 }; // heuristic to reduce Submit()s
         void SignalFileStreamer();
-        void CheckRemoveResourcesPFT();
+        void CheckRemoveResources();
     };
 }

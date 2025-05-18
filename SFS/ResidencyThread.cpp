@@ -24,9 +24,11 @@ namespace SFS
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-SFS::ResidencyThread::ResidencyThread(ManagerRT* in_pSFSManager, int in_threadPriority) :
+SFS::ResidencyThread::ResidencyThread(ManagerRT* in_pSFSManager, GroupRemoveResources& in_grr,
+    int in_threadPriority) :
     m_pSFSManager(in_pSFSManager)
     , m_threadPriority(in_threadPriority)
+    , m_removeResources(in_grr)
 {}
 
 //-----------------------------------------------------------------------------
@@ -54,11 +56,12 @@ void SFS::ResidencyThread::Start()
                 }
 
                 // remove resources?
-                if ((nullptr != m_pRemoveResources) &&
-                    (m_pRemoveResources->GetFlags() & GroupRemoveResources::Client::Residency))
+                if (GroupRemoveResources::Client::Residency & m_removeResources.GetFlags())
                 {
-                    ContainerRemove(m_streamingResources, *m_pRemoveResources);
-                    m_pRemoveResources->ClearFlag(GroupRemoveResources::Client::Residency);
+                    m_removeResources.Acquire();
+                    ContainerRemove(m_streamingResources, m_removeResources);
+                    m_removeResources.Release();
+                    m_removeResources.ClearFlag(GroupRemoveResources::Client::Residency);
                 }
 
                 std::vector<ResourceBase*> updated;
@@ -103,5 +106,8 @@ void SFS::ResidencyThread::ShareNewResources(const std::vector<ResourceBase*>& i
 {
     m_newResourcesLock.Acquire();
     m_newResourcesStaging.insert(m_newResourcesStaging.end(), in_resources.begin(), in_resources.end());
+#ifdef _DEBUG
+    for (auto p : m_newResourcesStaging) { ASSERT(p->GetInitialized()); }
+#endif
     m_newResourcesLock.Release();
 }

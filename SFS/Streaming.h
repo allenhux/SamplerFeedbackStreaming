@@ -225,4 +225,22 @@ namespace SFS
     {
         std::erase_if(container, [&](auto p) { return values.contains(p); });
     }
+
+    // container remove but not preserving order
+    // there must not be duplicates in the container
+    template<typename C, typename V> void ContainerRemoveUO(std::vector<C>& container, std::set<V> values)
+    {
+        UINT numToFind = (UINT)values.size();
+
+        for (UINT i = (UINT)container.size(); (numToFind != 0) && (i != 0);)
+        {
+            i--;
+            if (values.contains(container[i]))
+            {
+                container[i] = container.back();
+                container.resize(container.size() - 1);
+                numToFind--;
+            }
+        }
+    }
 }

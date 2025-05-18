@@ -1909,7 +1909,7 @@ bool Scene::Draw()
 #if 0
     m_args.m_cameraAnimationRate = .1f;
     // TEST: creation/deletion and thread safety
-    if (m_frameNumber < 500)
+    if (m_frameNumber < 1000)
     m_args.m_numSpheres = 2 + (rand() * (m_args.m_maxNumObjects-2)) / RAND_MAX;
     //m_args.m_numSpheres = 1 + (m_frameNumber & 1);
 #endif

@@ -39,19 +39,19 @@ extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = ".\\D3D12\\
 // constructor for streaming library base class
 //=============================================================================
 SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_pDevice) :// required for constructor
-m_numSwapBuffers(in_desc.m_swapChainBufferCount)
-// delay eviction by enough to not affect a pending frame
-,m_evictionDelay(std::max(in_desc.m_swapChainBufferCount + 1, in_desc.m_evictionDelay))
-, m_gpuTimerResolve(in_pDevice, in_desc.m_swapChainBufferCount, D3D12GpuTimer::TimerType::Direct)
-, m_renderFrameIndex(0)
-, m_directCommandQueue(in_desc.m_pDirectCommandQueue)
-, m_device(in_pDevice)
-, m_commandLists((UINT)CommandListName::Num)
-, m_dataUploader(in_pDevice, in_desc.m_maxNumCopyBatches, in_desc.m_stagingBufferSizeMB, in_desc.m_maxTileMappingUpdatesPerApiCall, (int)in_desc.m_threadPriority)
-, m_traceCaptureMode{in_desc.m_traceCaptureMode}
-, m_oldSharedResidencyMaps(in_desc.m_swapChainBufferCount + 1, nullptr)
-, m_residencyThread((ManagerRT*)this, (int)in_desc.m_threadPriority)
-, m_processFeedbackThread((ManagerPFT*)this, m_dataUploader, in_desc.m_minNumUploadRequests, (int)in_desc.m_threadPriority)
+    m_numSwapBuffers(in_desc.m_swapChainBufferCount)
+    // delay eviction by enough to not affect a pending frame
+    , m_evictionDelay(std::max(in_desc.m_swapChainBufferCount + 1, in_desc.m_evictionDelay))
+    , m_gpuTimerResolve(in_pDevice, in_desc.m_swapChainBufferCount, D3D12GpuTimer::TimerType::Direct)
+    , m_renderFrameIndex(0)
+    , m_directCommandQueue(in_desc.m_pDirectCommandQueue)
+    , m_device(in_pDevice)
+    , m_commandLists((UINT)CommandListName::Num)
+    , m_dataUploader(in_pDevice, in_desc.m_maxNumCopyBatches, in_desc.m_stagingBufferSizeMB, in_desc.m_maxTileMappingUpdatesPerApiCall, (int)in_desc.m_threadPriority)
+    , m_traceCaptureMode{ in_desc.m_traceCaptureMode }
+    , m_oldSharedResidencyMaps(in_desc.m_swapChainBufferCount + 1, nullptr)
+    , m_processFeedbackThread((ManagerPFT*)this, m_dataUploader, in_desc.m_minNumUploadRequests, (int)in_desc.m_threadPriority)
+    , m_residencyThread((ManagerRT*)this, m_processFeedbackThread.GetRemoveResources(), (int)in_desc.m_threadPriority)
 {
     ASSERT(D3D12_COMMAND_LIST_TYPE_DIRECT == m_directCommandQueue->GetDesc().Type);
 
@@ -329,6 +329,7 @@ void SFS::ManagerBase::RemoveResources()
         //ContainerRemove(m_newResources, m_removeResources);
 #endif
         m_processFeedbackThread.AsyncDestroyResources(m_removeResources);
+        m_removeResources.clear();
     }
 }
 

@@ -17,7 +17,7 @@ namespace SFS
     class ResidencyThread
     {
     public:
-        ResidencyThread(ManagerRT* in_pSFSManager, int in_threadPriority);
+        ResidencyThread(ManagerRT* in_pSFSManager, class GroupRemoveResources& in_grr,int in_threadPriority);
 
         void Start();
         void Stop();
@@ -26,7 +26,6 @@ namespace SFS
 
         // blocking lock
         void ShareNewResources(const std::vector<ResourceBase*>& in_resources);
-        void WakeRemoveResources(class GroupRemoveResources* pR) { m_pRemoveResources = pR; Wake(); }
     private:
         ManagerRT* const m_pSFSManager;
         const int m_threadPriority;
@@ -44,6 +43,6 @@ namespace SFS
         // lock around staging area for new resources
         Lock m_newResourcesLock;
 
-        GroupRemoveResources* m_pRemoveResources{ nullptr };
+        GroupRemoveResources& m_removeResources;
     };
 }
