@@ -148,7 +148,6 @@ namespace SFS
         // should clear feedback buffer before first use
         std::vector<FeedbackReadback> m_firstTimeClears;
 
-        bool m_threadsRunning{ false };
         void StartThreads();
         void StopThreads(); // stop only SFSManager threads. Used by Finish()
 

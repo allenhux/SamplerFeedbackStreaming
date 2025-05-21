@@ -83,7 +83,7 @@ SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_p
 
     UseDirectStorage(in_desc.m_useDirectStorage);
 
-    StartThreads(); // have to, or hit assert in debug mode
+    StartThreads();
 }
 
 SFS::ManagerBase::~ManagerBase()
@@ -107,13 +107,6 @@ SFS::ManagerBase::~ManagerBase()
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::StartThreads()
 {
-    if (m_threadsRunning)
-    {
-        return;
-    }
-
-    m_threadsRunning = true;
-
     // process sampler feedback buffers, generate upload and eviction commands
     m_processFeedbackThread.Start();
     // update residency maps
@@ -125,16 +118,11 @@ void SFS::ManagerBase::StartThreads()
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::StopThreads()
 {
-    if (m_threadsRunning)
-    {
-        m_threadsRunning = false;
-
-        // stop SFSManager threads
-        // do not want ProcessFeedback generating more work
-        // don't want UpdateResidency to write to min maps when that might be replaced
-        m_processFeedbackThread.Stop();
-        m_residencyThread.Stop();
-    }
+    // stop SFSManager threads
+    // do not want ProcessFeedback generating more work
+    // don't want UpdateResidency to write to min maps when that might be replaced
+    m_processFeedbackThread.Stop();
+    m_residencyThread.Stop();
 }
 
 //-----------------------------------------------------------------------------

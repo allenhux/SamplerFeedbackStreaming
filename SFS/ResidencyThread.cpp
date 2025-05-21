@@ -35,12 +35,11 @@ SFS::ResidencyThread::ResidencyThread(ManagerRT* in_pSFSManager, GroupRemoveReso
 //-----------------------------------------------------------------------------
 void SFS::ResidencyThread::Start()
 {
-    ASSERT(false == m_threadRunning);
+    if (m_threadRunning) { return; }
 
+    m_threadRunning = true;
     m_thread = std::thread([&]
         {
-            m_threadRunning = true;
-
             while (m_threadRunning)
             {
                 m_residencyChangedFlag.Wait();

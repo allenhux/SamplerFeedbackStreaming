@@ -218,8 +218,7 @@ void SFS::ResourceBase::TileMappingState::Init(const std::vector<SFSResourceDesc
 void SFS::ResourceBase::TileMappingState::FreeHeapAllocations(SFS::Heap* in_pHeap)
 {
     std::vector<UINT> indices;
-    // traverse bottom up. can early-out if a lower tile is empty,
-    // because tiles are loaded bottom-up
+    // traverse bottom up.
     for (auto layer = m_heapIndices.rbegin(); layer != m_heapIndices.rend(); layer++)
     {
         for (auto& i : layer->m_tiles)
@@ -229,11 +228,6 @@ void SFS::ResourceBase::TileMappingState::FreeHeapAllocations(SFS::Heap* in_pHea
                 indices.push_back(i);
                 i = TileMappingState::InvalidIndex;
             }
-        }
-        // if there were no tiles on this mip layer, won't be any tiles on higher-res mip layers
-        if (0 == indices.size())
-        {
-            break;
         }
     }
     if (indices.size())
@@ -898,9 +892,6 @@ void SFS::ResourceBase::ClearFeedback(ID3D12GraphicsCommandList* in_pCmdList, co
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList)
 {
-    // call to resolve feedback means this resource is now stale
-    m_pSFSManager->SetPending(this);
-
     // move to next readback index
     m_readbackIndex = (m_readbackIndex + 1) % m_queuedFeedback.size();
 

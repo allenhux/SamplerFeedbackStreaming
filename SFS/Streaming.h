@@ -199,12 +199,8 @@ namespace SFS
         void Release()
         {
             ASSERT(0 != m_lock);
-            bool wake = (m_lock == 1); // only Set for Acquire()
             m_lock = 0;
-            if (wake)
-            {
-                m_flag.Set();
-            }
+            m_flag.Set();
         }
 
         bool TryAcquire()

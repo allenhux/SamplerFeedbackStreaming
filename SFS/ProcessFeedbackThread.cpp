@@ -64,13 +64,17 @@ void SFS::ProcessFeedbackThread::SignalFileStreamer()
 //-----------------------------------------------------------------------------
 void SFS::ProcessFeedbackThread::Start()
 {
-    ASSERT(false == m_threadRunning);
+    if (m_threadRunning) { return; }
 
     m_threadRunning = true;
     m_thread = std::thread([&]
         {
             UINT uploadsRequested = 0; // remember if any work was queued so we can signal afterwards
             UINT64 previousFrameFenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
+
+
+            // start timer for this frame
+            INT64 prevFrameTime = m_cpuTimer.GetTime();
 
             while (m_threadRunning)
             {
@@ -83,27 +87,51 @@ void SFS::ProcessFeedbackThread::Start()
                     newFrame = true;
                 }
 
-                // check for new resources
-                if (m_newResourcesStaging.size() && m_newResourcesLock.TryAcquire())
+                // only look for new or to-delete resources once per frame
+                if (newFrame)
                 {
-                    // grab them and release the lock quickly
-                    std::vector<ResourceBase*> tmpResources;
-                    tmpResources.swap(m_newResourcesStaging);
-                    m_newResourcesLock.Release();
+                    // check for new resources
+                    if (m_newResourcesStaging.size() && m_newResourcesLock.TryAcquire())
+                    {
+                        // grab them and release the lock quickly
+                        std::vector<ResourceBase*> tmpResources;
+                        tmpResources.swap(m_newResourcesStaging);
+                        m_newResourcesLock.Release();
 
-                    m_newResources.insert(m_newResources.end(), tmpResources.begin(), tmpResources.end());
+                        m_newResources.insert(m_newResources.end(), tmpResources.begin(), tmpResources.end());
+                    }
+
+                    // check for resources where the application has called QueueFeedback() or QueueEviction()
+                    if (m_pendingResourceStaging.size() && m_pendingLock.TryAcquire())
+                    {
+                        // grab them and release the lock quickly
+                        std::vector<ResourceBase*> tmpResources;
+                        tmpResources.swap(m_pendingResourceStaging);
+                        m_pendingLock.Release();
+                        m_activeResources.insert(tmpResources.begin(), tmpResources.end());
+                    }
+
+                    // compare active resources to resources that are to be removed
+                    // NOTE: doing this before InitPackedMips, so m_newResources may contain resources
+                    //       without packed mips and that have not been propagated to residency thread
+                    CheckRemoveResources();
+
+                    // propagate new resources to residency thread only after they have packed mips in-flight
+                    // note these are new resources that completed initialization last frame
+                    if (m_residencyShareNewResources.size())
+                    {
+#ifdef _DEBUG
+                        for (auto p : m_residencyShareNewResources) { ASSERT(p->GetInitialized()); }
+#endif
+                        m_pSFSManager->ShareNewResources(m_residencyShareNewResources);
+                        m_residencyShareNewResources.clear();
+                    }
                 }
-
-                // compare active resources to resources that are to be removed
-                // NOTE: doing this before InitPackedMips, so m_newResources may contain resources
-                //       without packed mips and that have not been propagated to residency thread
-                CheckRemoveResources();
-
-                // FIXME: TODO while packed mips are loading, process evictions on stale resources
 
                 // prioritize loading packed mips, as objects shouldn't be displayed until packed mips load                
                 // InitPackedMips() must be called on every resource that needs to load packed mips
                 // once packed mips are scheduled to load, can share that resource with the residency thread
+                // NOTE: can successfully InitPackedMips() (on different resources) multiple times per frame
                 if (m_newResources.size())
                 {
                     UINT num = (UINT)m_newResources.size();
@@ -122,35 +150,12 @@ void SFS::ProcessFeedbackThread::Start()
                             i++;
                         }
                     }
+                    uploadsRequested += (UINT)m_newResources.size() - num;
+                    if (uploadsRequested)
+                    {
+                        SignalFileStreamer(); // these are small uploads, give FileStreamer a nudge
+                    }
                     m_newResources.resize(num);
-                }
-
-                // check for existing resources that have feedback
-                if (m_pendingResourceStaging.size() && m_pendingLock.TryAcquire())
-                {
-                    // grab them and release the lock quickly
-                    std::vector<ResourceBase*> tmpResources;
-                    tmpResources.swap(m_pendingResourceStaging);
-                    m_pendingLock.Release();
-
-                    m_activeResources.insert(tmpResources.begin(), tmpResources.end());
-                }
-
-                // propagate new resources to residency thread only after they have packed mips in-flight
-                if (m_residencyShareNewResources.size() && newFrame)
-                {
-#ifdef _DEBUG
-                    for (auto p : m_residencyShareNewResources) { ASSERT(p->GetInitialized()); }
-#endif
-                    m_pSFSManager->ShareNewResources(m_residencyShareNewResources);
-                    m_residencyShareNewResources.clear();
-                }
-
-                if (m_newResources.size() && newFrame)
-                {
-                    SignalFileStreamer();
-
-                    continue; // still working on loading packed mips. don't move on to other streaming tasks yet.
                 }
 
                 bool flushPendingUploadRequests = false;
@@ -158,9 +163,6 @@ void SFS::ProcessFeedbackThread::Start()
                 // Once per frame: process feedback buffers
                 if (newFrame)
                 {
-                    // start timer for this frame
-                    INT64 perFrameTime = m_cpuTimer.GetTime();
-
                     // flush any pending uploads from previous frame
                     if (uploadsRequested) { flushPendingUploadRequests = true; }
 
@@ -181,15 +183,11 @@ void SFS::ProcessFeedbackThread::Start()
                             i = m_activeResources.erase(i);
                         }
                     }
-                    // add the amount of time we just spent processing feedback for a single frame
-                    m_processFeedbackTime += UINT64(m_cpuTimer.GetTime() - perFrameTime);
                 }
 
                 // push uploads and evictions for stale resources
                 if (m_pendingResources.size())
                 {
-                    INT64 pendingStartTime = m_cpuTimer.GetTime();
-
                     UINT numEvictions = 0;
                     for (auto i = m_pendingResources.begin(); i != m_pendingResources.end();)
                     {
@@ -221,8 +219,6 @@ void SFS::ProcessFeedbackThread::Start()
                         }
                     }
                     if (numEvictions) { m_dataUploader.AddEvictions(numEvictions); }
-
-                    m_processFeedbackTime += UINT64(m_cpuTimer.GetTime() - pendingStartTime);
                 }
 
                 // if there are uploads, maybe signal depending on heuristic to minimize # signals
@@ -242,10 +238,14 @@ void SFS::ProcessFeedbackThread::Start()
 
                 // nothing to do? wait for next frame
                 // development note: do not Wait() if uploadsRequested != 0. safe because uploadsRequested was cleared above.
-                if (0 == m_activeResources.size())
-                {                    
+                if (0 == m_pendingResources.size())
+                {
+                    m_processFeedbackTime += m_cpuTimer.GetTime() - prevFrameTime;
+
                     ASSERT(0 == uploadsRequested);
                     m_processFeedbackFlag.Wait();
+
+                    prevFrameTime = m_cpuTimer.GetTime();
                 }
             }
 
@@ -304,8 +304,8 @@ void SFS::ProcessFeedbackThread::AsyncDestroyResources(std::set<ResourceBase*>& 
     // add resources to remove to staging
     m_removeStagingLock.Acquire();
     m_removeResourcesStaging.insert(m_removeResourcesStaging.end(), in_resources.begin(), in_resources.end());
-    m_removeResources.SetFlag(GroupRemoveResources::Client::Initialize);
     m_removeStagingLock.Release();
+    m_removeResources.SetFlag(GroupRemoveResources::Client::Initialize);
 
     Wake();
 }

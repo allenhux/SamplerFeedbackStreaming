@@ -99,6 +99,7 @@ void SFS::ManagerBase::UseDirectStorage(bool in_useDS)
     }
 
     delete pOldStreamer;
+    StartThreads();
 }
 
 //-----------------------------------------------------------------------------
@@ -144,6 +145,7 @@ void SFS::ManagerBase::SetVisualizationMode(UINT in_mode)
     }
 
     m_dataUploader.SetVisualizationMode(in_mode);
+    StartThreads();
 }
 
 //-----------------------------------------------------------------------------
@@ -179,15 +181,6 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     {
         auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
         m_oldSharedResidencyMaps[i] = nullptr;
-    }
-
-    // need to re-StartThreads() if stopped
-    // (change in visualization mode or file streamer)
-    if (!m_threadsRunning)
-    {
-        ASSERT(0 == m_newResources.size());
-
-        StartThreads();
     }
 
     // if new StreamingResources have been created...
