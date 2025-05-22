@@ -7,7 +7,7 @@
 
   // maximum number of in-flight batches of uploads, each batch corresponds to 1 texture
   // starvation is prevented via a stale queue
-  "numStreamingBatches": 256,
+  "numStreamingBatches": 512,
   // sum of #tiles of pending batches. heuristic to reduce frequency of DS Submit() calls
   "minNumUploadRequests": 1024,
   // number of frames to delay evicting a tile

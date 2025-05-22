@@ -70,11 +70,6 @@ namespace SFS
         // tile evictions:
         std::vector<D3D12_TILED_RESOURCE_COORDINATE> m_evictCoords;
 
-        UINT GetNumStandardUpdates() const { return (UINT)m_coords.size(); }
-        UINT GetNumEvictions() const { return (UINT)m_evictCoords.size(); }
-
-        void Reset(SFS::ResourceDU* in_pResource);
-
         INT64 m_copyLatencyTimer{ 0 }; // used only to get an approximate latency for tile copies
 
         union PackedMip
@@ -87,5 +82,18 @@ namespace SFS
             } m_mipInfo;
             D3D12_TILED_RESOURCE_COORDINATE m_coord;
         };
+
+        UINT GetNumStandardUpdates() const { return (UINT)m_coords.size(); }
+        UINT GetNumEvictions() const { return (UINT)m_evictCoords.size(); }
+
+        void Reset(SFS::ResourceDU* in_pResource)
+        {
+            m_pResource = in_pResource;
+            m_copyFenceValid = false;
+            m_coords.clear();
+            m_heapIndices.clear();
+            m_evictCoords.clear();
+            m_copyLatencyTimer = 0;
+        }
     };
 }

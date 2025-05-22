@@ -295,12 +295,10 @@ void SFS::ManagerBase::CreateMinMipMapView(D3D12_CPU_DESCRIPTOR_HANDLE in_descri
 
 //-----------------------------------------------------------------------------
 // delete resources that have been requested via Remove()
-// used by BeginFrame()
+// only used by BeginFrame()
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::RemoveResources()
 {
-    ASSERT(!GetWithinFrame());
-
     if (m_removeResources.size())
     {
         ContainerRemove(m_streamingResources, m_removeResources);
@@ -308,7 +306,6 @@ void SFS::ManagerBase::RemoveResources()
         ContainerRemove(m_packedMipTransitionResources, m_removeResources);
 
         // theoretically possible? would have to create and destroy the same resource in the same frame
-        // can only delete if no tile memory has been allocated yet!
 #ifdef _DEBUG
         for (auto p : m_newResources)
         {

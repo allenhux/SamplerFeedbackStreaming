@@ -536,8 +536,6 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
     }
 }
 
-#include "Subdivision.h"
-
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 int WINAPI WinMain(

@@ -123,7 +123,6 @@
     <ClCompile Include="SFSResourceDU.cpp" />
     <ClCompile Include="SFSManager.cpp" />
     <ClCompile Include="SFSManagerInternal.cpp" />
-    <ClCompile Include="UpdateList.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

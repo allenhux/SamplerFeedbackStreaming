@@ -112,9 +112,6 @@
     <ClCompile Include="SFSManagerInternal.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="UpdateList.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="ResidencyThread.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

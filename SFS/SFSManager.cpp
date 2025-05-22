@@ -190,11 +190,11 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
         AllocateSharedClearUavHeap();
         CreateClearDescriptors(); // if new shared heap, need to set clear uav heap descriptors on existing resources
 
-        // share new resources with PFT. PFT will share with residency thread
-        m_processFeedbackThread.ShareNewResources(m_newResources);
-
         // monitor new resources for when they need packed mip transition barriers
         m_packedMipTransitionResources.insert(m_packedMipTransitionResources.end(), m_newResources.begin(), m_newResources.end());
+
+        // share new resources with PFT. PFT will share with residency thread
+        m_processFeedbackThread.ShareNewResources(m_newResources);
         m_newResources.clear();
     }
 
@@ -253,7 +253,6 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
         m_processFeedbackFrameTime = m_cpuTimer.GetSecondsFromDelta(processFeedbackTime - m_previousFeedbackTime);
         m_previousFeedbackTime = processFeedbackTime; // remember current time for next call
     }
-
 }
 
 //-----------------------------------------------------------------------------

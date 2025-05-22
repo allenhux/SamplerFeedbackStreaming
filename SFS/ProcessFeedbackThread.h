@@ -97,6 +97,7 @@ namespace SFS
 
         // new resources are prioritized until packed mips are in-flight
         std::vector<ResourceBase*> m_newResources;
+
         // resources to be shared with residency thread (only after sufficient init, in case they are quickly deleted)
         std::vector<ResourceBase*> m_residencyShareNewResources;
 
@@ -115,11 +116,10 @@ namespace SFS
         std::vector<ResourceBase*> m_removeResourcesStaging; // resources to be deleted
         Lock m_removeStagingLock;   // lock between ProcessFeedbackThread and main thread
 
-        // PFT: initializes this, removes its own resources, then sends pointer to other threads
-        // other threads: if (ptr != nullptr) remove resources, ClearFlag(self), ptr = nullptr
-        // PFT: if (0==GetFlags()) delete the resources.
+        // Resources to delete. Verify other threads (Residency, DataUploader) aren't using them first.
         GroupRemoveResources m_removeResources;
 
+        // sleep until this is set:
         SFS::SynchronizationFlag m_processFeedbackFlag;
 
         RawCpuTimer m_cpuTimer;

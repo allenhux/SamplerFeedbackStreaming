@@ -112,8 +112,9 @@ void SFS::ProcessFeedbackThread::Start()
                     }
 
                     // compare active resources to resources that are to be removed
-                    // NOTE: doing this before InitPackedMips, so m_newResources may contain resources
-                    //       without packed mips and that have not been propagated to residency thread
+                    // NOTE: doing this before InitPackedMips and sharing with ResidencyThread
+                    //       as m_newResources may contain resources that have not been
+                    //       propagated to residency thread
                     CheckRemoveResources();
 
                     // propagate new resources to residency thread only after they have packed mips in-flight
@@ -404,6 +405,7 @@ void SFS::ProcessFeedbackThread::CheckRemoveResources()
     // then delete them as they become available
     if (GroupRemoveResources::Client::ProcessFeedback == m_removeResources.GetFlags())
     {
+        std::vector<ResourceBase*> dbg;
         std::set<ResourceBase*> remaining;
         auto& updateLists = m_dataUploader.GetUpdateLists();
         for (auto& u : updateLists)
@@ -420,7 +422,7 @@ void SFS::ProcessFeedbackThread::CheckRemoveResources()
             }
         }
 
-        // delete idle resources == m_removeResources
+        // m_removeResources is the resources to delete that don't have in-flight work
         for (auto p : m_removeResources)
         {
             delete p;
