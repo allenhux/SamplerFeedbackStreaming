@@ -130,9 +130,10 @@ namespace SFS
         void FenceMonitorThread();
         std::thread m_fenceMonitorThread;
         SFS::SynchronizationFlag m_fenceMonitorFlag; // sleeps until flag set
-        RawCpuTimer* m_pFenceThreadTimer{ nullptr }; // init timer on the thread that uses it. can't really worry about thread migration.
         std::vector<UpdateList*> m_monitorTasks;
         RingBuffer m_monitorTaskAlloc;
+        HANDLE m_fenceEvents[2]{};
+        RawCpuTimer* m_pFenceThreadTimer{ nullptr }; // init timer on the thread that uses it. can't really worry about thread migration.
 
         void StartThreads();
         void StopThreads();

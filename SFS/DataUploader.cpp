@@ -64,6 +64,16 @@ SFS::DataUploader::DataUploader(
         m_mappingFenceValue++;
     }
 
+    // create events for m_fenceMonitorThread
+    for (UINT i = 0; i < sizeof(m_fenceEvents) / sizeof(m_fenceEvents[0]); i++)
+    {
+        m_fenceEvents[i] = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        if (m_fenceEvents[i] == nullptr)
+        {
+            ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
+        }
+    }
+
     InitDirectStorage(in_pDevice);
 
     //NOTE: SFSManager must call SetStreamer() to start streaming
@@ -74,6 +84,10 @@ SFS::DataUploader::~DataUploader()
 {
     // stop updating. all StreamingResources must have been destroyed already, presumably.
     StopThreads();
+    for (UINT i = 0; i < sizeof(m_fenceEvents) / sizeof(m_fenceEvents[0]); i++)
+    {
+        ::CloseHandle(m_fenceEvents[i]);
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -340,6 +354,8 @@ void SFS::DataUploader::FenceMonitorThread()
 {
     bool loadPackedMips = false;
 
+    UINT64 mappingFenceValue = m_mappingFence->GetCompletedValue();
+    UINT64 copyFenceValue = m_pFileStreamer->GetCompletedValue();
     for (UINT i = 0; i < m_monitorTaskAlloc.GetReadyToRead();)
     {
         UINT taskIndex = m_monitorTaskAlloc.GetReadIndex(i);
@@ -362,7 +378,8 @@ void SFS::DataUploader::FenceMonitorThread()
             ASSERT(0 == updateList.GetNumEvictions());
 
             // wait for mapping complete before streaming packed tiles
-            if (m_mappingFence->GetCompletedValue() >= updateList.m_mappingFenceValue)
+            mappingFenceValue = m_mappingFence->GetCompletedValue();
+            if (mappingFenceValue >= updateList.m_mappingFenceValue)
             {
                 updateList.m_pResource->LoadPackedMipInfo(updateList);
                 m_pFileStreamer->StreamPackedMips(updateList);
@@ -381,7 +398,8 @@ void SFS::DataUploader::FenceMonitorThread()
             ASSERT(1 == updateList.GetNumStandardUpdates());
             ASSERT(0 == updateList.GetNumEvictions());
 
-            if ((updateList.m_copyFenceValid) && m_pFileStreamer->GetCompleted(updateList.m_copyFenceValue))
+            copyFenceValue = m_pFileStreamer->GetCompletedValue();
+            if ((updateList.m_copyFenceValid) && (copyFenceValue >= updateList.m_copyFenceValue))
             {
                 updateList.m_pResource->NotifyPackedMips();
                 freeUpdateList = true;
@@ -392,7 +410,8 @@ void SFS::DataUploader::FenceMonitorThread()
             ASSERT(0 != updateList.GetNumStandardUpdates());
 
             // only check copy fence if the fence has been set (avoid race condition)
-            if ((updateList.m_copyFenceValid) && m_pFileStreamer->GetCompleted(updateList.m_copyFenceValue))
+            copyFenceValue = m_pFileStreamer->GetCompletedValue();
+            if ((updateList.m_copyFenceValid) && (copyFenceValue >= updateList.m_copyFenceValue))
             {
                 updateList.m_executionState = UpdateList::State::STATE_MAP_PENDING;
             }
@@ -403,7 +422,8 @@ void SFS::DataUploader::FenceMonitorThread()
             [[fallthrough]];
 
         case UpdateList::State::STATE_MAP_PENDING:
-            if (updateList.m_mappingFenceValue <= m_mappingFence->GetCompletedValue())
+            mappingFenceValue = m_mappingFence->GetCompletedValue();
+            if (mappingFenceValue >= updateList.m_mappingFenceValue)
             {
 #if 0
                 // NOTE: dead code. currently not un-mapping tiles
@@ -454,6 +474,14 @@ void SFS::DataUploader::FenceMonitorThread()
         // DS Filestreamer may need a nudge if small amounts of data to move
         m_pFileStreamer->Signal();
     }
+
+    if (m_monitorTaskAlloc.GetReadyToRead())
+    {
+        ThrowIfFailed(m_mappingFence->SetEventOnCompletion(mappingFenceValue + 1, m_fenceEvents[0]));
+        ThrowIfFailed(m_pFileStreamer->SetEventOnCompletion(copyFenceValue + 1, m_fenceEvents[1]));
+        WaitForMultipleObjects(2, m_fenceEvents, false, 1000); // 1s timeout
+    }
+
 }
 
 //-----------------------------------------------------------------------------

@@ -66,7 +66,8 @@ namespace SFS
         };
         void SetVisualizationMode(UINT in_mode) { m_visualizationMode = (VisualizationMode)in_mode; }
 
-        bool GetCompleted(UINT64 in_fenceValue) const;
+        UINT64 GetCompletedValue() { return m_copyFence->GetCompletedValue(); }
+        void SetEventOnCompletion(UINT64 in_v, HANDLE in_event) { ThrowIfFailed(m_copyFence->SetEventOnCompletion(in_v, in_event)); }
 
         void CaptureTraceFile(bool in_captureTrace) { m_captureTrace = in_captureTrace; } // enable/disable writing requests/submits to a trace file
     protected:
