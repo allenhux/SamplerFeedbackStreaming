@@ -168,7 +168,7 @@ void ParseCommandLine(CommandLineArgs& out_args)
     argParser.AddArg(L"-SampleCount", out_args.m_sampleCount);
     argParser.AddArg(L"-LodBias", out_args.m_lodBias);
 
-    argParser.AddArg(L"-animationrate", out_args.m_animationRate);
+    argParser.AddArg(L"-animationRate", out_args.m_animationRate);
     argParser.AddArg(L"-texture",
         [&] {
             out_args.m_mediaDir.clear();
@@ -475,7 +475,7 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
             if (root.isMember("directStorage")) out_args.m_useDirectStorage = root["directStorage"].asBool();
             if (root.isMember("stagingSizeMB")) out_args.m_stagingSizeMB = root["stagingSizeMB"].asUInt();
 
-            if (root.isMember("animationrate")) out_args.m_animationRate = root["animationrate"].asFloat();
+            if (root.isMember("animationRate")) out_args.m_animationRate = root["animationRate"].asFloat();
             if (root.isMember("cameraRate")) out_args.m_cameraAnimationRate = root["cameraRate"].asFloat();
             if (root.isMember("rollerCoaster")) out_args.m_cameraRollerCoaster = root["rollerCoaster"].asBool();
             if (root.isMember("paintMixer")) out_args.m_cameraRollerCoaster = root["paintMixer"].asBool();
@@ -502,6 +502,7 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
 
             if (root.isMember("visualizeMinMip")) out_args.m_visualizeMinMip = root["visualizeMinMip"].asBool();
             if (root.isMember("hideFeedback")) out_args.m_showFeedbackMaps = !root["hideFeedback"].asBool();
+            if (root.isMember("feedbackVertical")) out_args.m_showFeedbackMapVertical = root["feedbackVertical"].asBool();
 
             if (root.isMember("hideUI")) out_args.m_showUI = !root["hideUI"].asBool();
             if (root.isMember("miniUI")) out_args.m_uiModeMini = root["miniUI"].asBool();

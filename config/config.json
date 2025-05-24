@@ -24,6 +24,9 @@
   //---------------------------------------
   // ---- application general settings ----
   //---------------------------------------
+  "maxFeedbackTime": 2, // target milliseconds for GPU to resolve feedback
+  "addAliasingBarriers": false, //// adds a barrier for each streaming resource: alias(nullptr, pResource)
+
   "fullScreen": false,
   "vsync": false,
   "windowWidth": 1280,
@@ -31,12 +34,11 @@
   "sampleCount": 4, // multisample anti-aliasing
   "lodBias": 0, // sampler bias. positive is blurrier
   "anisotropy": 4, // sampler anisotropy
-  "addAliasingBarriers": false, //// adds a barrier for each streaming resource: alias(nullptr, pResource)
 
   "adapter": "", // create device on adapter with description containig substring ignoring case e.g. "intel"
   "arch": 0, // create device with specified architecture {0, 1, 2} {default, discrete, integrated} 
 
-  "animationrate": 0, // rotation of individual objects
+  "animationRate": 0.1f, // rotation of individual objects
   "cameraRate": 0, // camera motion rate
   "rollerCoaster": false, // fly through, vs. orbiting, planets
 
@@ -46,13 +48,12 @@
   "terrainTexture": "4kTiles.xet", // use this texture only for the terrain, no planets
 
   "maxNumObjects": 5000, // maximum total number of objects in the scene
-  "numSpheres": 0, // number of objects besides the terrain
-  "lightFromView": false, // light direction is look direction
-
-  "maxFeedbackTime": 2, // target milliseconds for GPU to resolve feedback
+  "numSpheres": 200, // number of objects besides the terrain
+  "lightFromView": true, // light direction is look direction
 
   "visualizeMinMip": false, // color overlayed onto texture by PS corresponding to mip level
   "hideFeedback": false, // hide the terrain feedback windows
+  "feedbackVertical": true, // when feedback shown, the windows are vertical along the right side vs. horizontal across bottom
   "hideUI": false, // hide the UI
   "miniUI": false, // use "lite" UI (bandwidth & heap occupancy only)
 

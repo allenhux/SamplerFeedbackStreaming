@@ -175,6 +175,7 @@ private:
     Gui::ButtonChanges m_uiButtonChanges; // track changes in UI settings
 
     class TextureViewer* m_pTextureViewer{ nullptr };
+    UINT m_maxNumTextureViewerWindows{ 0 };
     class BufferViewer* m_pMinMipMapViewer{ nullptr };
     class BufferViewer* m_pFeedbackViewer{ nullptr };
     class FrustumViewer* m_pFrustumViewer{ nullptr };

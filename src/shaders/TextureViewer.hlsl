@@ -63,10 +63,10 @@ VS_OUT vs(uint vertexID : SV_VertexID)
     // horizontal or vertical arrangement
     if (g_vertical)
     {
-        height += g_gap;
+        height -= g_gap;
 
         output.pos.x += 2 * g_viewPosition.x;
-        output.pos.y += 2 * (g_viewPosition.y + (height * level));
+        output.pos.y += 2 * (g_viewPosition.y - (height * level));
     }
     else
     {

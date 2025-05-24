@@ -1591,6 +1591,12 @@ void Scene::CreateTerrainViewers()
             m_pTerrain->GetTiledResource(),
             SharedConstants::SWAP_CHAIN_FORMAT, m_srvHeap.Get(),
             heapOffset);
+
+        D3D12_PACKED_MIP_INFO info;
+        m_device->GetResourceTiling(m_pTerrain->GetTiledResource(), nullptr, &info,
+            nullptr, nullptr, 0, nullptr);
+        m_maxNumTextureViewerWindows = info.NumStandardMips;
+
     }
 #if RESOLVE_TO_TEXTURE
     // create viewer for the resolved feedback
@@ -1694,34 +1700,10 @@ void Scene::DrawUI()
         const float minDim = std::min(m_viewport.Height, m_viewport.Width) / 5;
         const DirectX::XMFLOAT2 windowSize = DirectX::XMFLOAT2(minDim, minDim);
 
-        // terrain object's texture
-        if (m_args.m_showFeedbackMapVertical)
-        {
-            UINT areaHeight = UINT(m_viewport.Height - minDim);
-                UINT numMips = areaHeight / (UINT)minDim;
-                if (numMips > 1)
-                {
-                    DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(m_viewport.Width - minDim, 0);
-                        m_pTextureViewer->Draw(m_commandList.Get(), windowPos, windowSize,
-                            m_viewport,
-                            m_args.m_visualizationBaseMip, numMips - 1,
-                            m_args.m_showFeedbackMapVertical);
-                }
-        }
-        else
-        {
-            UINT numMips = UINT(m_viewport.Width) / (UINT)minDim;
-            DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(0, 0);
-            m_pTextureViewer->Draw(m_commandList.Get(), windowPos, windowSize,
-                m_viewport,
-                m_args.m_visualizationBaseMip, numMips,
-                m_args.m_showFeedbackMapVertical);
-        }
-
         // terrain object's residency map
-        DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(m_viewport.Width - minDim, m_viewport.Height);
         if (m_args.m_showFeedbackViewer)
         {
+            DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(m_viewport.Width - minDim, m_viewport.Height);
             m_pMinMipMapViewer->Draw(m_commandList.Get(), windowPos, windowSize, m_viewport);
 
             // min mip feedback
@@ -1729,6 +1711,35 @@ void Scene::DrawUI()
             windowPos.x -= (5 + windowSize.x);
             m_pFeedbackViewer->Draw(m_commandList.Get(), windowPos, windowSize, m_viewport);
 #endif
+        }
+
+        // terrain object's texture
+        if (m_args.m_showFeedbackMapVertical)
+        {
+            UINT areaHeight = UINT(m_viewport.Height - minDim);
+            UINT numMips = areaHeight / (UINT)minDim;
+            numMips = std::min(numMips, m_maxNumTextureViewerWindows);
+
+            if (numMips > 1)
+            {
+                //DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(m_viewport.Width - minDim, 0);
+                DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(m_viewport.Width - minDim, m_viewport.Height - (2 * minDim));
+                m_pTextureViewer->Draw(m_commandList.Get(), windowPos, windowSize,
+                    m_viewport,
+                    m_args.m_visualizationBaseMip, numMips - 1,
+                    m_args.m_showFeedbackMapVertical);
+            }
+        }
+        else
+        {
+            UINT numMips = UINT(m_viewport.Width) / (UINT)minDim;
+            numMips = std::min(numMips, m_maxNumTextureViewerWindows);
+
+            DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(0, 0);
+            m_pTextureViewer->Draw(m_commandList.Get(), windowPos, windowSize,
+                m_viewport,
+                m_args.m_visualizationBaseMip, numMips,
+                m_args.m_showFeedbackMapVertical);
         }
     }
 
