@@ -58,7 +58,6 @@
   "miniUI": false, // use "lite" UI (bandwidth & heap occupancy only)
 
   "updateAll": false, // update feedback for every object every frame
-
   "waitForAssetLoad": false,
 
   "timingStart": 0, // start recording statistics this frame

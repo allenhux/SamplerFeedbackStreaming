@@ -8,6 +8,7 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>$(SolutionDir)imgui;$(SolutionDir)include;$(SolutionDir)DirectXTK12;$(SolutionDir)SFS</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_XM_SSE4_INTRINSICS_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>

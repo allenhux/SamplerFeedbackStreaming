@@ -1598,19 +1598,6 @@ void Scene::CreateTerrainViewers()
         m_maxNumTextureViewerWindows = info.NumStandardMips;
 
     }
-#if RESOLVE_TO_TEXTURE
-    // create viewer for the resolved feedback
-    if (nullptr == m_pFeedbackViewer)
-    {
-        UINT feedbackWidth = m_pTerrain->GetStreamingResource()->GetMinMipMapWidth();
-        UINT feedbackHeight = m_pTerrain->GetStreamingResource()->GetMinMipMapHeight();
-
-        m_pFeedbackViewer = new BufferViewer(
-            m_pTerrain->GetResolvedFeedback(),
-            feedbackWidth, feedbackHeight, feedbackWidth, 0,
-            SharedConstants::SWAP_CHAIN_FORMAT);
-    }
-#endif
 
     // NOTE: shared minmipmap will be nullptr until after SFSM::BeginFrame()
     // NOTE: the data will be delayed by 1 + 1 frame for each swap buffer (e.g. 3 for double-buffering)
@@ -1620,7 +1607,7 @@ void Scene::CreateTerrainViewers()
         UINT feedbackWidth = m_pTerrain->GetStreamingResource()->GetMinMipMapWidth();
         UINT feedbackHeight = m_pTerrain->GetStreamingResource()->GetMinMipMapHeight();
 
-        // note: bufferview can't be created until after SFSM::BeginFrame because the residency map will be NULL
+        // note: the residency map will be invalid until after object is drawable
         m_pMinMipMapViewer = new BufferViewer(
             m_pTerrain->GetMinMipMap(),
             feedbackWidth, feedbackHeight, feedbackWidth,
@@ -1639,11 +1626,6 @@ void Scene::DeleteTerrainViewers()
     {
         delete m_pTextureViewer;
         m_pTextureViewer = nullptr;
-    }
-    if (m_pFeedbackViewer)
-    {
-        delete m_pFeedbackViewer;
-        m_pFeedbackViewer = nullptr;
     }
     if (m_pMinMipMapViewer)
     {
@@ -1677,12 +1659,14 @@ void Scene::StartScene()
 
     if (m_args.m_lightFromView)
     {
-        XMStoreFloat4(&m_pFrameConstantData[m_frameIndex]->g_lightDir, m_viewMatrixInverse.r[2]);
+        constexpr float r = -XM_PIDIV4 * .5f;
+        const DirectX::XMMATRIX rotate = XMMatrixRotationRollPitchYaw(r, r, 0);
+        XMVECTOR v = XMVector3TransformNormal(m_viewMatrixInverse.r[2], rotate);
+        XMStoreFloat4(&m_pFrameConstantData[m_frameIndex]->g_lightDir, v);
     }
     else
     {
         m_pFrameConstantData[m_frameIndex]->g_lightDir = XMFLOAT4(-0.538732767f, -0.787301660f, -0.299871892f, 0);
-        XMStoreFloat4(&m_pFrameConstantData[m_frameIndex]->g_lightDir, XMVector4Normalize(XMLoadFloat4(&m_pFrameConstantData[m_frameIndex]->g_lightDir)));
     }
 }
 
@@ -1703,14 +1687,8 @@ void Scene::DrawUI()
         // terrain object's residency map
         if (m_args.m_showFeedbackViewer)
         {
-            DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(m_viewport.Width - minDim, m_viewport.Height);
+            DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(m_viewport.Width - 2 * minDim, m_viewport.Height);
             m_pMinMipMapViewer->Draw(m_commandList.Get(), windowPos, windowSize, m_viewport);
-
-            // min mip feedback
-#if RESOLVE_TO_TEXTURE
-            windowPos.x -= (5 + windowSize.x);
-            m_pFeedbackViewer->Draw(m_commandList.Get(), windowPos, windowSize, m_viewport);
-#endif
         }
 
         // terrain object's texture
@@ -1723,7 +1701,7 @@ void Scene::DrawUI()
             if (numMips > 1)
             {
                 //DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(m_viewport.Width - minDim, 0);
-                DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(m_viewport.Width - minDim, m_viewport.Height - (2 * minDim));
+                DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(m_viewport.Width - minDim, m_viewport.Height - minDim);
                 m_pTextureViewer->Draw(m_commandList.Get(), windowPos, windowSize,
                     m_viewport,
                     m_args.m_visualizationBaseMip, numMips - 1,

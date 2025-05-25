@@ -162,13 +162,34 @@ void ParseCommandLine(CommandLineArgs& out_args)
 
     argParser.AddArg(L"-config", [&]() { auto f = argParser.GetNextArg(); LoadConfigFile(f, out_args); }, L"Config File");
 
+    argParser.AddArg(L"-directStorage", [&]() { out_args.m_useDirectStorage = true; }, L"force enable DirectStorage");
+    argParser.AddArg(L"-stagingSizeMB", out_args.m_stagingSizeMB, L"DirectStorage staging buffer size");
+    argParser.AddArg(L"-heapSizeTiles", out_args.m_streamingHeapSize);
+    argParser.AddArg(L"-numHeaps", out_args.m_numHeaps);
+
+    argParser.AddArg(L"-maxFeedbackTime", out_args.m_maxGpuFeedbackTimeMs);
+    argParser.AddArg(L"-addAliasingBarriers", out_args.m_addAliasingBarriers, L"Add per-draw aliasing barriers to assist PIX analysis");
+
     argParser.AddArg(L"-fullScreen", out_args.m_startFullScreen);
+    argParser.AddArg(L"-vsync", out_args.m_vsyncEnabled);
     argParser.AddArg(L"-WindowWidth", out_args.m_windowWidth);
     argParser.AddArg(L"-WindowHeight", out_args.m_windowHeight);
     argParser.AddArg(L"-SampleCount", out_args.m_sampleCount);
     argParser.AddArg(L"-LodBias", out_args.m_lodBias);
+    argParser.AddArg(L"-anisotropy", out_args.m_anisotropy);
+
+    argParser.AddArg(L"-adapter", out_args.m_adapterDescription, L"find an adapter containing this string in the description, ignoring case");
+    argParser.AddArg(L"-arch", (UINT&)out_args.m_preferredArchitecture, L"none (0), discrete (1), integrated (2)");
 
     argParser.AddArg(L"-animationRate", out_args.m_animationRate);
+    argParser.AddArg(L"-cameraRate", out_args.m_cameraAnimationRate);
+    argParser.AddArg(L"-rollerCoaster", out_args.m_cameraRollerCoaster);
+    argParser.AddArg(L"-paintMixer", out_args.m_cameraPaintMixer);
+
+    argParser.AddArg(L"-mediaDir", out_args.m_mediaDir);
+    argParser.AddArg(L"-skyTexture", out_args.m_skyTexture);
+    argParser.AddArg(L"-earthTexture", out_args.m_earthTexture);
+    argParser.AddArg(L"-terrainTexture", out_args.m_terrainTexture);
     argParser.AddArg(L"-texture",
         [&] {
             out_args.m_mediaDir.clear();
@@ -179,47 +200,22 @@ void ParseCommandLine(CommandLineArgs& out_args)
             out_args.m_terrainTexture = textureFileName;
             out_args.m_textures.push_back(textureFileName);
         }, "use only one texture, with this name");
-    argParser.AddArg(L"-vsync", out_args.m_vsyncEnabled);
-
-    argParser.AddArg(L"-heapSizeTiles", out_args.m_streamingHeapSize);
-    argParser.AddArg(L"-numHeaps", out_args.m_numHeaps);
-
-    argParser.AddArg(L"-maxFeedbackTime", out_args.m_maxGpuFeedbackTimeMs);
 
     argParser.AddArg(L"-maxNumObjects", out_args.m_maxNumObjects);
     argParser.AddArg(L"-numSpheres", out_args.m_numSpheres);
-    argParser.AddArg(L"-terrainTexture", out_args.m_terrainTexture);
-    argParser.AddArg(L"-skyTexture", out_args.m_skyTexture);
-    argParser.AddArg(L"-earthTexture", out_args.m_earthTexture);
-    argParser.AddArg(L"-mediaDir", out_args.m_mediaDir);
-    argParser.AddArg(L"-anisotropy", out_args.m_anisotropy);
     argParser.AddArg(L"-lightFromView", out_args.m_lightFromView, L"Light direction is look direction");
-
-    argParser.AddArg(L"-cameraRate", out_args.m_cameraAnimationRate);
-    argParser.AddArg(L"-rollerCoaster", out_args.m_cameraRollerCoaster);
-    argParser.AddArg(L"-paintMixer", out_args.m_cameraPaintMixer);
 
     argParser.AddArg(L"-visualizeMinMip", [&]() { out_args.m_visualizeMinMip = true; }, out_args.m_visualizeMinMip);
     argParser.AddArg(L"-hideFeedback", [&]() { out_args.m_showFeedbackMaps = false; }, false, L"start with no feedback viewer");
     argParser.AddArg(L"-hideUI", [&]() { out_args.m_showUI = false; }, false, L"start with no visible UI");
     argParser.AddArg(L"-miniUI", [&]() { out_args.m_uiModeMini = true; }, false, L"start with mini UI");
     argParser.AddArg(L"-updateAll", out_args.m_updateEveryObjectEveryFrame);
-    argParser.AddArg(L"-addAliasingBarriers", out_args.m_addAliasingBarriers, L"Add per-draw aliasing barriers to assist PIX analysis");
+    argParser.AddArg(L"-waitForAssetLoad", out_args.m_waitForAssetLoad, L"stall animation & statistics until assets have minimally loaded");
 
     argParser.AddArg(L"-timingStart", out_args.m_timingStartFrame);
     argParser.AddArg(L"-timingStop", out_args.m_timingStopFrame);
     argParser.AddArg(L"-timingFileFrames", out_args.m_timingFrameFileName);
     argParser.AddArg(L"-exitImageFile", out_args.m_exitImageFileName);
-
-    argParser.AddArg(L"-waitForAssetLoad", out_args.m_waitForAssetLoad, L"stall animation & statistics until assets have minimally loaded");
-
-    argParser.AddArg(L"-adapter", out_args.m_adapterDescription, L"find an adapter containing this string in the description, ignoring case");
-    argParser.AddArg(L"-arch", (UINT&)out_args.m_preferredArchitecture, L"none (0), discrete (1), integrated (2)");
-
-    argParser.AddArg(L"-directStorage", [&]() { out_args.m_useDirectStorage = true; }, L"force enable DirectStorage");
-    argParser.AddArg(L"-directStorageOff", [&]() { out_args.m_useDirectStorage = false; }, L"force disable DirectStorage");
-    argParser.AddArg(L"-stagingSizeMB", out_args.m_stagingSizeMB, L"DirectStorage staging buffer size");
-
     argParser.AddArg(L"-captureTrace", [&]() { out_args.m_captureTrace = true; }, false, L"capture a trace of tile requests and submits (DS only)");
 
     argParser.Parse();
