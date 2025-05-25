@@ -478,7 +478,7 @@ void SFS::DataUploader::FenceMonitorThread()
     if (m_monitorTaskAlloc.GetReadyToRead())
     {
         ThrowIfFailed(m_mappingFence->SetEventOnCompletion(mappingFenceValue + 1, m_fenceEvents[0]));
-        ThrowIfFailed(m_pFileStreamer->SetEventOnCompletion(copyFenceValue + 1, m_fenceEvents[1]));
+        m_pFileStreamer->SetEventOnCompletion(copyFenceValue + 1, m_fenceEvents[1]);
         WaitForMultipleObjects(2, m_fenceEvents, false, 1000); // 1s timeout
     }
 
