@@ -100,10 +100,10 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_swapC
 #if RESOLVE_TO_TEXTURE
     // create gpu-side resolve destination
     {
-        D3D12_RESOURCE_DESC rd = CD3DX12_RESOURCE_DESC::Buffer(numTilesWidth * numTilesHeight);
         const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 
-        const auto textureDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8_UINT, numTilesWidth, numTilesHeight, 1, 1);
+        auto textureDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8_UINT, numTilesWidth, numTilesHeight, 1, 1);
+        textureDesc.Alignment = D3D12_SMALL_RESOURCE_PLACEMENT_ALIGNMENT;
 
         ThrowIfFailed(in_pDevice->CreateCommittedResource(
             &heapProperties,
@@ -140,10 +140,10 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_swapC
             D3D12_RESOURCE_STATE_RESOLVE_DEST,
 #endif
             nullptr,
-            IID_PPV_ARGS(&m_resolvedReadback)));
+            IID_PPV_ARGS(&m_readback)));
         static UINT resolveCount = 0;
-        m_resolvedReadback->SetName(L"ResolveDest");
-        m_resolvedReadback->Map(0, nullptr, (void**)&m_resolvedReadbackCpuAddress);
+        m_readback->SetName(L"ResolveDest");
+        m_readback->Map(0, nullptr, (void**)&m_readbackCpuAddress);
     }
 }
 
@@ -198,7 +198,7 @@ void SFS::InternalResources::ResolveFeedback(ID3D12GraphicsCommandList1 * out_pC
 //-----------------------------------------------------------------------------
 void SFS::InternalResources::ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList, UINT in_index)
 {
-    ID3D12Resource* pResolvedReadback = m_resolvedReadback.Get();
+    ID3D12Resource* pResolvedReadback = m_readback.Get();
     auto srcDesc = m_resolvedResource->GetDesc();
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout{ in_index * m_readbackStride,
         {srcDesc.Format, (UINT)srcDesc.Width, srcDesc.Height, 1, (UINT)srcDesc.Width } };
@@ -229,7 +229,7 @@ void SFS::InternalResources::NameStreamingTexture()
 //-----------------------------------------------------------------------------
 void* SFS::InternalResources::MapResolvedReadback(UINT in_index) const
 {
-    return &m_resolvedReadbackCpuAddress[in_index * m_readbackStride];
+    return &m_readbackCpuAddress[in_index * m_readbackStride];
 }
 
 //-----------------------------------------------------------------------------

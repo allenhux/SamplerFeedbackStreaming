@@ -128,15 +128,25 @@ void SFS::ResourceBase::SetResidencyMapOffset(UINT in_residencyMapOffsetBase)
 
 //-----------------------------------------------------------------------------
 // Update internal refcounts of tiles based on the incoming minimum mip
+// the refcount is the number of regions that depend on that underlying tile
+// consider this min mip map:
+// 1 2 2 1
+// 2 1 2 2
+// 0 2 2 2
+// 2 2 2 3
+// these are the corresponding refcounts for each mip layer:
+// 0 0 0 0 | 2 1 | 15
+// 0 0 0 0 | 1 0
+// 1 0 0 0 |
+// 0 0 0 0 |
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::SetMinMip(UINT8 in_current, UINT in_x, UINT in_y, UINT in_s)
+void SFS::ResourceBase::SetMinMip(UINT in_x, UINT in_y, UINT s, UINT in_desired)
 {
-    // what mip level is currently referenced at this tile?
-    UINT8 s = in_current;
+    // s is the mip level is currently referenced at this tile
 
     // addref mips we want
-    // AddRef()s are ordered from bottom mip to top (all dependencies will be loaded first)
-    while (s > in_s)
+    // AddRef()s are ordered from bottom mip to top (if we can't load them all, prefer the bottom mips first)
+    while (s > in_desired)
     {
         s -= 1; // already have "this" tile. e.g. have s == 1, desired in_s == 0, start with 0.
         AddTileRef(in_x >> s, in_y >> s, s);
@@ -144,7 +154,7 @@ void SFS::ResourceBase::SetMinMip(UINT8 in_current, UINT in_x, UINT in_y, UINT i
 
     // decref mips we don't need
     // DecRef()s are ordered from top mip to bottom (evict lower resolution tiles after all higher resolution ones)
-    while (s < in_s)
+    while (s < in_desired)
     {
         DecTileRef(in_x >> s, in_y >> s, s);
         s++;
@@ -180,7 +190,7 @@ void SFS::ResourceBase::DecTileRef(UINT in_x, UINT in_y, UINT in_s)
 
     ASSERT(0 != refCount);
 
-    // last refrence? try to evict
+    // last reference? try to evict
     if (1 == refCount)
     {
         // queue up a decmapping request that will release the heap index after mapping and clear the resident flag
@@ -408,10 +418,13 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
                 {
                     // clamp to the maximum we are tracking (not tracking packed mips)
                     UINT8 desired = std::min(pResolvedData[x], m_maxMip);
-                    UINT8 initialValue = pTileRow[x];
-                    if (desired != initialValue) { changed = true; }
-                    SetMinMip(initialValue, x, y, desired);
-                    pTileRow[x] = desired;
+                    UINT8 currentValue = pTileRow[x];
+                    if (desired != currentValue)
+                    {
+                        changed = true;
+                        SetMinMip(x, y, currentValue, desired);
+                        pTileRow[x] = desired;
+                    }
                 } // end loop over x
                 pTileRow += width;
 
@@ -430,16 +443,19 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
         // only need to SetResidencyChanged() on rescue
         if (changed)
         {
-            // did we end up with no tiles resident?
-            m_refCountsZero = !m_tileMappingState.GetAnyRefCount();
-
             // abandon pending loads that are no longer relevant
             AbandonPendingLoads();
 
             // clear pending evictions that are no longer relevant
-            if (!m_refCountsZero)
+            if (m_tileMappingState.GetAnyRefCount())
             {
+                m_refCountsZero = false;
                 m_pendingEvictions.Rescue(m_tileMappingState);
+            }
+            else
+            {
+                // ended up with no tiles resident
+                m_refCountsZero = true;
             }
         } // end if changed
     }

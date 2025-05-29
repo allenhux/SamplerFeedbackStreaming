@@ -64,6 +64,13 @@ void SFS::SimpleAllocator::Allocate(UINT* out_pIndices, UINT in_numIndices)
     memcpy(out_pIndices, &m_heap[m_index], in_numIndices * sizeof(UINT));
 }
 
+UINT SFS::SimpleAllocator::Allocate()
+{
+    ASSERT(m_index > 0);
+    m_index--;
+    return m_heap[m_index];
+}
+
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 void SFS::SimpleAllocator::Free(const UINT* in_pIndices, UINT in_numIndices)
@@ -72,6 +79,13 @@ void SFS::SimpleAllocator::Free(const UINT* in_pIndices, UINT in_numIndices)
     ASSERT((m_index + in_numIndices) <= (UINT)m_heap.size());
     memcpy(&m_heap[m_index], in_pIndices, sizeof(UINT) * in_numIndices);
     m_index += in_numIndices;
+}
+
+void SFS::SimpleAllocator::Free(UINT i)
+{
+    ASSERT(m_index < (UINT)m_heap.size());
+    m_heap[m_index] = i;
+    m_index++;
 }
 
 //-----------------------------------------------------------------------------

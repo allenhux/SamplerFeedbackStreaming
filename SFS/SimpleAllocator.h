@@ -49,8 +49,8 @@ namespace SFS
         void Free(std::vector<UINT>& in_indices) { Free(in_indices.data(), (UINT)in_indices.size()); in_indices.clear(); }
 
         // convenience functions for single values
-        UINT Allocate() { UINT v; Allocate(&v, 1); return v; }
-        void Free(UINT i) { Free(&i, 1); }
+        UINT Allocate();
+        void Free(UINT i);
 
         UINT GetAvailable() const { return m_index; }
         UINT GetCapacity() const { return (UINT)m_heap.size(); }

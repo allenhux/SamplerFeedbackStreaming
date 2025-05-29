@@ -75,8 +75,8 @@ namespace SFS
 #endif
         // per-swap-buffer cpu readable resolved feedback
         UINT m_readbackStride{ 0 };
-        ComPtr<ID3D12Resource> m_resolvedReadback;
-        UINT8* m_resolvedReadbackCpuAddress{ nullptr };
+        ComPtr<ID3D12Resource> m_readback;
+        UINT8* m_readbackCpuAddress{ nullptr };
 
         void NameStreamingTexture();
     };

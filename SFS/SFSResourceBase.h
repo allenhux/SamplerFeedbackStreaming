@@ -354,7 +354,7 @@ namespace SFS
         std::vector<QueuedFeedback> m_queuedFeedback;
 
         // update internal refcounts based on the incoming minimum mip
-        void SetMinMip(UINT8 in_current, UINT in_x, UINT in_y, UINT in_s);
+        void SetMinMip(UINT in_x, UINT in_y, UINT in_current, UINT in_desired);
 
         // AddRef, which requires allocation, might fail
         void AddTileRef(UINT in_x, UINT in_y, UINT in_s);
