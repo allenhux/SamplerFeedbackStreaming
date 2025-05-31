@@ -238,24 +238,16 @@ private:
     SceneObjects::BaseObject* m_pTerrain{ nullptr }; // convenience pointer, do not delete or draw, this is also in m_objects.
     SceneObjects::BaseObject* m_pSky{ nullptr }; // lifetime owned by m_objects
 
-    struct ObjectPose
+    struct ObjectPoses
     {
         void reserve(UINT in_size) { m_matrix.reserve(in_size); m_radius.reserve(in_size); }
         size_t size() const { return m_matrix.size(); }
-        void push_back(const DirectX::XMMATRIX& m, float r)
-        {
-            m_matrix.push_back(m);
-            m_radius.push_back(r);
-        }
         std::vector<DirectX::XMMATRIX> m_matrix;
         std::vector<float> m_radius;
     };
-    ObjectPose m_objectPoses;
+    ObjectPoses m_objectPoses;
     float m_universeSize{ 0 };
     void PrepareScene();
-
-    void TryFit(DirectX::XMMATRIX& out_matrix, float in_radius, float in_gap, float in_minDistance);
-    void SetSphereMatrix(float in_minDistance);
 
     // optimize file open/read for many files
     // m_sfsResourceDescs[i] correspond to m_args.m_textures[i]

@@ -35,6 +35,7 @@
 #include "FrustumViewer.h"
 #include "DebugHelper.h"
 #include "WindowCapture.h"
+#include "PlanetPoseGenerator.h"
 
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "d3dcompiler.lib")
@@ -685,162 +686,6 @@ void Scene::StartStreamingLibrary()
 }
 
 //-----------------------------------------------------------------------------
-// generate a random pose
-// return true if the pose does not intersect anything in the universe
-//-----------------------------------------------------------------------------
-void Scene::TryFit(XMMATRIX& out_matrix, float in_radius, float in_gap,
-    float in_minDistance)
-{
-    std::uniform_real_distribution<float> rDis(0, 1);
-    std::uniform_real_distribution<float> xDis(in_minDistance, m_universeSize);
-
-    XMMATRIX rtate = XMMatrixIdentity();
-    XMMATRIX xlate = XMMatrixIdentity();
-
-    UINT numTries = 100;
-    while (numTries)
-    {
-        rtate = XMMatrixRotationRollPitchYaw(
-            (XM_2PI)*xDis(m_gen), (XM_2PI)*xDis(m_gen), (XM_2PI)*xDis(m_gen));
-        float x = xDis(m_gen);
-        xlate.r[3] = XMVectorSet(0, 0, x, 1.f);
-        out_matrix = xlate * rtate;
-
-        bool fits = true;
-        XMVECTOR p0 = out_matrix.r[3];
-        for (UINT i = 0; i < m_objectPoses.size(); i++)
-        {
-            XMVECTOR p1 = m_objectPoses.m_matrix[i].r[3];
-            float dist = XMVectorGetX(XMVector3LengthEst(p1 - p0));
-
-            // leave a minimum spacing between planets
-            if (dist < (in_radius + m_objectPoses.m_radius[i] + in_gap))
-            {
-                fits = false;
-                break;
-            }
-        }
-        if (fits) return;
-        numTries--;
-    }
-    // doesn't fit? grow the universe, then put this object on the edge
-    {
-        m_universeSize += in_radius + in_gap + SharedConstants::SPHERE_RADIUS * SharedConstants::MAX_SPHERE_SCALE;
-        xlate.r[3] = XMVectorSet(0, 0, m_universeSize, 1.f);
-        out_matrix = xlate * rtate;
-    }
-}
-
-//-----------------------------------------------------------------------------
-// generate a random scale, position, and rotation
-// space the spheres so they do not touch
-// leave a hole in the middle with radius = in_minDistance
-//-----------------------------------------------------------------------------
-void Scene::SetSphereMatrix(float in_minDistance)
-{
-    constexpr float gap = SharedConstants::SPHERE_RADIUS;
-
-    float range = SharedConstants::SPHERE_RADIUS * (SharedConstants::MAX_SPHERE_SCALE - 1);
-    float midPoint = .5f * range;
-    float stdDev = range / 5.f;
-    std::normal_distribution<float>scaleDis(midPoint, stdDev);
-
-    in_minDistance += gap + SharedConstants::SPHERE_RADIUS * SharedConstants::MAX_SPHERE_SCALE;
-    m_universeSize = std::max(m_universeSize, in_minDistance * 1.25f);
-
-    XMMATRIX matrix = XMMatrixIdentity();
-
-    float sphereScale = std::clamp(scaleDis(m_gen), (float)SharedConstants::SPHERE_RADIUS, range);
-
-    TryFit(matrix, sphereScale, gap, in_minDistance);
-
-    const XMMATRIX scale = XMMatrixScaling(sphereScale, sphereScale, sphereScale);
-
-    // mix up the orientation
-    std::uniform_real_distribution<float> rDis(-XM_PI, XM_PI);
-    auto rtate = XMMatrixRotationRollPitchYaw(rDis(m_gen), rDis(m_gen), rDis(m_gen));
-
-    matrix = rtate * scale * matrix;
-
-    m_objectPoses.push_back(matrix, sphereScale);
-}
-
-//-----------------------------------------------------------------------------
-// progressively over multiple frames, if there are many
-//-----------------------------------------------------------------------------
-void Scene::LoadSpheres()
-{
-    bool updateNumTiles = (m_objects.size() != (UINT)m_args.m_numSpheres);
-
-    if (m_objects.size() < (UINT)m_args.m_numSpheres)
-    {
-        UINT textureIndex = (UINT)m_objects.size();
-        while (m_objects.size() < (UINT)m_args.m_numSpheres)
-        {
-            // this object's index-to-be
-            UINT objectIndex = (UINT)m_objects.size();
-
-            // put this resource into one of our shared heaps
-            UINT heapIndex = objectIndex % m_sharedHeaps.size();
-            auto pHeap = m_sharedHeaps[heapIndex];
-
-            // grab the next texture
-            UINT fileIndex = textureIndex % m_args.m_textures.size();
-            textureIndex++;
-            const auto& textureFilename = m_args.m_textures[fileIndex];
-
-            SceneObjects::BaseObject* o = nullptr;
-
-            // earth
-            if ((0 == fileIndex) && m_args.m_earthTexture.size())
-            {
-                o = new SceneObjects::Earth(this);
-            }
-            // planet
-            else
-            {
-                o = new SceneObjects::Planet(this);
-                static std::uniform_real_distribution<float> dis(-1.f, 1.f);
-                o->SetAxis(DirectX::XMVector3NormalizeEst(DirectX::XMVectorSet(dis(m_gen), dis(m_gen), dis(m_gen), 0)));
-            }
-            o->SetResource(m_pSFSManager->CreateResource(m_sfsResourceDescs[fileIndex], pHeap, textureFilename));
-            o->GetModelMatrix() = m_objectPoses.m_matrix[objectIndex];
-            m_objects.push_back(o);
-        }
-    } // end if adding objects
-    else if (m_objects.size() > (UINT)m_args.m_numSpheres) // else evict objects
-    {
-        WaitForGpu();
-        while (m_objects.size() > (UINT)m_args.m_numSpheres)
-        {
-            SceneObjects::BaseObject* pObject = m_objects.back();
-
-            if (m_pTerrain == pObject)
-            {
-                DeleteTerrainViewers();
-                m_pTerrain = nullptr;
-            }
-
-            if (m_pSky == pObject)
-            {
-                m_pSky = nullptr;
-            }
-
-            delete pObject;
-            m_objects.resize(m_objects.size() - 1);
-        }
-    }
-    if (updateNumTiles)
-    {
-        m_numTilesVirtual = 0;
-        for (auto& o : m_objects)
-        {
-            m_numTilesVirtual += o->GetStreamingResource()->GetNumTilesVirtual();
-        }
-    }
-}
-
-//-----------------------------------------------------------------------------
 // scene and texture fixup,
 // precompute position and radius of all objects
 //-----------------------------------------------------------------------------
@@ -926,15 +771,25 @@ void Scene::PrepareScene()
 
     float minRadius = (float)m_args.m_terrainParams.m_terrainSideSize;
 
-    // start with a tiny universe
-    m_universeSize = 2 * minRadius;// +(SharedConstants::SPHERE_RADIUS)*SharedConstants::MAX_SPHERE_SCALE;
+    // start with a tiny universe. will be computed accurately below
+    m_universeSize = 2 * minRadius;
 
-    m_objects.reserve(m_args.m_maxNumObjects);
-    m_objectPoses.reserve(m_args.m_maxNumObjects);
-    for(UINT i = 0; i < m_args.m_maxNumObjects; i++)
-    {
-        SetSphereMatrix(minRadius);
-    }
+    float range = SharedConstants::SPHERE_RADIUS * (SharedConstants::MAX_SPHERE_SCALE - 1);
+    float midPoint = .5f * range;
+    float stdDev = range / 5.f;
+    std::normal_distribution<float>scaleDis(midPoint, stdDev);
+
+    PlanetPoseGenerator::Settings settings{
+		.numPoses = m_args.m_maxNumObjects,
+        .gap = SharedConstants::SPHERE_RADIUS,
+        .minDistance = (float)m_args.m_terrainParams.m_terrainSideSize,
+        .minRadius = SharedConstants::SPHERE_RADIUS,
+        .maxRadius = SharedConstants::SPHERE_RADIUS * SharedConstants::MAX_SPHERE_SCALE
+    };
+	PlanetPoseGenerator poseGenerator(settings);
+    m_universeSize = poseGenerator.GeneratePoses(m_objectPoses.m_matrix, m_objectPoses.m_radius);
+
+    DebugPrint(m_universeSize);
 
     // load texture file headers
     m_sfsResourceDescs.resize(m_args.m_textures.size());
@@ -1175,6 +1030,81 @@ void Scene::CreateSampler()
     desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     ThrowIfFailed(m_device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_samplerHeap)));
     m_samplerHeap->SetName(L"m_samplerHeap");
+}
+
+//-----------------------------------------------------------------------------
+// progressively over multiple frames, if there are many
+//-----------------------------------------------------------------------------
+void Scene::LoadSpheres()
+{
+    bool updateNumTiles = (m_objects.size() != (UINT)m_args.m_numSpheres);
+
+    if (m_objects.size() < (UINT)m_args.m_numSpheres)
+    {
+        UINT textureIndex = (UINT)m_objects.size();
+        while (m_objects.size() < (UINT)m_args.m_numSpheres)
+        {
+            // this object's index-to-be
+            UINT objectIndex = (UINT)m_objects.size();
+
+            // put this resource into one of our shared heaps
+            UINT heapIndex = objectIndex % m_sharedHeaps.size();
+            auto pHeap = m_sharedHeaps[heapIndex];
+
+            // grab the next texture
+            UINT fileIndex = textureIndex % m_args.m_textures.size();
+            textureIndex++;
+            const auto& textureFilename = m_args.m_textures[fileIndex];
+
+            SceneObjects::BaseObject* o = nullptr;
+
+            // earth
+            if ((0 == fileIndex) && m_args.m_earthTexture.size())
+            {
+                o = new SceneObjects::Earth(this);
+            }
+            // planet
+            else
+            {
+                o = new SceneObjects::Planet(this);
+                static std::uniform_real_distribution<float> dis(-1.f, 1.f);
+                o->SetAxis(DirectX::XMVector3NormalizeEst(DirectX::XMVectorSet(dis(m_gen), dis(m_gen), dis(m_gen), 0)));
+            }
+            o->SetResource(m_pSFSManager->CreateResource(m_sfsResourceDescs[fileIndex], pHeap, textureFilename));
+            o->GetModelMatrix() = m_objectPoses.m_matrix[objectIndex];
+            m_objects.push_back(o);
+        }
+    } // end if adding objects
+    else if (m_objects.size() > (UINT)m_args.m_numSpheres) // else evict objects
+    {
+        WaitForGpu();
+        while (m_objects.size() > (UINT)m_args.m_numSpheres)
+        {
+            SceneObjects::BaseObject* pObject = m_objects.back();
+
+            if (m_pTerrain == pObject)
+            {
+                DeleteTerrainViewers();
+                m_pTerrain = nullptr;
+            }
+
+            if (m_pSky == pObject)
+            {
+                m_pSky = nullptr;
+            }
+
+            delete pObject;
+            m_objects.resize(m_objects.size() - 1);
+        }
+    }
+    if (updateNumTiles)
+    {
+        m_numTilesVirtual = 0;
+        for (auto& o : m_objects)
+        {
+            m_numTilesVirtual += o->GetStreamingResource()->GetNumTilesVirtual();
+        }
+    }
 }
 
 //-----------------------------------------------------------------------------
