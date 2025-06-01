@@ -1,31 +1,13 @@
-//*********************************************************
+//==============================================================
+// Copyright © Intel Corporation
 //
-// Copyright 2020 Intel Corporation 
-//
-// Permission is hereby granted, free of charge, to any 
-// person obtaining a copy of this software and associated 
-// documentation files(the "Software"), to deal in the Software 
-// without restriction, including without limitation the rights 
-// to use, copy, modify, merge, publish, distribute, sublicense, 
-// and/or sell copies of the Software, and to permit persons to 
-// whom the Software is furnished to do so, subject to the 
-// following conditions :
-// The above copyright notice and this permission notice shall 
-// be included in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT.IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT 
-// HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, 
-// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
-// DEALINGS IN THE SOFTWARE.
-//
-//*********************************************************
-
+// SPDX-License-Identifier: MIT
+// =============================================================
 
 /*=============================================================================
+External API interface for Sampler Feedback Streaming
+This is the library equivalent of d3d12.h
+
 Usage:
 
 1. Create an SFSManager
@@ -48,6 +30,8 @@ Draw loop:
 // When resolving to texture, must copy to cpu-readable buffer from gpu texture (which cannot be in the readback heap)
 // Setting this to 0 resolves directly to cpu-readable buffer
 #define RESOLVE_TO_TEXTURE 1
+
+#include <d3d12.h>
 
 //==================================================
 // a streaming resource is associated with a single heap (in this implementation)
@@ -104,9 +88,6 @@ struct SFSResource
     //--------------------------------------------
     // number of tiles reserved (not necessarily committed) for this resource
     virtual UINT GetNumTilesVirtual() const = 0;
-#if RESOLVE_TO_TEXTURE
-    virtual ID3D12Resource* GetResolvedFeedback() const = 0;
-#endif
 };
 
 //=============================================================================

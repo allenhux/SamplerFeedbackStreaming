@@ -1,29 +1,8 @@
-//*********************************************************
+//==============================================================
+// Copyright © Intel Corporation
 //
-// Copyright 2020 Intel Corporation 
-//
-// Permission is hereby granted, free of charge, to any 
-// person obtaining a copy of this software and associated 
-// documentation files(the "Software"), to deal in the Software 
-// without restriction, including without limitation the rights 
-// to use, copy, modify, merge, publish, distribute, sublicense, 
-// and/or sell copies of the Software, and to permit persons to 
-// whom the Software is furnished to do so, subject to the 
-// following conditions :
-// The above copyright notice and this permission notice shall 
-// be included in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT.IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT 
-// HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, 
-// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
-// DEALINGS IN THE SOFTWARE.
-//
-//*********************************************************
-
+// SPDX-License-Identifier: MIT
+// =============================================================
 
 /*=============================================================================
 Base class for SFSResource
@@ -49,26 +28,29 @@ namespace SFS
     // unpacked mips are dynamically loaded/evicted, preserving a min-mip-map
     // packed mips are not evicted from the heap (as little as 1 tile for a 16k x 16k texture)
     //=============================================================================
-    class ResourceBase : public ::SFSResource
+    class ResourceBase : public SFSResource
     {
     public:
         //-----------------------------------------------------------------
         // external APIs
         //-----------------------------------------------------------------
-        virtual void Destroy() override;
+        // SFSM needs this for barrier on packed mips
+        ID3D12Resource* GetTiledResource() const override { return m_resources.GetTiledResource(); }
         virtual void CreateFeedbackView(D3D12_CPU_DESCRIPTOR_HANDLE out_descriptor) override;
         virtual void CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor) override;
-        virtual UINT GetMinMipMapWidth() const override;
-        virtual UINT GetMinMipMapHeight() const override;
-        virtual UINT GetMinMipMapOffset() const override;
-        virtual bool Drawable() const override;
-        virtual void QueueFeedback(D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor);
-        virtual void QueueEviction() override;
-        virtual ID3D12Resource* GetMinMipMap() const override;
-        virtual UINT GetNumTilesVirtual() const override;
+
+#if RESOLVE_TO_TEXTURE
+        // SFSM needs this for barrier before/after copy
+        ID3D12Resource* GetResolvedFeedback() const { return m_resources.GetResolvedFeedback(); }
+#endif
         //-----------------------------------------------------------------
         // end external APIs
         //-----------------------------------------------------------------
+
+#if RESOLVE_TO_TEXTURE
+        // call after resolving to read back to CPU
+        void ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList);
+#endif
 
         ResourceBase(
             // method that will fill a tile-worth of bits, for streaming
@@ -92,14 +74,6 @@ namespace SFS
         // note: that is, called once per frame
         //-------------------------------------
 
-        // Called on every object every frame
-        // exits fast if tile residency has not changed (due to addmap or decmap)
-        bool UpdateMinMipMap();
-        inline void WriteMinMipMap(UINT8* out_pDest) // do this fast!! inside lock
-        {
-            memcpy(m_residencyMapOffsetBase + out_pDest, m_minMipMap.data(), m_minMipMap.size());
-        }
-
         // returns true if packed mips are loaded
         // NOTE: this query will only return true one time
         bool GetPackedMipsNeedTransition();
@@ -116,17 +90,6 @@ namespace SFS
         // call after drawing to get feedback
         void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList);
 
-#if RESOLVE_TO_TEXTURE
-        // call after resolving to read back to CPU
-        void ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList);
-
-        // SFSM needs this for barrier before/after copy
-        ID3D12Resource* GetResolvedFeedback() const override { return m_resources.GetResolvedFeedback(); }
-#endif
-
-        // SFSM needs this for barrier on packed mips
-        ID3D12Resource* GetTiledResource() const override { return m_resources.GetTiledResource(); }
-
         bool FirstUse()
         {
             if (m_firstUse) { m_firstUse = false; return true; }
@@ -136,6 +99,14 @@ namespace SFS
         //-------------------------------------
         // end called by SFSM::EndFrame()
         //-------------------------------------
+
+        // Called by ResidencyThread (and also on creation via BeginFrame()
+        // exits fast if tile residency has not changed (due to addmap or decmap)
+        bool UpdateMinMipMap();
+        inline void WriteMinMipMap(UINT8* out_pDest) // do this fast!! inside lock
+        {
+            memcpy(m_residencyMapOffsetBase + out_pDest, m_minMipMap.data(), m_minMipMap.size());
+        }
 
         //-------------------------------------
         // called by SFSM::ProcessFeedbackThread
@@ -292,6 +263,14 @@ namespace SFS
 
         void DeferredInitialize1(); // before requesting packed mips (in ProcessFeedbackThread)
         void DeferredInitialize2(); // after packed mips arrive (FenceMonitorThread -> NotifyPackedMips)
+
+        // set by QueueEviction() - render thread
+        // read by ProcessFeedback()
+        std::atomic<bool> m_evictAll{ false };
+
+        // read by QueueEviction() - render thread, to avoid setting evict all unnecessarily
+        // written by ProcessFeedback()
+        std::atomic<bool> m_refCountsZero{ true };
     private:
         // do not immediately decmap:
         // need to withhold until in-flight command buffers have completed
@@ -366,13 +345,5 @@ namespace SFS
         // exchanged by UpdateMinMip()
         // set by ProcessFeedback()
         std::atomic<bool> m_tileResidencyChanged{ false };
-
-        // set by QueueEviction() - render thread
-        // read by ProcessFeedback()
-        std::atomic<bool> m_evictAll{ false };
-
-        // read by QueueEviction() - render thread, to avoid setting evict all unnecessarily
-        // written by ProcessFeedback()
-        std::atomic<bool> m_refCountsZero{ true };
     };
 }

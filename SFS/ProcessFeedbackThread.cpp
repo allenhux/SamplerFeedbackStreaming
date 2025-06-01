@@ -1,8 +1,14 @@
+//==============================================================
+// Copyright © Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
 #include "pch.h"
 
 #include "ProcessFeedbackThread.h"
-#include "SFSManagerBase.h"
-#include "SFSResourceBase.h"
+#include "ManagerBase.h"
+#include "ResourceBase.h"
 
 //=============================================================================
 // severely limited SFSManager interface
@@ -405,7 +411,6 @@ void SFS::ProcessFeedbackThread::CheckRemoveResources()
     // then delete them as they become available
     if (GroupRemoveResources::Client::ProcessFeedback == m_removeResources.GetFlags())
     {
-        std::vector<ResourceBase*> dbg;
         std::set<ResourceBase*> remaining;
         auto& updateLists = m_dataUploader.GetUpdateLists();
         for (auto& u : updateLists)

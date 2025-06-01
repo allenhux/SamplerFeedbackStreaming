@@ -1,3 +1,13 @@
+//==============================================================
+// Copyright © Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
+//=============================================================================
+// a thread to update residency maps as a result of feedback
+//=============================================================================
+
 #pragma once
 
 #include <vector>
@@ -6,9 +16,6 @@
 #include <atomic>
 #include "Streaming.h"
 
-//=============================================================================
-// a thread to update residency maps as a result of feedback
-//=============================================================================
 namespace SFS
 {
     class ManagerRT;

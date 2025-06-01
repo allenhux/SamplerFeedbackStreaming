@@ -1,33 +1,13 @@
-//*********************************************************
+//==============================================================
+// Copyright © Intel Corporation
 //
-// Copyright 2020 Intel Corporation 
-//
-// Permission is hereby granted, free of charge, to any 
-// person obtaining a copy of this software and associated 
-// documentation files(the "Software"), to deal in the Software 
-// without restriction, including without limitation the rights 
-// to use, copy, modify, merge, publish, distribute, sublicense, 
-// and/or sell copies of the Software, and to permit persons to 
-// whom the Software is furnished to do so, subject to the 
-// following conditions :
-// The above copyright notice and this permission notice shall 
-// be included in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT.IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT 
-// HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, 
-// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
-// DEALINGS IN THE SOFTWARE.
-//
-//*********************************************************
+// SPDX-License-Identifier: MIT
+// =============================================================
 
 #include "pch.h"
 
-#include "SFSManagerBase.h"
-#include "SFSResourceBase.h"
+#include "ManagerBase.h"
+#include "ResourceBase.h"
 #include "SFSHeap.h"
 #include "BitVector.h"
 
@@ -42,7 +22,6 @@ SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_p
     m_numSwapBuffers(in_desc.m_swapChainBufferCount)
     // delay eviction by enough to not affect a pending frame
     , m_evictionDelay(std::max(in_desc.m_swapChainBufferCount + 1, in_desc.m_evictionDelay))
-    , m_gpuTimerResolve(in_pDevice, in_desc.m_swapChainBufferCount, D3D12GpuTimer::TimerType::Direct)
     , m_renderFrameIndex(0)
     , m_directCommandQueue(in_desc.m_pDirectCommandQueue)
     , m_device(in_pDevice)
@@ -114,18 +93,6 @@ void SFS::ManagerBase::StartThreads()
 }
 
 //-----------------------------------------------------------------------------
-// stop only SFSManager threads. Used by Finish()
-//-----------------------------------------------------------------------------
-void SFS::ManagerBase::StopThreads()
-{
-    // stop SFSManager threads
-    // do not want ProcessFeedback generating more work
-    // don't want UpdateResidency to write to min maps when that might be replaced
-    m_processFeedbackThread.Stop();
-    m_residencyThread.Stop();
-}
-
-//-----------------------------------------------------------------------------
 // flushes all internal queues
 // submits all outstanding command lists
 // stops all processing threads
@@ -134,7 +101,8 @@ void SFS::ManagerBase::Finish()
 {
     ASSERT(!GetWithinFrame());
  
-    StopThreads();
+    m_processFeedbackThread.Stop();
+    m_residencyThread.Stop();
 
     // now we are no longer producing work for the DataUploader, so its commands can be drained
     m_dataUploader.FlushCommands();
@@ -333,4 +301,20 @@ void SFS::ManagerBase::RemoveHeaps()
         }
     }
     m_streamingHeaps.erase(std::remove(m_streamingHeaps.begin(), m_streamingHeaps.end(), nullptr), m_streamingHeaps.end());
+}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor)
+{
+    auto pResource = (SFS::ResourceBase*)in_pResource;
+
+    if (pResource->FirstUse())
+    {
+        m_firstTimeClears.push_back({ pResource, in_gpuDescriptor });
+    }
+
+    m_feedbackReadbacks.push_back({ pResource, in_gpuDescriptor });
+
+    // NOTE: feedback buffers will be cleared after readback, in CommandListName::After
 }

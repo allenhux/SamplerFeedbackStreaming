@@ -47,16 +47,16 @@
     <ClInclude Include="SFSHeap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SFSResourceBase.h">
+    <ClInclude Include="ResourceBase.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SFSResourceDU.h">
+    <ClInclude Include="ResourceDU.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SFSManagerBase.h">
+    <ClInclude Include="ManagerBase.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SFSManagerSR.h">
+    <ClInclude Include="ManagerSR.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="UpdateList.h">
@@ -66,6 +66,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ProcessFeedbackThread.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SFSResource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SFSManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -100,16 +106,16 @@
     <ClCompile Include="SFSResource.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="SFSResourceInternal.cpp">
+    <ClCompile Include="ResourceBase.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="SFSResourceDU.cpp">
+    <ClCompile Include="ResourceDU.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="SFSManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="SFSManagerInternal.cpp">
+    <ClCompile Include="ManagerBase.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ResidencyThread.cpp">

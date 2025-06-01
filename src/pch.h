@@ -26,13 +26,15 @@
 
 #pragma once
 
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
+
+// WindowCapture.h uses gdiplus
 #pragma warning( disable : 4458 )
 #include <gdiplus.h>
 #pragma warning( default : 4458 )
-#undef max
-#undef min
 
 #include <d3d12.h>
 #include <dxgi1_6.h>

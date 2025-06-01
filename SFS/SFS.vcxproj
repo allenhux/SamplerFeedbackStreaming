@@ -94,13 +94,15 @@
     <ClInclude Include="ProcessFeedbackThread.h" />
     <ClInclude Include="ResidencyThread.h" />
     <ClInclude Include="SamplerFeedbackStreaming.h" />
+    <ClInclude Include="SFSManager.h" />
+    <ClInclude Include="SFSResource.h" />
     <ClInclude Include="SimpleAllocator.h" />
     <ClInclude Include="Streaming.h" />
     <ClInclude Include="SFSHeap.h" />
-    <ClInclude Include="SFSResourceBase.h" />
-    <ClInclude Include="SFSResourceDU.h" />
-    <ClInclude Include="SFSManagerBase.h" />
-    <ClInclude Include="SFSManagerSR.h" />
+    <ClInclude Include="ResourceBase.h" />
+    <ClInclude Include="ResourceDU.h" />
+    <ClInclude Include="ManagerBase.h" />
+    <ClInclude Include="ManagerSR.h" />
     <ClInclude Include="UpdateList.h" />
   </ItemGroup>
   <ItemGroup>
@@ -119,10 +121,10 @@
     <ClCompile Include="SimpleAllocator.cpp" />
     <ClCompile Include="SFSHeap.cpp" />
     <ClCompile Include="SFSResource.cpp" />
-    <ClCompile Include="SFSResourceInternal.cpp" />
-    <ClCompile Include="SFSResourceDU.cpp" />
+    <ClCompile Include="ResourceBase.cpp" />
+    <ClCompile Include="ResourceDU.cpp" />
     <ClCompile Include="SFSManager.cpp" />
-    <ClCompile Include="SFSManagerInternal.cpp" />
+    <ClCompile Include="ManagerBase.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

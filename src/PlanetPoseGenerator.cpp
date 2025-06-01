@@ -1,3 +1,9 @@
+//*********************************************************
+// Copyright 2024 Allen Hux 
+//
+// SPDX-License-Identifier: MIT
+//*********************************************************
+
 #include "pch.h"
 
 #include <list>
@@ -27,6 +33,8 @@ bool PlanetPoseGenerator::CheckFit(const Pos& pose,
 
 //-----------------------------------------------------------------------------
 // generate a random pose
+// position can be anywhere between minimum of previous layer and maximum of current layer
+// effectively "blending" the two layers
 //-----------------------------------------------------------------------------
 float PlanetPoseGenerator::AddPose(Pos& pose, Layer* in_pLayer, Layer* pPreviousLayer)
 {

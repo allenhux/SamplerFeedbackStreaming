@@ -1,8 +1,14 @@
+//==============================================================
+// Copyright © Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
 #include "pch.h"
 
 #include "ResidencyThread.h"
-#include "SFSManagerBase.h"
-#include "SFSResourceBase.h"
+#include "ManagerBase.h"
+#include "ResourceBase.h"
 #include "ProcessFeedbackThread.h"
 
 //=============================================================================

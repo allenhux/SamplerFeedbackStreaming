@@ -1,5 +1,10 @@
-#pragma once
+//==============================================================
+// Copyright © Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
 
+#pragma once
 
 enum class RenderThreadEvents
 {

@@ -1,11 +1,11 @@
 //*********************************************************
-//
 // Copyright 2024 Allen Hux 
 //
+// SPDX-License-Identifier: MIT
+//*********************************************************
+
 // Keeps most recent mouse position
 // If dragging, accumulates delta
-// 
-//*********************************************************
 
 #pragma once
 

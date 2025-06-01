@@ -1,28 +1,8 @@
-//*********************************************************
+//==============================================================
+// Copyright © Intel Corporation
 //
-// Copyright 2020 Intel Corporation 
-//
-// Permission is hereby granted, free of charge, to any 
-// person obtaining a copy of this software and associated 
-// documentation files(the "Software"), to deal in the Software 
-// without restriction, including without limitation the rights 
-// to use, copy, modify, merge, publish, distribute, sublicense, 
-// and/or sell copies of the Software, and to permit persons to 
-// whom the Software is furnished to do so, subject to the 
-// following conditions :
-// The above copyright notice and this permission notice shall 
-// be included in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT.IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT 
-// HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, 
-// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
-// DEALINGS IN THE SOFTWARE.
-//
-//*********************************************************
+// SPDX-License-Identifier: MIT
+// =============================================================
 
 //=============================================================================
 // Implementation of the ::SFSManager public (external) interface
@@ -30,9 +10,9 @@
 
 #include "pch.h"
 
-#include "SFSManagerBase.h"
-#include "SFSManagerSR.h"
-#include "SFSResourceBase.h"
+#include "SFSManager.h"
+#include "ManagerSR.h"
+#include "SFSResource.h"
 #include "DataUploader.h"
 #include "SFSHeap.h"
 
@@ -43,10 +23,10 @@ SFSManager* SFSManager::Create(const SFSManagerDesc& in_desc)
 {
     SFS::ComPtr<ID3D12Device8> device;
     in_desc.m_pDirectCommandQueue->GetDevice(IID_PPV_ARGS(&device));
-    return new SFS::ManagerBase(in_desc, device.Get());
+    return new SFS::Manager(in_desc, device.Get());
 }
 
-void SFS::ManagerBase::Destroy()
+void SFS::Manager::Destroy()
 {
     delete this;
 }
@@ -55,7 +35,7 @@ void SFS::ManagerBase::Destroy()
 // Create a heap used by 1 or more StreamingResources
 // parameter is number of 64KB tiles to manage
 //--------------------------------------------
-SFSHeap* SFS::ManagerBase::CreateHeap(UINT in_maxNumTilesHeap)
+SFSHeap* SFS::Manager::CreateHeap(UINT in_maxNumTilesHeap)
 {
     auto pStreamingHeap = new SFS::Heap(this, m_dataUploader.GetMappingQueue(), in_maxNumTilesHeap);
     m_streamingHeaps.push_back(pStreamingHeap);
@@ -65,17 +45,17 @@ SFSHeap* SFS::ManagerBase::CreateHeap(UINT in_maxNumTilesHeap)
 //--------------------------------------------
 // Create SFS Resources using a common SFSManager
 //--------------------------------------------
-SFSResource* SFS::ManagerBase::CreateResource(const struct SFSResourceDesc& in_desc,
+SFSResource* SFS::Manager::CreateResource(const struct SFSResourceDesc& in_desc,
     SFSHeap* in_pHeap, const std::wstring& in_filename)
 {
     ASSERT(!m_withinFrame);
 
-    auto pRsrc = new SFS::ResourceBase(in_filename, in_desc, (SFS::ManagerSR*)this, (SFS::Heap*)in_pHeap);
+    ResourceBase* pRsrc = new Resource(in_filename, in_desc, (SFS::ManagerSR*)this, (SFS::Heap*)in_pHeap);
 
     m_streamingResources.push_back(pRsrc);
     m_newResources.push_back(pRsrc);
 
-    return (SFSResource*)pRsrc;
+    return pRsrc;
 }
 
 //-----------------------------------------------------------------------------
@@ -103,39 +83,23 @@ void SFS::ManagerBase::UseDirectStorage(bool in_useDS)
 }
 
 //-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor)
-{
-    auto pResource = (SFS::ResourceBase*)in_pResource;
-
-    if (pResource->FirstUse())
-    {
-        m_firstTimeClears.push_back({ pResource, in_gpuDescriptor });
-    }
-
-    m_feedbackReadbacks.push_back({ pResource, in_gpuDescriptor });
-
-    // NOTE: feedback buffers will be cleared after readback, in CommandListName::After
-}
-
-//-----------------------------------------------------------------------------
 // returns (approximate) cpu time for processing feedback in the previous frame
 // since processing happens asynchronously, this time should be averaged
 //-----------------------------------------------------------------------------
-float SFS::ManagerBase::GetCpuProcessFeedbackTime() { return m_processFeedbackFrameTime; }
+float SFS::Manager::GetCpuProcessFeedbackTime() { return m_processFeedbackFrameTime; }
 
 //-----------------------------------------------------------------------------
 // performance and visualization
 //-----------------------------------------------------------------------------
-float SFS::ManagerBase::GetTotalTileCopyLatency() const { return m_dataUploader.GetApproximateTileCopyLatency(); }
-float SFS::ManagerBase::GetGpuTime() const { return m_gpuTimerResolve.GetTimes()[m_renderFrameIndex].first; }
-UINT SFS::ManagerBase::GetTotalNumUploads() const { return m_dataUploader.GetTotalNumUploads(); }
-UINT SFS::ManagerBase::GetTotalNumEvictions() const { return m_dataUploader.GetTotalNumEvictions(); }
-UINT SFS::ManagerBase::GetTotalNumSubmits() const { return m_processFeedbackThread.GetTotalNumSubmits(); }
+float SFS::Manager::GetTotalTileCopyLatency() const { return m_dataUploader.GetApproximateTileCopyLatency(); }
+float SFS::Manager::GetGpuTime() const { return m_gpuTimerResolve.GetTimes()[m_renderFrameIndex].first; }
+UINT SFS::Manager::GetTotalNumUploads() const { return m_dataUploader.GetTotalNumUploads(); }
+UINT SFS::Manager::GetTotalNumEvictions() const { return m_dataUploader.GetTotalNumEvictions(); }
+UINT SFS::Manager::GetTotalNumSubmits() const { return m_processFeedbackThread.GetTotalNumSubmits(); }
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-void SFS::ManagerBase::SetVisualizationMode(UINT in_mode)
+void SFS::Manager::SetVisualizationMode(UINT in_mode)
 {
     ASSERT(!GetWithinFrame());
     Finish();
@@ -150,7 +114,7 @@ void SFS::ManagerBase::SetVisualizationMode(UINT in_mode)
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-void SFS::ManagerBase::CaptureTraceFile(bool in_captureTrace)
+void SFS::Manager::CaptureTraceFile(bool in_captureTrace)
 {
     ASSERT(m_traceCaptureMode); // must enable at creation time by setting SFSManagerDesc::m_traceCaptureMode
     m_dataUploader.CaptureTraceFile(in_captureTrace);
@@ -160,7 +124,7 @@ void SFS::ManagerBase::CaptureTraceFile(bool in_captureTrace)
 // Call this method once for each SFSManager that shares heap/upload buffers
 // expected to be called once per frame, before anything is drawn.
 //-----------------------------------------------------------------------------
-void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
+void SFS::Manager::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     D3D12_CPU_DESCRIPTOR_HANDLE in_minmipmapDescriptorHandle)
 {
     ASSERT(!GetWithinFrame());
@@ -250,7 +214,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     // capture cpu time spent processing feedback
     {
         INT64 processFeedbackTime = m_processFeedbackThread.GetTotalProcessTime(); // snapshot of live counter
-        m_processFeedbackFrameTime = m_cpuTimer.GetSecondsFromDelta(processFeedbackTime - m_previousFeedbackTime);
+        m_processFeedbackFrameTime = m_processFeedbackThread.GetSecondsFromDelta(processFeedbackTime - m_previousFeedbackTime);
         m_previousFeedbackTime = processFeedbackTime; // remember current time for next call
     }
 }
@@ -262,7 +226,7 @@ void SFS::ManagerBase::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
 // returns 1 command list: afterDrawCommands
 // 
 //-----------------------------------------------------------------------------
-SFSManager::CommandLists SFS::ManagerBase::EndFrame()
+SFSManager::CommandLists SFS::Manager::EndFrame()
 {
     // NOTE: we are "within frame" until the end of EndFrame()
     ASSERT(GetWithinFrame());

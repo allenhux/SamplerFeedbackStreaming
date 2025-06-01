@@ -1,40 +1,22 @@
-//*********************************************************
+//==============================================================
+// Copyright © Intel Corporation
 //
-// Copyright 2020 Intel Corporation 
-//
-// Permission is hereby granted, free of charge, to any 
-// person obtaining a copy of this software and associated 
-// documentation files(the "Software"), to deal in the Software 
-// without restriction, including without limitation the rights 
-// to use, copy, modify, merge, publish, distribute, sublicense, 
-// and/or sell copies of the Software, and to permit persons to 
-// whom the Software is furnished to do so, subject to the 
-// following conditions :
-// The above copyright notice and this permission notice shall 
-// be included in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT.IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT 
-// HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, 
-// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
-// DEALINGS IN THE SOFTWARE.
-//
-//*********************************************************
+// SPDX-License-Identifier: MIT
+// =============================================================
 
-// Implementation of the few methods required for the ::ResourceBase public (external) interface
+//=============================================================================
+// Implementation of the ::SFSResource public (external) interface
+//=============================================================================
 
 #include "pch.h"
 
-#include "SFSResourceBase.h"
-#include "SFSManagerSR.h"
+#include "SFSResource.h"
+#include "ManagerSR.h"
 
 //-----------------------------------------------------------------------------
 // public interface to destroy object
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::Destroy()
+void SFS::Resource::Destroy()
 {
     // tell SFSManager to stop tracking and delete
     m_pSFSManager->Remove(this);
@@ -69,21 +51,14 @@ void SFS::ResourceBase::CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE in_
 }
 
 //-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-ID3D12Resource* SFS::ResourceBase::GetMinMipMap() const
-{
-    return m_pSFSManager->GetResidencyMap().GetResource();
-}
-
-//-----------------------------------------------------------------------------
 // shader reading min-mip-map buffer will want its dimensions
 //-----------------------------------------------------------------------------
-UINT SFS::ResourceBase::GetMinMipMapWidth() const
+UINT SFS::Resource::GetMinMipMapWidth() const
 {
     return GetNumTilesWidth();
 }
 
-UINT SFS::ResourceBase::GetMinMipMapHeight() const
+UINT SFS::Resource::GetMinMipMapHeight() const
 {
     return GetNumTilesHeight();
 }
@@ -92,7 +67,7 @@ UINT SFS::ResourceBase::GetMinMipMapHeight() const
 // IMPORTANT: all min mip maps are stored in a single buffer. offset into the buffer.
 // this saves a massive amount of GPU memory, since each min mip map is much smaller than 64KB
 //-----------------------------------------------------------------------------
-UINT SFS::ResourceBase::GetMinMipMapOffset() const
+UINT SFS::Resource::GetMinMipMapOffset() const
 {
     return m_residencyMapOffsetBase;
 }
@@ -101,7 +76,7 @@ UINT SFS::ResourceBase::GetMinMipMapOffset() const
 // application should not use this texture before packed mips are loaded AND
 // an offset into the shared residency map buffer has been assigned
 //-----------------------------------------------------------------------------
-bool SFS::ResourceBase::Drawable() const
+bool SFS::Resource::Drawable() const
 {
     bool drawable = (UINT(-1) != m_residencyMapOffsetBase) && (PackedMipStatus::RESIDENT == m_packedMipStatus);
 
@@ -110,19 +85,18 @@ bool SFS::ResourceBase::Drawable() const
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::QueueFeedback(D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor)
+void SFS::Resource::QueueFeedback(D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor)
 {
     m_pSFSManager->QueueFeedback(this, in_gpuDescriptor);
     // requesting feedback means this resource will be stale
     m_pSFSManager->SetPending(this);
-
 }
 
 //-----------------------------------------------------------------------------
 // if an object isn't visible, set all refcounts to 0
 // this will schedule all tiles to be evicted
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::QueueEviction()
+void SFS::Resource::QueueEviction()
 {
     if (!m_refCountsZero)
     {
@@ -133,7 +107,14 @@ void SFS::ResourceBase::QueueEviction()
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-UINT SFS::ResourceBase::GetNumTilesVirtual() const
+ID3D12Resource* SFS::Resource::GetMinMipMap() const
+{
+    return m_pSFSManager->GetResidencyMap().GetResource();
+}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+UINT SFS::Resource::GetNumTilesVirtual() const
 {
     return m_resourceDesc.m_mipInfo.m_numTilesForPackedMips +
         m_resourceDesc.m_mipInfo.m_numTilesForStandardMips;
