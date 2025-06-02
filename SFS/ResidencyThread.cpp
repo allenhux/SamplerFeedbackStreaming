@@ -107,9 +107,9 @@ void SFS::ResidencyThread::Stop()
 //-----------------------------------------------------------------------------
 // SFSManager acquires staging area and adds new resources
 //-----------------------------------------------------------------------------
-void SFS::ResidencyThread::ShareNewResources(const std::vector<ResourceBase*>& in_resources)
+void SFS::ResidencyThread::ShareNewResourcesRT(const std::vector<ResourceBase*>& in_resources)
 {
-    m_newResourcesLock.Acquire();
+    m_newResourcesLock.TryAcquire();
     m_newResourcesStaging.insert(m_newResourcesStaging.end(), in_resources.begin(), in_resources.end());
 #ifdef _DEBUG
     for (auto p : m_newResourcesStaging) { ASSERT(p->GetInitialized()); }

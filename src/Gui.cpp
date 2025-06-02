@@ -339,11 +339,11 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     // heap statistics
     //---------------------------------------------------------------------
     ImGui::Separator();
-    ImGui::Text("Reserved GB: %f", (in_drawParams.m_numTilesVirtual * 64) / 1000000.f);
-    ImGui::Text("Committed KB: %d (%.2f %%)", (in_drawParams.m_numTilesCommitted * 64), 100.f * float(in_drawParams.m_numTilesCommitted) / float(in_drawParams.m_numTilesVirtual));
+    ImGui::Text("Reserved GB: %.3f", (in_drawParams.m_numTilesVirtual * 64.f) / 1000000.f);
+    ImGui::Text("Committed MB: %.3f (%.2f %%)", (in_drawParams.m_numTilesCommitted * 64.f) / 1000.f, 100.f * float(in_drawParams.m_numTilesCommitted) / float(in_drawParams.m_numTilesVirtual));
 
-    ImGui::Text("Heap Occupancy KB: %.2f%% of %d",
-        100.f * float(in_drawParams.m_numTilesCommitted) / float(in_drawParams.m_totalHeapSize), (in_drawParams.m_totalHeapSize * 64));
+    ImGui::Text("Heap Occupancy: %.2f%% of %.2f MB",
+        100.f * float(in_drawParams.m_numTilesCommitted) / float(in_drawParams.m_totalHeapSize), (in_drawParams.m_totalHeapSize * 64.f) / 1000.f);
     DrawHeapOccupancyBar(in_drawParams.m_numTilesCommitted, in_drawParams.m_totalHeapSize, 10.0f);
 
     //---------------------------------------------------------------------

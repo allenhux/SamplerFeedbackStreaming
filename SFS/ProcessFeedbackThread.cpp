@@ -22,9 +22,9 @@ namespace SFS
 
         void WakeResidencyThread() { m_residencyThread.Wake(); }
 
-        void ShareNewResources(const std::vector<ResourceBase*>& in_resources)
+        void ShareNewResourcesRT(const std::vector<ResourceBase*>& in_resources)
         {
-            m_residencyThread.ShareNewResources(in_resources);
+            m_residencyThread.ShareNewResourcesRT(in_resources);
         }
     };
 }
@@ -125,12 +125,13 @@ void SFS::ProcessFeedbackThread::Start()
 
                     // propagate new resources to residency thread only after they have packed mips in-flight
                     // note these are new resources that completed initialization last frame
+                    // note only propagating once per frame
                     if (m_residencyShareNewResources.size())
                     {
 #ifdef _DEBUG
                         for (auto p : m_residencyShareNewResources) { ASSERT(p->GetInitialized()); }
 #endif
-                        m_pSFSManager->ShareNewResources(m_residencyShareNewResources);
+                        m_pSFSManager->ShareNewResourcesRT(m_residencyShareNewResources);
                         m_residencyShareNewResources.clear();
                     }
                 }
