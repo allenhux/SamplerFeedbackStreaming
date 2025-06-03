@@ -93,6 +93,7 @@ float SFS::Manager::GetCpuProcessFeedbackTime() { return m_processFeedbackFrameT
 //-----------------------------------------------------------------------------
 float SFS::Manager::GetTotalTileCopyLatency() const { return m_dataUploader.GetApproximateTileCopyLatency(); }
 float SFS::Manager::GetGpuTime() const { return m_gpuTimerResolve.GetTimes()[m_renderFrameIndex].first; }
+float SFS::Manager::GetGpuTexelsPerMs() const { return m_numTexelsQueued[0] / (m_gpuFeedbackTimes[0]*1000.f); }
 UINT SFS::Manager::GetTotalNumUploads() const { return m_dataUploader.GetTotalNumUploads(); }
 UINT SFS::Manager::GetTotalNumEvictions() const { return m_dataUploader.GetTotalNumEvictions(); }
 UINT SFS::Manager::GetTotalNumSubmits() const { return m_processFeedbackThread.GetTotalNumSubmits(); }
@@ -128,6 +129,9 @@ void SFS::Manager::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     D3D12_CPU_DESCRIPTOR_HANDLE in_minmipmapDescriptorHandle)
 {
     ASSERT(!GetWithinFrame());
+
+    // accumulate gpu time from last frame
+    m_gpuFeedbackTimes[1] += GetGpuTime();
 
     // delete resources that have been requested via Remove()
     RemoveResources();
@@ -231,6 +235,16 @@ SFSManager::CommandLists SFS::Manager::EndFrame()
     // NOTE: we are "within frame" until the end of EndFrame()
     ASSERT(GetWithinFrame());
 
+    m_numFeedbackTimingFrames++;
+    if (m_numFeedbackTimingFrames >= m_feedbackTimingFrequency)
+    {
+        m_numFeedbackTimingFrames = 0;
+        m_numTexelsQueued[0] = m_numTexelsQueued[1];
+        m_numTexelsQueued[1] = 0;
+        m_gpuFeedbackTimes[0] = m_gpuFeedbackTimes[1];
+        m_gpuFeedbackTimes[1] = 0;
+    }
+
     //------------------------------------------------------------------
     // after draw calls,
     //    - transition packed mips (do not draw affected objects until subsequent frame)
@@ -303,6 +317,7 @@ SFSManager::CommandLists SFS::Manager::EndFrame()
             // do the feedback resolves
             for (auto& t : m_feedbackReadbacks)
             {
+                m_numTexelsQueued[1] += t.m_pStreamingResource->GetMinMipMapSize();
                 t.m_pStreamingResource->ResolveFeedback(pCommandList);
             }
 

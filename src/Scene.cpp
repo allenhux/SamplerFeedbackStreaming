@@ -118,7 +118,6 @@ void Scene::CreateDeviceWithName(std::wstring& out_adapterDescription)
 Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
     m_args(in_args), m_hwnd(in_hwnd)
     , m_frameFenceValues(m_swapBufferCount, 0)
-    , m_prevNumFeedbackObjects(SharedConstants::SWAP_CHAIN_BUFFER_COUNT, 1)
     , m_renderThreadTimes(in_args.m_statisticsNumFrames)
     , m_updateFeedbackTimes(in_args.m_statisticsNumFrames)
 {
@@ -1116,43 +1115,6 @@ void Scene::SetSampler()
 }
 
 //----------------------------------------------------------
-// time-limit the number of feedback resolves on the GPU
-// by keeping a running average of the time to resolve feedback
-// and only calling QueueFeedback() for a subset of the StreamingResources
-//----------------------------------------------------------
-UINT Scene::DetermineMaxNumFeedbackResolves()
-{
-    UINT maxNumFeedbackResolves = 0;
-
-    if (m_args.m_updateEveryObjectEveryFrame)
-    {
-        maxNumFeedbackResolves = (UINT)m_objects.size();
-    }
-    else if (m_args.m_enableTileUpdates)
-    {
-        maxNumFeedbackResolves = 10;
-
-        // how long did it take
-        const float feedbackTime = 1000.f * m_gpuProcessFeedbackTime;
-
-        if (feedbackTime > 0)
-        {
-            // keep a running average of feedback time
-            static AverageOver feedbackTimes;
-
-            float avgTimePerObject = feedbackTime / std::max(UINT(1), m_prevNumFeedbackObjects[m_frameIndex]);
-            feedbackTimes.Update(avgTimePerObject);
-
-            // # objects to meet target time
-            // FIXME: assumes all textures are the same dimensions
-            maxNumFeedbackResolves = std::max(UINT(1), UINT(m_args.m_maxGpuFeedbackTimeMs / feedbackTimes.Get()));
-        }
-    }
-
-    return maxNumFeedbackResolves;
-}
-
-//----------------------------------------------------------
 // draw objects grouped by same pipeline state
 //----------------------------------------------------------
 void Scene::DrawObjectSet(ID3D12GraphicsCommandList1* out_pCommandList,
@@ -1201,14 +1163,19 @@ void Scene::DrawObjects()
     // objects without feedback enabled will not call WriteSamplerFeedback()
     //------------------------------------------------------------------------------------
     {
-        UINT maxNumFeedbackResolves = DetermineMaxNumFeedbackResolves();
+        float timePerTexel = m_pSFSManager->GetGpuTexelsPerMs();
+        UINT texelLimit = (UINT)(m_args.m_maxGpuFeedbackTimeMs * timePerTexel);
+        // early timing values aren't valid, so clamp to a minimal non-0 value
+        texelLimit = std::max(texelLimit, (UINT)1000);
+        if (!m_args.m_enableTileUpdates) { texelLimit = 0; }
+        UINT numTexels = 0;
 
-        // clamp in case # objects changed
+        // round-robin which objects get feedback
         m_queueFeedbackIndex = m_queueFeedbackIndex % m_objects.size();
 
         // loop over n objects starting with the range that we want to get sampler feedback from, then wrap around.
         UINT numObjects = m_queueFeedbackIndex + (UINT)m_objects.size();
-        UINT numFeedbackObjects = 0;
+        m_numFeedbackObjects = 0;
         for (UINT i = m_queueFeedbackIndex; i < numObjects; i++)
         {
             UINT objectIndex = i % (UINT)m_objects.size();
@@ -1221,7 +1188,9 @@ void Scene::DrawObjects()
             bool isTiny = o->GetScreenAreaPixels() < 50;
 
             // get sampler feedback for this object?
-            bool queueFeedback = isVisible && (!isTiny) && (numFeedbackObjects < maxNumFeedbackResolves);
+            bool queueFeedback = isVisible && (!isTiny) && (numTexels < texelLimit);
+            queueFeedback = queueFeedback || m_args.m_updateEveryObjectEveryFrame;
+
             bool evict = !isVisible || isTiny;
 
             if (isVisible)
@@ -1240,7 +1209,8 @@ void Scene::DrawObjects()
 
             if (queueFeedback)
             {
-                numFeedbackObjects++;
+                m_numFeedbackObjects++;
+                numTexels += o->GetStreamingResource()->GetMinMipMapSize();
 
                 // aliasing barriers for performance analysis only, NOT REQUIRED FOR CORRECT BEHAVIOR
                 if (m_args.m_addAliasingBarriers)
@@ -1257,10 +1227,7 @@ void Scene::DrawObjects()
 
         // next time, start feedback where we left off this time.
         // note m_queueFeedbackIndex will be adjusted to # of objects next time, above
-        m_queueFeedbackIndex += numFeedbackObjects;
-
-        // remember how many resolves were queued for the running average
-        m_prevNumFeedbackObjects[m_frameIndex] = numFeedbackObjects;
+        m_queueFeedbackIndex += m_numFeedbackObjects;
     }
 
     // set common draw state
@@ -1353,7 +1320,7 @@ void Scene::GatherStatistics()
             m_numUploadsPreviousFrame, m_numEvictionsPreviousFrame,
             // Note: these may be off by 1 frame, but probably good enough
             m_pSFSManager->GetCpuProcessFeedbackTime(),
-            m_gpuProcessFeedbackTime, m_prevNumFeedbackObjects[m_frameIndex],
+            m_gpuProcessFeedbackTime, m_numFeedbackObjects,
             numSubmitsLastFrame);
 
         if (m_frameNumber == m_args.m_timingStopFrame)

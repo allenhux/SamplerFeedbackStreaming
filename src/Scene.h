@@ -201,7 +201,6 @@ private:
     struct SFSManager* m_pSFSManager{ nullptr };
 
     void Animate(); // camera and objects
-    UINT DetermineMaxNumFeedbackResolves();
     void DrawObjects();   // draw all the objects
 
     void CreateTerrainViewers();
@@ -238,7 +237,8 @@ private:
 
     // each frame, update objects until timeout reached
     UINT m_queueFeedbackIndex{ 0 }; // index based on number of gpu feedback resolves per frame
-    std::vector<UINT> m_prevNumFeedbackObjects; // to correlate # objects with feedback time
+    UINT m_numFeedbackObjects{ 0 }; // for statistics
+
     using BarrierList = std::vector<D3D12_RESOURCE_BARRIER>;
     BarrierList m_aliasingBarriers; // optional barrier for performance analysis only
 

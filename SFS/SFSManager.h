@@ -38,6 +38,7 @@ namespace SFS
         //virtual void UseDirectStorage(bool in_useDS) override;
         //virtual bool GetWithinFrame() const override;
         virtual float GetGpuTime() const override;
+        virtual float GetGpuTexelsPerMs() const override;
         virtual void SetVisualizationMode(UINT in_mode) override;
         virtual void CaptureTraceFile(bool in_captureTrace) override;
         virtual float GetCpuProcessFeedbackTime() override;
@@ -54,7 +55,7 @@ namespace SFS
             , m_gpuTimerResolve(in_pDevice, in_desc.m_swapChainBufferCount, D3D12GpuTimer::TimerType::Direct)
         {}
         virtual ~Manager() {}
-
+    private:
         D3D12GpuTimer m_gpuTimerResolve; // time for feedback resolve
         SFS::BarrierList m_barrierUavToResolveSrc; // transition copy source to resolve dest
         SFS::BarrierList m_barrierResolveSrcToUav; // transition resolve dest to copy source
@@ -62,5 +63,11 @@ namespace SFS
 
         INT64 m_previousFeedbackTime{ 0 }; // m_processFeedbackTime at time of last query
         float m_processFeedbackFrameTime{ 0 }; // cpu time spent processing feedback for the most recent frame
+
+        // every n frames swap
+        UINT m_feedbackTimingFrequency{ 100 };
+        UINT m_numFeedbackTimingFrames{ 0 };
+        float m_numTexelsQueued[2] = { 100000, 0 };
+        float m_gpuFeedbackTimes[2] = { 2, 0 };
     };
 }

@@ -38,6 +38,9 @@ namespace SFS
         ID3D12Resource* GetTiledResource() const override { return m_resources.GetTiledResource(); }
         virtual void CreateFeedbackView(D3D12_CPU_DESCRIPTOR_HANDLE out_descriptor) override;
         virtual void CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor) override;
+        virtual UINT GetMinMipMapWidth() const override { return m_tileReferencesWidth; }
+        virtual UINT GetMinMipMapHeight() const override { return m_tileReferencesHeight; }
+        virtual UINT GetMinMipMapSize() const override { return GetMinMipMapWidth() * GetMinMipMapHeight(); }
 
 #if RESOLVE_TO_TEXTURE
         // SFSM needs this for barrier before/after copy
@@ -146,9 +149,6 @@ namespace SFS
         // called by SFSM::SetVisualizationMode()
         void ClearAllocations();
 
-        UINT GetNumTilesWidth() const { return m_tileReferencesWidth; }
-        UINT GetNumTilesHeight() const { return m_tileReferencesHeight; }
-        UINT GetMinMipMapSize() const { return GetNumTilesWidth() * GetNumTilesHeight(); }
     protected:
         const SFSResourceDesc m_resourceDesc;
         std::wstring m_filename; // only used so we can dynamically change file streamer type :/

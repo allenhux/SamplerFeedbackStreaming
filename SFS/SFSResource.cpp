@@ -51,19 +51,6 @@ void SFS::ResourceBase::CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE in_
 }
 
 //-----------------------------------------------------------------------------
-// shader reading min-mip-map buffer will want its dimensions
-//-----------------------------------------------------------------------------
-UINT SFS::Resource::GetMinMipMapWidth() const
-{
-    return GetNumTilesWidth();
-}
-
-UINT SFS::Resource::GetMinMipMapHeight() const
-{
-    return GetNumTilesHeight();
-}
-
-//-----------------------------------------------------------------------------
 // IMPORTANT: all min mip maps are stored in a single buffer. offset into the buffer.
 // this saves a massive amount of GPU memory, since each min mip map is much smaller than 64KB
 //-----------------------------------------------------------------------------

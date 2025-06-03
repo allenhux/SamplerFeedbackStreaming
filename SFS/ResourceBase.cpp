@@ -383,8 +383,8 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
         // update the refcount of each tile based on feedback
         //------------------------------------------------------------------
         {
-            const UINT width = GetNumTilesWidth();
-            const UINT height = GetNumTilesHeight();
+            const UINT width = GetMinMipMapWidth();
+            const UINT height = GetMinMipMapHeight();
 
             // mapped host feedback buffer
             UINT8* pResolvedData = (UINT8*)m_resources.MapResolvedReadback(feedbackIndex);
@@ -662,8 +662,8 @@ bool SFS::ResourceBase::UpdateMinMipMap()
 
     if (m_tileMappingState.GetAnyRefCount())
     {
-        const UINT width = GetNumTilesWidth();
-        const UINT height = GetNumTilesHeight();
+        const UINT width = GetMinMipMapWidth();
+        const UINT height = GetMinMipMapHeight();
 
 #if 0
         // FIXME? if the optimization below introduces artifacts, this might work:

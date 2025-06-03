@@ -62,6 +62,7 @@ struct SFSResource
     // shader reading min-mip-map buffer will want its dimensions
     virtual UINT GetMinMipMapWidth() const = 0;
     virtual UINT GetMinMipMapHeight() const = 0;
+    virtual UINT GetMinMipMapSize() const = 0;
 
     // shader reading min-mip-map buffer will need an offset into the min-mip-map (residency map)
     // NOTE: all min mip maps are stored in a single buffer. offset into the buffer.
@@ -192,12 +193,11 @@ struct SFSManager
     virtual bool GetWithinFrame() const = 0;
 
     //--------------------------------------------
-    // GPU time for resolving feedback buffers last frame
     // use this to time-limit gpu feedback processing
-    // to determine per-resolve time, divide this time by the number of QueueFeedback() calls during the frame
+    // multiply this by the amount of time you allow for feedback, e.g. 2 (for 2ms), to get # texels
+    // call QueueFeedback() for resources until the sum of GetMinMipMapSize() is >= that number
     //--------------------------------------------
-    virtual float GetGpuTime() const = 0;
-    virtual float GetGpuTimePerTexel() const { return 0; }; // FIXME TBD: time as a function of the queued texture dimensions
+    virtual float GetGpuTexelsPerMs() const = 0 ; // time (ms) as a function of the queued texture dimensions
 
     //--------------------------------------------
     // for visualization
@@ -205,6 +205,7 @@ struct SFSManager
     virtual void SetVisualizationMode(UINT in_mode) = 0;
     virtual void CaptureTraceFile(bool in_captureTrace) = 0; // capture a trace file of tile uploads
     virtual float GetCpuProcessFeedbackTime() = 0; // approx. cpu time spent processing feedback last frame. expected usage is to average over many frames
+    virtual float GetGpuTime() const = 0; // GPU time for resolving feedback buffers last frame
     virtual UINT GetTotalNumUploads() const = 0;   // number of tiles uploaded so far
     virtual UINT GetTotalNumEvictions() const = 0; // number of tiles evicted so far
     virtual float GetTotalTileCopyLatency() const = 0; // very approximate average latency of tile upload from request to completion

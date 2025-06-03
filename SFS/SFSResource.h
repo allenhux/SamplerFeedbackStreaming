@@ -35,8 +35,8 @@ namespace SFS
         virtual void Destroy() override;
         //virtual void CreateFeedbackView(D3D12_CPU_DESCRIPTOR_HANDLE out_descriptor) override;
         //virtual void CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor) override;
-        virtual UINT GetMinMipMapWidth() const override;
-        virtual UINT GetMinMipMapHeight() const override;
+        //virtual UINT GetMinMipMapWidth() const override;
+        //virtual UINT GetMinMipMapHeight() const override;
         virtual UINT GetMinMipMapOffset() const override;
         virtual bool Drawable() const override;
         virtual void QueueFeedback(D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor) override;
