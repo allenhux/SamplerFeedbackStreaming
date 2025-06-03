@@ -150,7 +150,7 @@ void SFS::Manager::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     // if new StreamingResources have been created...
     if (m_newResources.size())
     {
-        AllocateSharedResidencyMap(in_minmipmapDescriptorHandle, m_newResources);
+        AllocateSharedResidencyMap(in_minmipmapDescriptorHandle);
         AllocateSharedClearUavHeap();
         CreateClearDescriptors(); // if new shared heap, need to set clear uav heap descriptors on existing resources
 

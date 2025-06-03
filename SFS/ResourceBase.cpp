@@ -102,8 +102,6 @@ SFS::ResourceBase::~ResourceBase()
 void SFS::ResourceBase::SetResidencyMapOffset(UINT in_residencyMapOffsetBase)
 {
     m_residencyMapOffsetBase = in_residencyMapOffsetBase;
-
-    WriteMinMipMap((UINT8*)m_pSFSManager->GetResidencyMap().GetData());
 }
 
 //-----------------------------------------------------------------------------

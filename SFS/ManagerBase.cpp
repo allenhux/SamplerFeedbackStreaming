@@ -57,6 +57,15 @@ SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_p
         cl.m_commandList->Close();
     }
 
+    // GPU upload heap support?
+    {
+        auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+        D3D12_FEATURE_DATA_D3D12_OPTIONS16 options{};
+        m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS16, &options, sizeof(options));
+
+        m_gpuUploadHeapSupported = options.GPUUploadHeapSupported;
+    }
+
     // advance frame number to the first frame...
     m_frameFenceValue++;
 
@@ -113,11 +122,24 @@ void SFS::ManagerBase::Finish()
 // assign offsets to new resources and update all resources on resource allocation
 // descriptor handle required to update the assoiated shader resource view
 //-----------------------------------------------------------------------------
-void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle,
-    std::vector<ResourceBase*>& in_newResources)
+void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle)
 {
     static constexpr UINT alignment = std::hardware_destructive_interference_size; // cache line size
     static constexpr UINT gpuPageSize = 64 * 1024;
+
+    m_residencyMapLock.Acquire();
+
+    UINT requiredSize = 0;
+    for (auto r : m_streamingResources)
+    {
+        r->SetResidencyMapOffset(requiredSize);
+        UINT minMipMapSize = r->GetMinMipMapSize();
+        // align to cache line size
+        requiredSize += (minMipMapSize + alignment - 1) & ~(alignment - 1);
+    }
+
+    // remember how many bytes are in use
+    m_residencyMap.m_bytesUsed = requiredSize;
 
     UINT bufferSize = 0;
     if (nullptr != m_residencyMap.GetResource())
@@ -125,87 +147,33 @@ void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in
         bufferSize = (UINT)m_residencyMap.GetResource()->GetDesc().Width;
     }
 
-    UINT requiredSize = m_residencyMap.m_bytesUsed;
-    ASSERT(0 == (requiredSize & (alignment - 1)));
-    for (const auto r : in_newResources)
-    {
-        UINT minMipMapSize = r->GetMinMipMapSize();
-        requiredSize += (minMipMapSize + alignment - 1) & ~(alignment - 1);
-    }
-
-    UINT offset = m_residencyMap.m_bytesUsed;
-    auto* updateArray = &in_newResources;
-
-    // changing offsets or the residency resource necessitates halting the residency thread
-    bool lockAcquired = false;
-
-     // allocate residency map buffer large enough for all SFSResources
     if (requiredSize > bufferSize)
     {
-        lockAcquired = true;
-        m_residencyMapLock.Acquire();
+        // align to gpu page size
+        requiredSize = (requiredSize + gpuPageSize - 1) & ~(gpuPageSize - 1);
 
-        // before we allocate, see if re-arranging will work
-        requiredSize = 0;
-        for (auto r : m_streamingResources)
+        auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+        if (m_gpuUploadHeapSupported)
         {
-            UINT minMipMapSize = r->GetMinMipMapSize();
-            ASSERT(0 != minMipMapSize);
-            requiredSize += (minMipMapSize + alignment - 1) & ~(alignment - 1);
+            uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_GPU_UPLOAD);
+            // per DirectX-Specs, "CPUPageProperty and MemoryPoolPreference must be ..._UNKNOWN"
+            uploadHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+            uploadHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
         }
 
-        // definitely doesn't fit, allocate new buffer
-        if (requiredSize > bufferSize)
+		// defer deletion of current residency map
         {
-            // if available, use GPU Upload Heaps
-            auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-            {
-                D3D12_FEATURE_DATA_D3D12_OPTIONS16 options{};
-                m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS16, &options, sizeof(options));
-
-                if (options.GPUUploadHeapSupported)
-                {
-                    uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_GPU_UPLOAD);
-                    // per DirectX-Specs, "CPUPageProperty and MemoryPoolPreference must be ..._UNKNOWN"
-                    uploadHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-                    uploadHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-                }
-            }
-
-            bufferSize = (requiredSize + gpuPageSize - 1) & ~(gpuPageSize - 1);
-
-            {
-                auto p = m_residencyMap.Detach();
-                auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
-                m_oldSharedResidencyMaps[i].Attach(p);
-            }
-
-            m_residencyMap.Allocate(m_device.Get(), bufferSize, uploadHeapProperties);
-
-            CreateMinMipMapView(in_descriptorHandle);
+            auto p = m_residencyMap.Detach();
+            auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
+            m_oldSharedResidencyMaps[i].Attach(p);
         }
 
-        // need to re-assign all the streaming resources
-        offset = 0;
-        updateArray = &m_streamingResources;
+        m_residencyMap.Allocate(m_device.Get(), requiredSize, uploadHeapProperties);
+        CreateMinMipMapView(in_descriptorHandle);
     }
-
-    // set offsets AFTER allocating resource. allows SFSResource to initialize buffer state
-    // assign all if we allocated above. if re-using, just assign in_newResources
-    for (auto r : *updateArray)
-    {
-        r->SetResidencyMapOffset(offset);
-        UINT minMipMapSize = r->GetMinMipMapSize();
-        offset += (minMipMapSize + alignment - 1) & ~(alignment - 1);
-    }
-    ASSERT(offset <= requiredSize);
-
-    if (lockAcquired)
-    {
-        m_residencyMapLock.Release();
-    }
-
-    m_residencyMap.m_bytesUsed = offset;
+    m_residencyMapLock.Release();
+    auto pDest = m_residencyMap.GetData();
+    for (auto r : m_streamingResources) { r->WriteMinMipMap((UINT8*)pDest); }
 }
 
 //-----------------------------------------------------------------------------

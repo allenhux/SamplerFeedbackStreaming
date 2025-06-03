@@ -144,8 +144,7 @@ namespace SFS
         // do not delete in-use resources - wait until swapchaincount frames have passed
         std::vector<ComPtr<ID3D12Resource>> m_oldSharedResidencyMaps;
         // adds old resource to m_oldSharedResidencyMaps so it can be safely released after n frames
-        void AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle,
-            std::vector<ResourceBase*>& in_newResources);
+        void AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle);
 
         // heap to clear feedback resources, shared by all
         ComPtr<ID3D12DescriptorHeap> m_sharedClearUavHeap;
@@ -159,6 +158,8 @@ namespace SFS
         void RemoveResources();
         // delete heaps that have been requested via Destroy()
         void RemoveHeaps();
+    private:
+		bool m_gpuUploadHeapSupported{ false }; // if supported, use GPU upload heaps for residency maps
     };
 }
 /*

@@ -197,6 +197,7 @@ struct SFSManager
     // to determine per-resolve time, divide this time by the number of QueueFeedback() calls during the frame
     //--------------------------------------------
     virtual float GetGpuTime() const = 0;
+    virtual float GetGpuTimePerTexel() const { return 0; }; // FIXME TBD: time as a function of the queued texture dimensions
 
     //--------------------------------------------
     // for visualization
