@@ -149,7 +149,6 @@ namespace SFS
         // heap to clear feedback resources, shared by all
         ComPtr<ID3D12DescriptorHeap> m_sharedClearUavHeap;
         void AllocateSharedClearUavHeap();
-        void CreateClearDescriptors();
 
         // after packed mips have arrived for new resources, transition them from copy_dest
         std::vector<ResourceBase*> m_packedMipTransitionResources;

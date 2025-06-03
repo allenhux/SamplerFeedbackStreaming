@@ -878,6 +878,7 @@ bool SFS::ResourceBase::GetPackedMipsNeedTransition()
 
 void SFS::ResourceBase::ClearFeedback(ID3D12GraphicsCommandList* in_pCmdList, const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor)
 {
+    CreateFeedbackView(m_clearUavDescriptor);
     m_resources.ClearFeedback(in_pCmdList, in_gpuDescriptor, m_clearUavDescriptor);
 }
 

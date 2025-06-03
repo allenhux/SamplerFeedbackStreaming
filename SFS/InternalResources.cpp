@@ -102,23 +102,21 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_swapC
         D3D12_RESOURCE_DESC rd = CD3DX12_RESOURCE_DESC::Buffer(numTilesWidth * numTilesHeight);
         const auto resolvedHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK);
 
+        auto initialState = D3D12_RESOURCE_STATE_RESOLVE_DEST;
 #if RESOLVE_TO_TEXTURE
         // CopyTextureRegion requires pitch multiple of D3D12_TEXTURE_DATA_PITCH_ALIGNMENT = 256
         UINT pitch = numTilesWidth;
         pitch = (pitch + 0x0ff) & ~0x0ff;
         m_readbackStride = pitch * (UINT)numTilesHeight;
         rd.Width = m_readbackStride * in_swapChainBufferCount;
+
+        initialState = D3D12_RESOURCE_STATE_COPY_DEST;
 #endif
 
         ThrowIfFailed(in_pDevice->CreateCommittedResource(
             &resolvedHeapProperties,
             D3D12_HEAP_FLAG_NONE,
-            &rd,
-#if RESOLVE_TO_TEXTURE
-            D3D12_RESOURCE_STATE_COPY_DEST,
-#else
-            D3D12_RESOURCE_STATE_RESOLVE_DEST,
-#endif
+            &rd, initialState,
             nullptr,
             IID_PPV_ARGS(&m_readback)));
         static UINT resolveCount = 0;

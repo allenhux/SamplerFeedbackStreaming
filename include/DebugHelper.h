@@ -34,7 +34,8 @@ template<typename ... Ts> void DebugPrint(const Ts& ... ts)
     autoString << std::endl;
     OutputDebugString(autoString.str().c_str());
 }
-inline void ThrowIfFailed(HRESULT hr) { assert(SUCCEEDED(hr)); }
+
+#define ThrowIfFailed(expr) { auto h = expr; if (!SUCCEEDED(h)) { DebugPrint("THROW ", h, " ", __FILE__, " line ", __LINE__);} }
 #else
 #define ASSERT(X)
 #define DebugPrint(...)

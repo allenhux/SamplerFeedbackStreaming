@@ -768,8 +768,6 @@ void Scene::PrepareScene()
 	PlanetPoseGenerator poseGenerator(settings);
     m_universeSize = poseGenerator.GeneratePoses(m_objectPoses.m_matrix, m_objectPoses.m_radius);
 
-    DebugPrint(m_universeSize);
-
     // load texture file headers
     m_sfsResourceDescs.resize(m_args.m_textures.size());
     UINT i = 0;

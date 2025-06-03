@@ -124,41 +124,45 @@ void SFS::ManagerBase::Finish()
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle)
 {
-    static constexpr UINT alignment = std::hardware_destructive_interference_size; // cache line size
-    static constexpr UINT gpuPageSize = 64 * 1024;
+    static constexpr UINT alignmentMask = std::hardware_destructive_interference_size - 1; // cache line size
+    static constexpr UINT gpuPageSizeMask = (64 * 1024) - 1;
 
-    m_residencyMapLock.Acquire();
+    // if new resources, will probably need to expand clear descriptor heap. just always re-allocate.
+    AllocateSharedClearUavHeap();
 
-    UINT requiredSize = 0;
-    for (auto r : m_streamingResources)
-    {
-        r->SetResidencyMapOffset(requiredSize);
-        UINT minMipMapSize = r->GetMinMipMapSize();
-        // align to cache line size
-        requiredSize += (minMipMapSize + alignment - 1) & ~(alignment - 1);
-    }
-
-    // remember how many bytes are in use
-    m_residencyMap.m_bytesUsed = requiredSize;
-
+    // get the buffer size
     UINT bufferSize = 0;
     if (nullptr != m_residencyMap.GetResource())
     {
         bufferSize = (UINT)m_residencyMap.GetResource()->GetDesc().Width;
     }
 
+    // need to lock out ResidencyThread
+    // because we are setting offsets and potentially creating a new resource
+    m_residencyMapLock.Acquire();
+
+    // because there may have been deletions, there could be "holes"
+    // rather than building a proper memory manager, just reset everything on any allocation
+    UINT requiredSize = 0;
+    for (auto r : m_streamingResources)
+    {
+        r->SetResidencyMapOffset(requiredSize);
+        // align to cache line size
+        requiredSize += (r->GetMinMipMapSize() + alignmentMask) & ~alignmentMask;
+    }
+
     if (requiredSize > bufferSize)
     {
         // align to gpu page size
-        requiredSize = (requiredSize + gpuPageSize - 1) & ~(gpuPageSize - 1);
+        requiredSize = (requiredSize + gpuPageSizeMask) & ~gpuPageSizeMask;
 
         auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
         if (m_gpuUploadHeapSupported)
         {
             uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_GPU_UPLOAD);
             // per DirectX-Specs, "CPUPageProperty and MemoryPoolPreference must be ..._UNKNOWN"
-            uploadHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-            uploadHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+            ASSERT(D3D12_CPU_PAGE_PROPERTY_UNKNOWN == uploadHeapProperties.CPUPageProperty);
+            ASSERT(D3D12_MEMORY_POOL_UNKNOWN == uploadHeapProperties.MemoryPoolPreference);
         }
 
 		// defer deletion of current residency map
@@ -169,11 +173,26 @@ void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in
         }
 
         m_residencyMap.Allocate(m_device.Get(), requiredSize, uploadHeapProperties);
-        CreateMinMipMapView(in_descriptorHandle);
     }
     m_residencyMapLock.Release();
+
+    CreateMinMipMapView(in_descriptorHandle);
+
+    // remember how many bytes are in use
+    m_residencyMap.m_bytesUsed = requiredSize;
+
+    auto srvUavCbvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    D3D12_CPU_DESCRIPTOR_HANDLE clearHandle = m_sharedClearUavHeap->GetCPUDescriptorHandleForHeapStart();
     auto pDest = m_residencyMap.GetData();
-    for (auto r : m_streamingResources) { r->WriteMinMipMap((UINT8*)pDest); }
+    for (auto r : m_streamingResources)
+    {
+        // copy current minmipmap state or initialize to default state
+        r->WriteMinMipMap((UINT8*)pDest);
+        // set clear uav descriptor heap offset
+        // note these are views are invalid until set within ClearFeedback()
+        r->SetClearUavDescriptor(clearHandle);
+        clearHandle.ptr += srvUavCbvDescriptorSize;
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -191,27 +210,6 @@ void SFS::ManagerBase::AllocateSharedClearUavHeap()
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
         ThrowIfFailed(m_device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_sharedClearUavHeap)));
         m_sharedClearUavHeap->SetName(L"m_sharedClearUavHeap");
-    }
-}
-
-//-----------------------------------------------------------------------------
-// create uav descriptors in the clear uav heap
-// could optimize this for just the new resources, but CreateResourceView() is designed to be fast
-//     and this function is expected to be called very infrequently
-//-----------------------------------------------------------------------------
-void SFS::ManagerBase::CreateClearDescriptors()
-{
-    auto srvUavCbvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    CD3DX12_CPU_DESCRIPTOR_HANDLE clearHandle(m_sharedClearUavHeap->GetCPUDescriptorHandleForHeapStart(), 0, srvUavCbvDescriptorSize);
-    for (const auto& r : m_streamingResources)
-    {
-        // only update resources that are sufficiently initialized
-        if (r->Drawable())
-        {
-            r->CreateFeedbackView(clearHandle);
-            r->SetClearUavDescriptor(clearHandle);
-            clearHandle.ptr += srvUavCbvDescriptorSize;
-        }
     }
 }
 

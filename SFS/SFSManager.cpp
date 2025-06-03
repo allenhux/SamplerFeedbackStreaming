@@ -83,20 +83,15 @@ void SFS::ManagerBase::UseDirectStorage(bool in_useDS)
 }
 
 //-----------------------------------------------------------------------------
-// returns (approximate) cpu time for processing feedback in the previous frame
-// since processing happens asynchronously, this time should be averaged
-//-----------------------------------------------------------------------------
-float SFS::Manager::GetCpuProcessFeedbackTime() { return m_processFeedbackFrameTime; }
-
-//-----------------------------------------------------------------------------
 // performance and visualization
 //-----------------------------------------------------------------------------
-float SFS::Manager::GetTotalTileCopyLatency() const { return m_dataUploader.GetApproximateTileCopyLatency(); }
+float SFS::Manager::GetGpuTexelsPerMs() const { return m_numTexelsQueued[0] / (m_gpuFeedbackTimes[0] * 1000.f); }
 float SFS::Manager::GetGpuTime() const { return m_gpuTimerResolve.GetTimes()[m_renderFrameIndex].first; }
-float SFS::Manager::GetGpuTexelsPerMs() const { return m_numTexelsQueued[0] / (m_gpuFeedbackTimes[0]*1000.f); }
+float SFS::Manager::GetCpuProcessFeedbackTime() { return m_processFeedbackFrameTime; }
 UINT SFS::Manager::GetTotalNumUploads() const { return m_dataUploader.GetTotalNumUploads(); }
 UINT SFS::Manager::GetTotalNumEvictions() const { return m_dataUploader.GetTotalNumEvictions(); }
 UINT SFS::Manager::GetTotalNumSubmits() const { return m_processFeedbackThread.GetTotalNumSubmits(); }
+float SFS::Manager::GetTotalTileCopyLatency() const { return m_dataUploader.GetApproximateTileCopyLatency(); }
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -155,8 +150,6 @@ void SFS::Manager::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     if (m_newResources.size())
     {
         AllocateSharedResidencyMap(in_minmipmapDescriptorHandle);
-        AllocateSharedClearUavHeap();
-        CreateClearDescriptors(); // if new shared heap, need to set clear uav heap descriptors on existing resources
 
         // monitor new resources for when they need packed mip transition barriers
         m_packedMipTransitionResources.insert(m_packedMipTransitionResources.end(), m_newResources.begin(), m_newResources.end());
@@ -184,11 +177,6 @@ void SFS::Manager::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
             {
                 i++;
             }
-        }
-        // if resources have become drawable, set their clear uav heap descriptors
-        if (m_packedMipTransitionBarriers.size())
-        {
-            CreateClearDescriptors();
         }
     }
 

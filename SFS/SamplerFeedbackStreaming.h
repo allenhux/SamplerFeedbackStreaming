@@ -200,16 +200,20 @@ struct SFSManager
     virtual float GetGpuTexelsPerMs() const = 0 ; // time (ms) as a function of the queued texture dimensions
 
     //--------------------------------------------
+    // statistics
+    //--------------------------------------------
+    virtual float GetGpuTime() const = 0; // GPU time for resolving feedback buffers last frame
+    virtual float GetCpuProcessFeedbackTime() = 0; // approx. cpu time spent processing feedback last frame. expected usage is to average over many frames
+    virtual UINT GetTotalNumUploads() const = 0;   // number of tiles uploaded so far
+    virtual UINT GetTotalNumEvictions() const = 0; // number of tiles evicted so far
+    virtual UINT GetTotalNumSubmits() const = 0;   // number of fence signals for uploads. when using DS, equals number of calls to IDStorageQueue::Submit()
+    virtual float GetTotalTileCopyLatency() const = 0; // very approximate sum of latencies for tile uploads from request to completion
+    virtual void CaptureTraceFile(bool in_captureTrace) = 0; // capture a trace file of tile uploads
+
+    //--------------------------------------------
     // for visualization
     //--------------------------------------------
     virtual void SetVisualizationMode(UINT in_mode) = 0;
-    virtual void CaptureTraceFile(bool in_captureTrace) = 0; // capture a trace file of tile uploads
-    virtual float GetCpuProcessFeedbackTime() = 0; // approx. cpu time spent processing feedback last frame. expected usage is to average over many frames
-    virtual float GetGpuTime() const = 0; // GPU time for resolving feedback buffers last frame
-    virtual UINT GetTotalNumUploads() const = 0;   // number of tiles uploaded so far
-    virtual UINT GetTotalNumEvictions() const = 0; // number of tiles evicted so far
-    virtual float GetTotalTileCopyLatency() const = 0; // very approximate average latency of tile upload from request to completion
-    virtual UINT GetTotalNumSubmits() const = 0;   // number of fence signals for uploads. when using DS, equals number of calls to IDStorageQueue::Submit()
 };
 
 struct SFSResourceDesc

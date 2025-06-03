@@ -37,15 +37,15 @@ namespace SFS
         virtual CommandLists EndFrame() override;
         //virtual void UseDirectStorage(bool in_useDS) override;
         //virtual bool GetWithinFrame() const override;
-        virtual float GetGpuTime() const override;
         virtual float GetGpuTexelsPerMs() const override;
-        virtual void SetVisualizationMode(UINT in_mode) override;
-        virtual void CaptureTraceFile(bool in_captureTrace) override;
+        virtual float GetGpuTime() const override;
         virtual float GetCpuProcessFeedbackTime() override;
         virtual UINT GetTotalNumUploads() const override;
         virtual UINT GetTotalNumEvictions() const override;
         virtual float GetTotalTileCopyLatency() const override;
         virtual UINT GetTotalNumSubmits() const override;
+        virtual void CaptureTraceFile(bool in_captureTrace) override;
+        virtual void SetVisualizationMode(UINT in_mode) override;
         //-----------------------------------------------------------------
         // end external APIs
         //-----------------------------------------------------------------
