@@ -100,13 +100,30 @@ void AdjustArguments(CommandLineArgs& out_args)
             out_args.m_mediaDir += L'\\';
         }
 
-        CorrectPath(out_args.m_mediaDir);
+        // treat terrain path separately
+        if (out_args.m_terrainTexture.size())
+        {
+            auto f = out_args.m_terrainTexture;
+            CorrectPath(f);
+            auto path = std::filesystem::absolute(f);
+            if (std::filesystem::exists(path))
+            {
+                out_args.m_terrainTexture = path;
+            }
+        }
 
+        CorrectPath(out_args.m_mediaDir);
         if (std::filesystem::exists(out_args.m_mediaDir))
         {
             for (const auto& filename : std::filesystem::directory_iterator(out_args.m_mediaDir))
             {
-                std::wstring f = std::filesystem::absolute(filename.path());
+                auto path = std::filesystem::absolute(filename.path());
+                auto z = path.extension();
+                if (path.extension() != ".xet")
+                {
+                    continue;
+                }
+                std::wstring f = path;
                 out_args.m_textures.push_back(f);
 
                 // matched the requested terrain texture name? substitute the full path

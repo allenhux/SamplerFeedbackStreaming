@@ -66,7 +66,9 @@
     </Link>
     <PostBuildEvent>
       <Command>cd /d "$(TargetDir)"
-convert.bat "$(SolutionDir)dds" media</Command>
+call convert.bat "$(SolutionDir)dds" media
+if not exist media\\terrain mkdir media\\terrain
+move media\\4ktiles.xet media\\terrain</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -87,7 +89,9 @@ convert.bat "$(SolutionDir)dds" media</Command>
     </Link>
     <PostBuildEvent>
       <Command>cd /d "$(TargetDir)"
-convert.bat "$(SolutionDir)dds" media</Command>
+call convert.bat "$(SolutionDir)dds" media
+if not exist media\\terrain mkdir media\\terrain
+move media\\4ktiles.xet media\\terrain</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

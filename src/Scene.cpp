@@ -680,7 +680,6 @@ void Scene::PrepareScene()
             if (std::wstring::npos != i->find(m_args.m_terrainTexture))
             {
                 m_args.m_terrainTexture = *i;
-                m_args.m_textures.erase(i);
                 break;
             }
         }

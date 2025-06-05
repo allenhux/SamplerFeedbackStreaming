@@ -50,7 +50,7 @@
   "mediaDir": "media", // media directory
   "skyTexture": "heic2020d", // add a sky sphere. path relative to mediadir
   "earthTexture": "earth", // when a texture containing this string is encountered, treat it as a mercator projection (no uv mirror)
-  "terrainTexture": "4kTiles.xet", // use this texture only for the terrain, no planets
+  "terrainTexture": "media/terrain/4kTiles.xet", // use this texture only for the terrain, no planets
 
   "maxNumObjects": 7500, // maximum total number of objects in the scene
   "numSpheres": 50, // number of objects besides the terrain
