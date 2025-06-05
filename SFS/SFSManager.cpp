@@ -16,6 +16,47 @@
 #include "DataUploader.h"
 #include "SFSHeap.h"
 
+SFS::Manager::Manager(const struct SFSManagerDesc& in_desc, ID3D12Device8* in_pDevice)
+    : ManagerBase(in_desc, in_pDevice)
+    , m_gpuTimerResolve(in_pDevice, in_desc.m_swapChainBufferCount, D3D12GpuTimer::TimerType::Direct)
+{
+    ASSERT(in_desc.m_resolveHeapSizeMB);
+
+    // this limits the implementation to a maximum minmipmap dimension of 64x64,
+    // which supports 16k x 16k BC7 textures. BC1 only requires only 32x64.
+    constexpr UINT MAX_RESOLVE_DIM = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION / 256; // == 64
+
+    auto textureDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8_UINT, MAX_RESOLVE_DIM, MAX_RESOLVE_DIM, 1, 1);
+    textureDesc.Alignment = D3D12_SMALL_RESOURCE_PLACEMENT_ALIGNMENT;
+
+    D3D12_RESOURCE_ALLOCATION_INFO info = in_pDevice->GetResourceAllocationInfo(0, 1, &textureDesc);
+
+    // ideally, texture size is 4KB so 32MB is enough for 8192 feedback resolves per frame.
+    const UINT HEAP_SIZE = in_desc.m_resolveHeapSizeMB * 1024 * 1024;
+
+    // consider scenarios:
+    // alignment = 4k but size = 15k? alignment = 16k but size = 7k?
+    UINT64 mask = info.Alignment - 1;
+    const UINT allocationStep = (UINT)std::max((info.SizeInBytes + mask) & ~mask, info.Alignment);
+    m_maxNumResolvesPerFrame = HEAP_SIZE / allocationStep;
+
+    AutoString nz("alloc ", info.SizeInBytes, " ", info.Alignment, " ", m_maxNumResolvesPerFrame);
+    OutputDebugString(nz.str().c_str());
+
+    m_sharedResolvedResources.resize(m_maxNumResolvesPerFrame);
+    CD3DX12_HEAP_DESC heapDesc(HEAP_SIZE, D3D12_HEAP_TYPE_DEFAULT, 0, D3D12_HEAP_FLAG_DENY_BUFFERS | D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES);
+    ThrowIfFailed(m_device->CreateHeap(&heapDesc, IID_PPV_ARGS(&m_resolvedResourceHeap)));
+
+    auto initialState = D3D12_RESOURCE_STATE_COPY_SOURCE;
+
+    UINT heapOffset = 0;
+    for (auto& r : m_sharedResolvedResources)
+    {
+        in_pDevice->CreatePlacedResource(m_resolvedResourceHeap.Get(), heapOffset, &textureDesc, initialState, nullptr, IID_PPV_ARGS(&r));
+        heapOffset += allocationStep;
+    }
+}
+
 //--------------------------------------------
 // instantiate streaming library
 //--------------------------------------------
@@ -85,7 +126,8 @@ void SFS::ManagerBase::UseDirectStorage(bool in_useDS)
 //-----------------------------------------------------------------------------
 // performance and visualization
 //-----------------------------------------------------------------------------
-float SFS::Manager::GetGpuTexelsPerMs() const { return m_numTexelsQueued[0] / (m_gpuFeedbackTimes[0] * 1000.f); }
+float SFS::Manager::GetGpuTexelsPerMs() const { return m_texelsPerMs; }
+UINT SFS::Manager::GetMaxNumFeedbacksPerFrame() const { return m_maxNumResolvesPerFrame; }
 float SFS::Manager::GetGpuTime() const { return m_gpuTimerResolve.GetTimes()[m_renderFrameIndex].first; }
 float SFS::Manager::GetCpuProcessFeedbackTime() { return m_processFeedbackFrameTime; }
 UINT SFS::Manager::GetTotalNumUploads() const { return m_dataUploader.GetTotalNumUploads(); }
@@ -126,7 +168,7 @@ void SFS::Manager::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     ASSERT(!GetWithinFrame());
 
     // accumulate gpu time from last frame
-    m_gpuFeedbackTimes[1] += GetGpuTime();
+    m_gpuFeedbackTime += GetGpuTime();
 
     // delete resources that have been requested via Remove()
     RemoveResources();
@@ -223,16 +265,6 @@ SFSManager::CommandLists SFS::Manager::EndFrame()
     // NOTE: we are "within frame" until the end of EndFrame()
     ASSERT(GetWithinFrame());
 
-    m_numFeedbackTimingFrames++;
-    if (m_numFeedbackTimingFrames >= m_feedbackTimingFrequency)
-    {
-        m_numFeedbackTimingFrames = 0;
-        m_numTexelsQueued[0] = m_numTexelsQueued[1];
-        m_numTexelsQueued[1] = 0;
-        m_gpuFeedbackTimes[0] = m_gpuFeedbackTimes[1];
-        m_gpuFeedbackTimes[1] = 0;
-    }
-
     //------------------------------------------------------------------
     // after draw calls,
     //    - transition packed mips (do not draw affected objects until subsequent frame)
@@ -293,8 +325,9 @@ SFSManager::CommandLists SFS::Manager::EndFrame()
 
 #if RESOLVE_TO_TEXTURE
                 // resolve to texture incurs a subsequent copy to linear buffer
-                m_barrierUavToResolveSrc[numFeedbackReadbacks + i] = CD3DX12_RESOURCE_BARRIER::Transition(pResource->GetResolvedFeedback(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RESOLVE_DEST);
-                m_barrierResolveSrcToUav[numFeedbackReadbacks + i] = CD3DX12_RESOURCE_BARRIER::Transition(pResource->GetResolvedFeedback(), D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE);
+                auto pResolved = m_sharedResolvedResources[i].Get();
+                m_barrierUavToResolveSrc[numFeedbackReadbacks + i] = CD3DX12_RESOURCE_BARRIER::Transition(pResolved, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RESOLVE_DEST);
+                m_barrierResolveSrcToUav[numFeedbackReadbacks + i] = CD3DX12_RESOURCE_BARRIER::Transition(pResolved, D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE);
 #endif
             } // end barrier coalescing
 
@@ -303,10 +336,10 @@ SFSManager::CommandLists SFS::Manager::EndFrame()
             pCommandList->ResourceBarrier(barrierArraySize, m_barrierUavToResolveSrc.data());
 
             // do the feedback resolves
-            for (auto& t : m_feedbackReadbacks)
+            for (UINT i = 0; i < (UINT)m_feedbackReadbacks.size(); i++)
             {
-                m_numTexelsQueued[1] += t.m_pStreamingResource->GetMinMipMapSize();
-                t.m_pStreamingResource->ResolveFeedback(pCommandList);
+                m_numTexelsQueued += m_feedbackReadbacks[i].m_pStreamingResource->GetMinMipMapSize();
+                m_feedbackReadbacks[i].m_pStreamingResource->ResolveFeedback(pCommandList, m_sharedResolvedResources[i].Get());
             }
 
             // transition all feedback resources RESOLVE_SOURCE->UAV
@@ -314,10 +347,9 @@ SFSManager::CommandLists SFS::Manager::EndFrame()
             pCommandList->ResourceBarrier(barrierArraySize, m_barrierResolveSrcToUav.data());
 
 #if RESOLVE_TO_TEXTURE
-            // copy readable feedback buffers to cpu
-            for (auto& t : m_feedbackReadbacks)
+            for (UINT i = 0; i < (UINT)m_feedbackReadbacks.size(); i++)
             {
-                t.m_pStreamingResource->ReadbackFeedback(pCommandList);
+                m_feedbackReadbacks[i].m_pStreamingResource->ReadbackFeedback(pCommandList, m_sharedResolvedResources[i].Get());
             }
 #endif
             // now safe to clear feedback buffers
@@ -340,6 +372,15 @@ SFSManager::CommandLists SFS::Manager::EndFrame()
     outputCommandLists.m_afterDrawCommands = m_commandLists[(UINT)CommandListName::After].m_commandList.Get();
 
     m_withinFrame = false;
+
+    m_numFeedbackTimingFrames++;
+    if (m_numFeedbackTimingFrames >= m_feedbackTimingFrequency)
+    {
+        m_numFeedbackTimingFrames = 0;
+        m_texelsPerMs = m_numTexelsQueued / (m_gpuFeedbackTime * 1000.f);
+        m_numTexelsQueued = 0;
+        m_gpuFeedbackTime = 0;
+    }
 
     return outputCommandLists;
 }

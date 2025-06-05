@@ -42,18 +42,9 @@ namespace SFS
         virtual UINT GetMinMipMapHeight() const override { return m_tileReferencesHeight; }
         virtual UINT GetMinMipMapSize() const override { return GetMinMipMapWidth() * GetMinMipMapHeight(); }
 
-#if RESOLVE_TO_TEXTURE
-        // SFSM needs this for barrier before/after copy
-        ID3D12Resource* GetResolvedFeedback() const { return m_resources.GetResolvedFeedback(); }
-#endif
         //-----------------------------------------------------------------
         // end external APIs
         //-----------------------------------------------------------------
-
-#if RESOLVE_TO_TEXTURE
-        // call after resolving to read back to CPU
-        void ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList);
-#endif
 
         ResourceBase(
             // method that will fill a tile-worth of bits, for streaming
@@ -91,7 +82,11 @@ namespace SFS
         ID3D12Resource* GetOpaqueFeedback() { return m_resources.GetOpaqueFeedback(); }
 
         // call after drawing to get feedback
-        void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList);
+        void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, ID3D12Resource* in_pDestination);
+#if RESOLVE_TO_TEXTURE
+        // call after resolving to read back to CPU
+        void ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList, ID3D12Resource* in_pResolvedResource);
+#endif
 
         bool FirstUse()
         {

@@ -29,29 +29,23 @@ namespace SFS
         void* MapResolvedReadback(UINT in_index) const;
         void UnmapResolvedReadback(UINT in_index) const;
 
-#if RESOLVE_TO_TEXTURE
-        // for visualization
-        ID3D12Resource* GetResolvedFeedback() const { return m_resolvedResource.Get(); }
-#endif
-
         ID3D12Resource* GetOpaqueFeedback() const { return m_feedbackResource.Get(); }
 
         void ClearFeedback(ID3D12GraphicsCommandList* out_pCmdList, const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor,
             const D3D12_CPU_DESCRIPTOR_HANDLE in_cpuDescriptor);
 
-        void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, UINT in_index);
 #if RESOLVE_TO_TEXTURE
-        void ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList, UINT in_index);
+        void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, ID3D12Resource* in_pDestination);
+        void ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList, ID3D12Resource* in_pResolvedResource, UINT in_index, UINT in_width, UINT in_height);
+#else
+        // resolve directly to a cpu destination
+        void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, UINT in_index);
 #endif
 
     private:
         ComPtr<ID3D12Resource> m_tiledResource;
         ComPtr<ID3D12Resource2> m_feedbackResource;
 
-#if RESOLVE_TO_TEXTURE
-        // feedback resolved on gpu for visualization
-        ComPtr<ID3D12Resource> m_resolvedResource;
-#endif
         // per-swap-buffer cpu readable resolved feedback
         UINT m_readbackStride{ 0 };
         ComPtr<ID3D12Resource> m_readback;

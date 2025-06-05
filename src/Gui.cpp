@@ -316,17 +316,12 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     // live statistics
     //---------------------------------------------------------------------
     {
-        static AverageOver averageFeedback;
-        averageFeedback.Update(in_drawParams.m_gpuFeedbackTime);
-        static AverageOver averageDraw;
-        averageDraw.Update(in_drawParams.m_gpuDrawTime);
-
         DrawLineGraph(m_bandwidthHistory, m_bandwidthHistoryIndex, ImVec2(m_width, 50.0f));
         // GPU timers
         ImGui::Text("GPU ms: Feedback |   Draw");
         ImGui::Text("         %7.2f | %6.3f",
-            averageFeedback.Get() * 1000.f,
-            averageDraw.Get() * 1000.f);
+            in_drawParams.m_gpuFeedbackTime * 1000.f,
+            in_drawParams.m_gpuDrawTime * 1000.f);
         // CPU timers
         ImGui::Separator();
         ImGui::Text("CPU ms: Feedback |  Draw  |  Frame");

@@ -38,6 +38,7 @@ namespace SFS
         //virtual void UseDirectStorage(bool in_useDS) override;
         //virtual bool GetWithinFrame() const override;
         virtual float GetGpuTexelsPerMs() const override;
+        virtual UINT GetMaxNumFeedbacksPerFrame() const override;
         virtual float GetGpuTime() const override;
         virtual float GetCpuProcessFeedbackTime() override;
         virtual UINT GetTotalNumUploads() const override;
@@ -50,10 +51,7 @@ namespace SFS
         // end external APIs
         //-----------------------------------------------------------------
     public:
-        Manager(const struct SFSManagerDesc& in_desc, ID3D12Device8* in_pDevice)
-            : ManagerBase(in_desc, in_pDevice)
-            , m_gpuTimerResolve(in_pDevice, in_desc.m_swapChainBufferCount, D3D12GpuTimer::TimerType::Direct)
-        {}
+        Manager(const struct SFSManagerDesc& in_desc, ID3D12Device8* in_pDevice);
         virtual ~Manager() {}
     private:
         D3D12GpuTimer m_gpuTimerResolve; // time for feedback resolve
@@ -67,7 +65,14 @@ namespace SFS
         // every n frames swap
         UINT m_feedbackTimingFrequency{ 100 };
         UINT m_numFeedbackTimingFrames{ 0 };
-        float m_numTexelsQueued[2] = { 100000, 0 };
-        float m_gpuFeedbackTimes[2] = { 2, 0 };
+        float m_texelsPerMs{ 50 };
+        float m_numTexelsQueued{ 0 };
+        float m_gpuFeedbackTime{ 0 };
+
+#if RESOLVE_TO_TEXTURE
+        ComPtr<ID3D12Heap> m_resolvedResourceHeap;
+        // feedback resolved on gpu
+        std::vector<ComPtr<ID3D12Resource>> m_sharedResolvedResources;
+#endif
     };
 }

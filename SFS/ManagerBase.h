@@ -63,6 +63,9 @@ namespace SFS
         const UINT m_numSwapBuffers;
         const UINT m_evictionDelay;
 
+        // this is a function of the size of m_resolvedResourceHeap
+        UINT m_maxNumResolvesPerFrame{ UINT(-1) };
+
         // track the objects that this resource created
         // used to discover which resources have been updated within a frame
         std::vector<ResourceBase*> m_streamingResources;

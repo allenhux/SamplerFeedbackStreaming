@@ -652,6 +652,7 @@ void Scene::StartStreamingLibrary()
     desc.m_minNumUploadRequests = m_args.m_minNumUploadRequests;
     desc.m_useDirectStorage = m_args.m_useDirectStorage;
     desc.m_threadPriority = (SFSManagerDesc::ThreadPriority)m_args.m_threadPriority;
+    desc.m_resolveHeapSizeMB = m_args.m_resolveHeapSizeMB;
     desc.m_evictionDelay = m_args.m_evictionDelay;
     desc.m_traceCaptureMode = m_args.m_captureTrace;
 
@@ -1161,7 +1162,8 @@ void Scene::DrawObjects()
     // objects without feedback enabled will not call WriteSamplerFeedback()
     //------------------------------------------------------------------------------------
     {
-        float timePerTexel = m_pSFSManager->GetGpuTexelsPerMs();
+        const float timePerTexel = m_pSFSManager->GetGpuTexelsPerMs();
+        const UINT maxNumFeedbacks = m_pSFSManager->GetMaxNumFeedbacksPerFrame();
         UINT texelLimit = (UINT)(m_args.m_maxGpuFeedbackTimeMs * timePerTexel);
         // early timing values aren't valid, so clamp to a minimal non-0 value
         texelLimit = std::max(texelLimit, (UINT)1000);
@@ -1178,7 +1180,6 @@ void Scene::DrawObjects()
         {
             UINT objectIndex = i % (UINT)m_objects.size();
             auto o = m_objects[objectIndex];
-
             if (!o->Drawable()) { continue; }
 
             bool isVisible = o->IsVisible();
@@ -1186,7 +1187,9 @@ void Scene::DrawObjects()
             bool isTiny = o->GetScreenAreaPixels() < 50;
 
             // get sampler feedback for this object?
-            bool queueFeedback = isVisible && (!isTiny) && (numTexels < texelLimit);
+            bool queueFeedback = isVisible && (!isTiny)
+                && (numTexels < texelLimit)
+                && (m_numFeedbackObjects < maxNumFeedbacks);
             queueFeedback = queueFeedback || m_args.m_updateEveryObjectEveryFrame;
 
             bool evict = !isVisible || isTiny;

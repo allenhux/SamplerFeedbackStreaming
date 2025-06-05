@@ -21,6 +21,11 @@
   // 1 prefers P cores, -1 prefers E cores. 0 is normal.
   "threadPriority": 0,
 
+  // sets size for an internal gpu heap to use for feedback resolve resources
+  // The textures in this heap are 64x64, requiring 4KB each on some HW (nvidia 4060) but 64k each on others (amd 780M)
+  // hence limits the maximum # of resolves per frame to 8192 or 512 depending on the HW (unless we multipass, TBD)
+  "resolveHeapSizeMB": 32,
+
   //---------------------------------------
   // ---- application general settings ----
   //---------------------------------------

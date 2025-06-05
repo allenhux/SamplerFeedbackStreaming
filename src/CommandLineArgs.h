@@ -101,5 +101,6 @@ struct CommandLineArgs
     TerrainGenerator::Params m_terrainParams;
 
     bool m_captureTrace{ false }; // capture a trace file of tile uploads
-    int m_threadPriority{ 0 }; // applies to internal threads
+    int m_threadPriority{ 0 }; // applies to internal 
+    UINT m_resolveHeapSizeMB{ 32 }; // size of shared resolve resource heap (if resolve to texture)
 };

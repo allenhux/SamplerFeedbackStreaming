@@ -126,6 +126,8 @@ struct SFSManagerDesc
     };
     ThreadPriority m_threadPriority{ ThreadPriority::Prefer_Normal };
 
+    UINT m_resolveHeapSizeMB{ 32 };
+
     // true: use Microsoft DirectStorage. false: use internal file streaming system
     // NOTE: internal file streaming system does not support DirectStorage compression
     bool m_useDirectStorage{ true };
@@ -198,6 +200,10 @@ struct SFSManager
     // call QueueFeedback() for resources until the sum of GetMinMipMapSize() is >= that number
     //--------------------------------------------
     virtual float GetGpuTexelsPerMs() const = 0 ; // time (ms) as a function of the queued texture dimensions
+
+    // the number of times QueueFeedback() can be called per frame
+    // beyond this limit, QueueFeedback() will be ignored
+    virtual UINT GetMaxNumFeedbacksPerFrame() const = 0;
 
     //--------------------------------------------
     // statistics

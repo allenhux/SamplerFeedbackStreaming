@@ -77,27 +77,6 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_swapC
         m_feedbackResource->SetName(L"m_feedbackResource");
     }
 
-#if RESOLVE_TO_TEXTURE
-    // create gpu-side resolve destination
-    {
-        const auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-
-        auto textureDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8_UINT, numTilesWidth, numTilesHeight, 1, 1);
-        textureDesc.Alignment = D3D12_SMALL_RESOURCE_PLACEMENT_ALIGNMENT;
-
-        ThrowIfFailed(in_pDevice->CreateCommittedResource(
-            &heapProperties,
-            D3D12_HEAP_FLAG_NONE,
-            &textureDesc,
-            // NOTE: though used as RESOLVE_DEST, it is also copied to the CPU
-            // start in the copy_source state to align with transition barrier logic in SFSManager
-            D3D12_RESOURCE_STATE_COPY_SOURCE,
-            nullptr,
-            IID_PPV_ARGS(&m_resolvedResource)));
-        m_resolvedResource->SetName(L"m_resolvedResource");
-    }
-#endif
-
     {
         D3D12_RESOURCE_DESC rd = CD3DX12_RESOURCE_DESC::Buffer(numTilesWidth * numTilesHeight);
         const auto resolvedHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK);
@@ -105,8 +84,9 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_swapC
         auto initialState = D3D12_RESOURCE_STATE_RESOLVE_DEST;
 #if RESOLVE_TO_TEXTURE
         // CopyTextureRegion requires pitch multiple of D3D12_TEXTURE_DATA_PITCH_ALIGNMENT = 256
+        constexpr UINT alignmentMask = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1;
         UINT pitch = numTilesWidth;
-        pitch = (pitch + 0x0ff) & ~0x0ff;
+        pitch = (pitch + alignmentMask) & ~alignmentMask;
         m_readbackStride = pitch * (UINT)numTilesHeight;
         rd.Width = m_readbackStride * in_swapChainBufferCount;
 
@@ -146,9 +126,8 @@ void SFS::InternalResources::ClearFeedback(
 // write command to resolve the opaque feedback to a min-mip feedback map
 //-----------------------------------------------------------------------------
 #if RESOLVE_TO_TEXTURE
-void SFS::InternalResources::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, UINT)
+void SFS::InternalResources::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, ID3D12Resource* resolveDest)
 {
-    auto resolveDest = m_resolvedResource.Get();
 #else
 void SFS::InternalResources::ResolveFeedback(ID3D12GraphicsCommandList1 * out_pCmdList, UINT in_index)
 {
@@ -174,22 +153,34 @@ void SFS::InternalResources::ResolveFeedback(ID3D12GraphicsCommandList1 * out_pC
 //-----------------------------------------------------------------------------
 // write command to copy GPU resolved feedback to CPU readable readback buffer
 //-----------------------------------------------------------------------------
-void SFS::InternalResources::ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList, UINT in_index)
+void SFS::InternalResources::ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList,
+    ID3D12Resource* in_pResolvedResource, UINT in_index, UINT in_width, UINT in_height)
 {
     ID3D12Resource* pResolvedReadback = m_readback.Get();
-    auto srcDesc = m_resolvedResource->GetDesc();
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout{ in_index * m_readbackStride,
-        {srcDesc.Format, (UINT)srcDesc.Width, srcDesc.Height, 1, (UINT)srcDesc.Width } };
-    layout.Footprint.RowPitch = (layout.Footprint.RowPitch + 0x0ff) & ~0x0ff;
 
-    D3D12_TEXTURE_COPY_LOCATION srcLocation = CD3DX12_TEXTURE_COPY_LOCATION(m_resolvedResource.Get(), 0);
-    D3D12_TEXTURE_COPY_LOCATION dstLocation = CD3DX12_TEXTURE_COPY_LOCATION(pResolvedReadback, layout);
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT dstLayout{ in_index * m_readbackStride,
+        {DXGI_FORMAT_R8_UINT, in_width, in_height, 1, in_width } };
+    // CopyTextureRegion requires pitch multiple of D3D12_TEXTURE_DATA_PITCH_ALIGNMENT = 256
+    constexpr UINT alignmentMask = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1;
+    dstLayout.Footprint.RowPitch = (dstLayout.Footprint.RowPitch + alignmentMask) & ~alignmentMask;
+
+    D3D12_TEXTURE_COPY_LOCATION srcLocation = CD3DX12_TEXTURE_COPY_LOCATION(in_pResolvedResource, 0);
+    D3D12_TEXTURE_COPY_LOCATION dstLocation = CD3DX12_TEXTURE_COPY_LOCATION(pResolvedReadback, dstLayout);
+
+    D3D12_BOX sourceRegion;
+    sourceRegion.left = 0;
+    sourceRegion.top = 0;
+    sourceRegion.right = in_width;
+    sourceRegion.bottom = in_height;
+    sourceRegion.front = 0;
+    sourceRegion.back = 1;
+
 
     out_pCmdList->CopyTextureRegion(
         &dstLocation,
         0, 0, 0,
         &srcLocation,
-        nullptr);
+        &sourceRegion);
 }
 #endif
 

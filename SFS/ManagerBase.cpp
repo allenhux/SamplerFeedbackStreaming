@@ -280,7 +280,10 @@ void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRI
         m_firstTimeClears.push_back({ pResource, in_gpuDescriptor });
     }
 
-    m_feedbackReadbacks.push_back({ pResource, in_gpuDescriptor });
+    if (m_maxNumResolvesPerFrame > m_feedbackReadbacks.size())
+    {
+        m_feedbackReadbacks.push_back({ pResource, in_gpuDescriptor });
+    }
 
     // NOTE: feedback buffers will be cleared after readback, in CommandListName::After
 }

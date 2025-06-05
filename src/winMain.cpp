@@ -501,6 +501,7 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
             if (root.isMember("mountainSize")) out_args.m_terrainParams.m_mountainSize = root["mountainSize"].asFloat();
 
             if (root.isMember("threadPriority")) out_args.m_threadPriority = root["threadPriority"].asInt();
+            if (root.isMember("resolveHeapSizeMB")) out_args.m_resolveHeapSizeMB = root["resolveHeapSizeMB"].asInt();
         } // end if successful load
     } // end if file exists
 

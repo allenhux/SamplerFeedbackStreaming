@@ -407,7 +407,9 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
                 pTileRow += width;
 
 #if RESOLVE_TO_TEXTURE
-                pResolvedData += (width + 0x0ff) & ~0x0ff;
+                // CopyTextureRegion requires pitch multiple of D3D12_TEXTURE_DATA_PITCH_ALIGNMENT = 256
+                constexpr UINT alignmentMask = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1;
+                pResolvedData += (width + alignmentMask) & ~alignmentMask;
 #else
                 pResolvedData += width;
 #endif
@@ -885,7 +887,7 @@ void SFS::ResourceBase::ClearFeedback(ID3D12GraphicsCommandList* in_pCmdList, co
 //-----------------------------------------------------------------------------
 // command to resolve feedback to the appropriate non-opaque buffer
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList)
+void SFS::ResourceBase::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, ID3D12Resource* in_pDestination)
 {
     // move to next readback index
     m_readbackIndex = (m_readbackIndex + 1) % m_queuedFeedback.size();
@@ -895,17 +897,21 @@ void SFS::ResourceBase::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList
     f.m_renderFenceForFeedback = m_pSFSManager->GetFrameFenceValue();
     f.m_feedbackQueued = true;
 
+#if RESOLVE_TO_TEXTURE
+    m_resources.ResolveFeedback(out_pCmdList, in_pDestination);
+#else
     m_resources.ResolveFeedback(out_pCmdList, m_readbackIndex);
+#endif
 }
 
 #if RESOLVE_TO_TEXTURE
 //-----------------------------------------------------------------------------
 // call after resolving to read back to CPU
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList)
+void SFS::ResourceBase::ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList, ID3D12Resource* in_pResolvedResource)
 {
     // write readback command to command list if resolving to texture
-    m_resources.ReadbackFeedback(out_pCmdList, m_readbackIndex);
+    m_resources.ReadbackFeedback(out_pCmdList, in_pResolvedResource, m_readbackIndex, GetMinMipMapWidth(), GetMinMipMapHeight());
 }
 #endif
 
