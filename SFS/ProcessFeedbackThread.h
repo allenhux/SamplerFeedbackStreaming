@@ -55,7 +55,9 @@ namespace SFS
         void Wake() { m_processFeedbackFlag.Set(); }
 
         void ShareNewResources(const std::vector<ResourceBase*>& in_resources);
-        void SharePendingResources(const std::vector<ResourceBase*>& in_resources);
+
+        // IF successfully transferred, clears the vector
+        void SharePendingResources(std::vector<ResourceBase*>& in_resources);
 
         // attempts to indicate resources should be destroyed
         // may not succeed if resources are already in the process of being deleted

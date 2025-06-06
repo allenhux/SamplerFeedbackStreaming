@@ -226,7 +226,6 @@ void SFS::Manager::BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap,
     if (m_pendingResources.size())
     {
         m_processFeedbackThread.SharePendingResources(m_pendingResources);
-        m_pendingResources.clear();
     }
 
     // every frame, process feedback (also steps eviction history from prior frames)

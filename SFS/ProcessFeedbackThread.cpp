@@ -66,7 +66,6 @@ void SFS::ProcessFeedbackThread::SignalFileStreamer()
 
 //-----------------------------------------------------------------------------
 // per frame, call SFSResource::ProcessFeedback()
-// expects the no change in # of streaming resources during thread lifetime
 //-----------------------------------------------------------------------------
 void SFS::ProcessFeedbackThread::Start()
 {
@@ -159,10 +158,6 @@ void SFS::ProcessFeedbackThread::Start()
                         }
                     }
                     uploadsRequested += (UINT)m_newResources.size() - num;
-                    if (uploadsRequested)
-                    {
-                        SignalFileStreamer(); // these are small uploads, give FileStreamer a nudge
-                    }
                     m_newResources.resize(num);
                 }
 
@@ -289,12 +284,13 @@ void SFS::ProcessFeedbackThread::ShareNewResources(const std::vector<ResourceBas
 }
 
 //-----------------------------------------------------------------------------
-// SFSManager acquires staging area and adds new resources
+// SFSManager acquires staging area and adds resources that have QueueFeedback() called
 //-----------------------------------------------------------------------------
-void SFS::ProcessFeedbackThread::SharePendingResources(const std::vector<ResourceBase*>& in_resources)
+void SFS::ProcessFeedbackThread::SharePendingResources(std::vector<ResourceBase*>& in_resources)
 {
-    m_pendingLock.Acquire();
+    m_pendingLock.TryAcquire();
     m_pendingResourceStaging.insert(m_pendingResourceStaging.end(), in_resources.begin(), in_resources.end());
+    in_resources.clear();
     m_pendingLock.Release();
 }
 
