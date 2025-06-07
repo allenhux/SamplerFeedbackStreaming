@@ -72,9 +72,9 @@ bool SFS::Resource::Drawable() const
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-void SFS::Resource::QueueFeedback(D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor)
+void SFS::Resource::QueueFeedback()
 {
-    m_pSFSManager->QueueFeedback(this, in_gpuDescriptor);
+    m_pSFSManager->QueueFeedback(this);
     // requesting feedback means this resource will be stale
     m_pSFSManager->SetPending(this);
 }

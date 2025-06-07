@@ -26,6 +26,19 @@ namespace SFS
         {
             m_residencyThread.ShareNewResourcesRT(in_resources);
         }
+        auto GetReadbackSet(UINT64 in_frameFenceValue)
+        {
+            ReadbackSet* pSet = nullptr;
+            for (auto i = m_readbackSets.begin(); i != m_readbackSets.end(); i++)
+            {
+                if ((!i->m_free) && (i->m_fenceValue <= in_frameFenceValue))
+                {
+                    pSet = &(*i);
+                    break;
+                }
+            }
+            return pSet;
+        }
     };
 }
 
@@ -186,6 +199,29 @@ void SFS::ProcessFeedbackThread::Start()
                             i = m_activeResources.erase(i);
                         }
                     }
+#if 0
+                    // FIXME PoC not robust
+                    // loop over feedback buffers that need processing
+                    // fairly often, have more than 1 set (frame's worth) of feedback buffers to process
+                    // start with newest buffer, then only update resources in older buffers
+                    //     that haven't been updated already (with newer data)
+                    std::set<ResourceBase*> pending2;
+                    while (1)
+                    {
+                        auto pReadbackSet = m_pSFSManager->GetReadbackSet(previousFrameFenceValue);
+                        if (pReadbackSet)
+                        {
+                            if (0 == pending2.size())
+                            {
+                                pending2.insert(pReadbackSet->m_resources.begin(), pReadbackSet->m_resources.end());
+                            }
+                            pReadbackSet->m_resources.clear();
+                            pReadbackSet->m_free = true;
+                            continue;
+                        }
+                        break;
+                    }
+#endif
                 }
 
                 // push uploads and evictions for stale resources

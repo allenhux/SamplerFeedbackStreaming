@@ -106,23 +106,6 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_swapC
 }
 
 //-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-void SFS::InternalResources::ClearFeedback(
-    ID3D12GraphicsCommandList* out_pCmdList,
-    const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor,
-    // CPU descriptor corresponding to separate CPU heap /not/ bound to command list
-    const D3D12_CPU_DESCRIPTOR_HANDLE in_cpuDescriptor)
-{
-    // note clear value is ignored when clearing feedback maps
-    UINT clearValue[4]{};
-    out_pCmdList->ClearUnorderedAccessViewUint(
-        in_gpuDescriptor,
-        in_cpuDescriptor,
-        m_feedbackResource.Get(),
-        clearValue, 0, nullptr);
-}
-
-//-----------------------------------------------------------------------------
 // write command to resolve the opaque feedback to a min-mip feedback map
 //-----------------------------------------------------------------------------
 #if RESOLVE_TO_TEXTURE

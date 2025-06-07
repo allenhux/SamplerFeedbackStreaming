@@ -73,8 +73,7 @@ struct SFSResource
 
     // application must explicitly request feedback for each resource each frame
     // this allows the application to limit how much time is spent on feedback, or stop processing e.g. for off-screen objects
-    // descriptor required to create Clear() and Resolve() commands
-    virtual void QueueFeedback(D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor) = 0;
+    virtual void QueueFeedback() = 0;
 
     // evict all loaded tiles for this object, e.g. if not visible
     // call any time
@@ -162,12 +161,11 @@ struct SFSManager
     //--------------------------------------------
     // Call BeginFrame() first,
     // once for all SFSManagers that share heap/upload buffers
-    // descriptor heap is used per ProcessFeedback() to clear the feedback buffer
-    // the shader resource view for the min mip map will be updated if necessary
-    //    (which only happens if StreamingResources are created/destroyed)
+    // the shader resource view for the min mip map will be set
+    //    (only changes if StreamingResources are created/destroyed)
     // NOTE: the root signature should set the associated descriptor range as descriptor and data volatile
     //--------------------------------------------
-    virtual void BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap, D3D12_CPU_DESCRIPTOR_HANDLE in_minmipmapDescriptorHandle) = 0;
+    virtual void BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle) = 0;
 
     //--------------------------------------------
     // Call EndFrame() last, paired with each BeginFrame() and after all draw commands

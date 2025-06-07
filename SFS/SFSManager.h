@@ -17,8 +17,7 @@ use this to create SFSResource and SFSHeap
 
 #include <d3d12.h>
 #include <vector>
-#include <memory>
-#include <thread>
+#include <string>
 
 #include "ManagerBase.h"
 
@@ -33,7 +32,7 @@ namespace SFS
         virtual SFSHeap* CreateHeap(UINT in_maxNumTilesHeap) override;
         virtual SFSResource* CreateResource(const struct SFSResourceDesc& in_desc,
             SFSHeap* in_pHeap, const std::wstring& in_filename) override;
-        virtual void BeginFrame(ID3D12DescriptorHeap* in_pDescriptorHeap, D3D12_CPU_DESCRIPTOR_HANDLE in_minmipmapDescriptorHandle) override;
+        virtual void BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle) override;
         virtual CommandLists EndFrame() override;
         //virtual void UseDirectStorage(bool in_useDS) override;
         //virtual bool GetWithinFrame() const override;
@@ -74,5 +73,6 @@ namespace SFS
         // feedback resolved on gpu
         std::vector<ComPtr<ID3D12Resource>> m_sharedResolvedResources;
 #endif
+        void ClearFeedback(ID3D12GraphicsCommandList* in_pCommandList, const std::vector<ResourceBase*>& in_resources);
     };
 }

@@ -1745,7 +1745,7 @@ bool Scene::WaitForAssetLoad()
         {
             // must give SFSManager a chance to process packed mip requests
             D3D12_CPU_DESCRIPTOR_HANDLE minmipmapDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
-            m_pSFSManager->BeginFrame(m_srvHeap.Get(), minmipmapDescriptor);
+            m_pSFSManager->BeginFrame(minmipmapDescriptor);
             auto commandLists = m_pSFSManager->EndFrame();
             ID3D12CommandList* pCommandLists[] = { commandLists.m_afterDrawCommands };
             m_commandQueue->ExecuteCommandLists(_countof(pCommandLists), pCommandLists);
@@ -1805,7 +1805,7 @@ bool Scene::Draw()
 
     // prepare to update Feedback & stream textures
     D3D12_CPU_DESCRIPTOR_HANDLE minmipmapDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
-    m_pSFSManager->BeginFrame(m_srvHeap.Get(), minmipmapDescriptor);
+    m_pSFSManager->BeginFrame(minmipmapDescriptor);
 
     Animate();
 

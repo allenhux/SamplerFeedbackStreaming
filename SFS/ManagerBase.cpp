@@ -10,6 +10,7 @@
 #include "ResourceBase.h"
 #include "SFSHeap.h"
 #include "BitVector.h"
+#include "DebugHelper.h"
 
 // agility sdk 1.613.3 or later required for gpu upload heaps 
 extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 615; }
@@ -182,16 +183,16 @@ void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in
     m_residencyMap.m_bytesUsed = requiredSize;
 
     auto srvUavCbvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    D3D12_CPU_DESCRIPTOR_HANDLE clearHandle = m_sharedClearUavHeap->GetCPUDescriptorHandleForHeapStart();
     auto pDest = m_residencyMap.GetData();
+    UINT offset = 0;
     for (auto r : m_streamingResources)
     {
         // copy current minmipmap state or initialize to default state
         r->WriteMinMipMap((UINT8*)pDest);
         // set clear uav descriptor heap offset
-        // note these are views are invalid until set within ClearFeedback()
-        r->SetClearUavDescriptor(clearHandle);
-        clearHandle.ptr += srvUavCbvDescriptorSize;
+        // note these are views are invalid until set within NotifyPackedMips()
+        r->SetClearUavDescriptorOffset(offset);
+        offset += srvUavCbvDescriptorSize;
     }
 }
 
@@ -202,14 +203,18 @@ void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in
 void SFS::ManagerBase::AllocateSharedClearUavHeap()
 {
     UINT numDescriptorsNeeded = (UINT)m_streamingResources.size();
-    if ((nullptr == m_sharedClearUavHeap.Get()) || (m_sharedClearUavHeap->GetDesc().NumDescriptors < numDescriptorsNeeded))
+    if ((nullptr == m_sharedClearUavHeapNotBound.Get()) || (m_sharedClearUavHeapNotBound->GetDesc().NumDescriptors < numDescriptorsNeeded))
     {
         D3D12_DESCRIPTOR_HEAP_DESC desc = {};
         desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         desc.NumDescriptors = numDescriptorsNeeded;
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-        ThrowIfFailed(m_device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_sharedClearUavHeap)));
-        m_sharedClearUavHeap->SetName(L"m_sharedClearUavHeap");
+        ThrowIfFailed(m_device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_sharedClearUavHeapNotBound)));
+        m_sharedClearUavHeapNotBound->SetName(L"m_sharedClearUavHeapNotBound");
+
+        desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        ThrowIfFailed(m_device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_sharedClearUavHeapBound)));
+        m_sharedClearUavHeapNotBound->SetName(L"m_sharedClearUavHeapBound");
     }
 }
 
@@ -270,19 +275,51 @@ void SFS::ManagerBase::RemoveHeaps()
 }
 
 //-----------------------------------------------------------------------------
+// add a feedback readback to the current set of readbacks
 //-----------------------------------------------------------------------------
-void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor)
+void SFS::ManagerBase::AddReadback(ResourceBase* in_pResource)
+{
+    if (nullptr == m_pCurrentReadbackSet)
+    {
+        for (auto& s : m_readbackSets)
+        {
+            if (s.m_free)
+            {
+                m_pCurrentReadbackSet = &s;
+                break;
+            }
+        }
+    }
+    if (nullptr == m_pCurrentReadbackSet)
+    {
+        m_readbackSets.emplace_back();
+        m_pCurrentReadbackSet = &m_readbackSets.back();
+        m_pCurrentReadbackSet->m_resources.reserve(m_maxNumResolvesPerFrame);
+    }
+
+    // something is probably wrong if # readback sets vastly exceeds # swapchain buffers
+    // FIXME: block?
+    ASSERT(m_readbackSets.size() < 5 * m_numSwapBuffers);
+
+    m_pCurrentReadbackSet->m_resources.push_back(in_pResource);
+}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource)
 {
     auto pResource = (SFS::ResourceBase*)in_pResource;
 
     if (pResource->FirstUse())
     {
-        m_firstTimeClears.push_back({ pResource, in_gpuDescriptor });
+        m_firstTimeClears.push_back(pResource);
     }
 
     if (m_maxNumResolvesPerFrame > m_feedbackReadbacks.size())
     {
-        m_feedbackReadbacks.push_back({ pResource, in_gpuDescriptor });
+        // FIXME: only add the resource one time per frame!
+        m_feedbackReadbacks.push_back(pResource);
+        //AddReadback(pResource); // FIXME PoC not robust
     }
 
     // NOTE: feedback buffers will be cleared after readback, in CommandListName::After

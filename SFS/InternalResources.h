@@ -31,9 +31,6 @@ namespace SFS
 
         ID3D12Resource* GetOpaqueFeedback() const { return m_feedbackResource.Get(); }
 
-        void ClearFeedback(ID3D12GraphicsCommandList* out_pCmdList, const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor,
-            const D3D12_CPU_DESCRIPTOR_HANDLE in_cpuDescriptor);
-
 #if RESOLVE_TO_TEXTURE
         void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, ID3D12Resource* in_pDestination);
         void ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList, ID3D12Resource* in_pResolvedResource, UINT in_index, UINT in_width, UINT in_height);

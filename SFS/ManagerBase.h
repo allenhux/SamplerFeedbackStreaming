@@ -42,7 +42,7 @@ namespace SFS
         virtual bool GetWithinFrame() const override { return m_withinFrame; }
         virtual void UseDirectStorage(bool in_useDS) override;
 
-        void QueueFeedback(SFSResource* in_pResource, D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor);
+        void QueueFeedback(SFSResource* in_pResource);
 
         // force all outstanding commands to complete.
         // used by ~ManagerBase() and to delete an SFSResource
@@ -111,15 +111,10 @@ namespace SFS
         // direct queue is used to monitor progress of render frames so we know when feedback buffers are ready to be used
         ComPtr<ID3D12CommandQueue> m_directCommandQueue;
 
-        struct FeedbackReadback
-        {
-            ResourceBase* m_pStreamingResource;
-            D3D12_GPU_DESCRIPTOR_HANDLE m_gpuDescriptor;
-        };
-        std::vector<FeedbackReadback> m_feedbackReadbacks;
+        std::vector<ResourceBase*> m_feedbackReadbacks;
 
         // should clear feedback buffer before first use
-        std::vector<FeedbackReadback> m_firstTimeClears;
+        std::vector<ResourceBase*> m_firstTimeClears;
 
         //---------------------------------------------------------------------------
         // SFSM creates 2 command lists to be executed Before & After application draw
@@ -141,6 +136,17 @@ namespace SFS
         };
         std::vector<CommandList> m_commandLists;
 
+        // track per-frame feedback readback
+        struct ReadbackSet
+        {
+            std::atomic<bool> m_free{ true };
+            std::vector<ResourceBase*> m_resources;
+            UINT64 m_fenceValue{ 0 };
+        };
+        std::list<ReadbackSet> m_readbackSets;
+        ReadbackSet* m_pCurrentReadbackSet{ nullptr };
+        void AddReadback(ResourceBase* in_pResource);
+
         // the min mip map is shared. it must be created (at least) every time a SFSResource is created/destroyed
         void CreateMinMipMapView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor);
 
@@ -149,8 +155,10 @@ namespace SFS
         // adds old resource to m_oldSharedResidencyMaps so it can be safely released after n frames
         void AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle);
 
-        // heap to clear feedback resources, shared by all
-        ComPtr<ID3D12DescriptorHeap> m_sharedClearUavHeap;
+        // descriptor heaps to clear feedback resources, shared by all resources
+        ComPtr<ID3D12DescriptorHeap> m_sharedClearUavHeapNotBound;
+        ComPtr<ID3D12DescriptorHeap> m_sharedClearUavHeapBound;
+
         void AllocateSharedClearUavHeap();
 
         // after packed mips have arrived for new resources, transition them from copy_dest

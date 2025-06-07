@@ -17,6 +17,7 @@ SFS Manager interface for the SFS Resource class
 
 #include "ManagerBase.h"
 #include "DataUploader.h"
+#include "ResourceBase.h"
 
 //=============================================================================
 // manager for tiled resources
@@ -68,5 +69,16 @@ namespace SFS
         FileHandle* OpenFile(const std::wstring& in_filename) { return m_dataUploader.OpenFile(in_filename); }
 
         void SetPending(ResourceBase* in_pResource) { m_pendingResources.push_back(in_pResource); }
+
+        void CreateClearViews(ResourceBase* in_pResource, UINT64 in_offset)
+        {
+            D3D12_CPU_DESCRIPTOR_HANDLE bound = m_sharedClearUavHeapBound->GetCPUDescriptorHandleForHeapStart();
+            bound.ptr += in_offset;
+            in_pResource->CreateFeedbackView(bound);
+
+            D3D12_CPU_DESCRIPTOR_HANDLE notBound = m_sharedClearUavHeapNotBound->GetCPUDescriptorHandleForHeapStart();
+            notBound.ptr += in_offset;
+            in_pResource->CreateFeedbackView(notBound);
+        }
     };
 }

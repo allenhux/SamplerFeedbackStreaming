@@ -75,9 +75,9 @@ namespace SFS
         // the following are called only if the application made a feedback request for the object:
 
         // called after feedback map has been copied to the cpu
-        D3D12_CPU_DESCRIPTOR_HANDLE  m_clearUavDescriptor{ 0 };
-        void SetClearUavDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE in_cpuDescriptor) { m_clearUavDescriptor = in_cpuDescriptor; }
-        void ClearFeedback(ID3D12GraphicsCommandList* in_pCmdList, const D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptor);
+        UINT64 m_clearUavDescriptorOffset{ 0 };
+        void SetClearUavDescriptorOffset(UINT64 in_offset) { m_clearUavDescriptorOffset = in_offset; }
+        UINT64 GetClearUavDescriptorOffset() const { return m_clearUavDescriptorOffset; }
 
         ID3D12Resource* GetOpaqueFeedback() { return m_resources.GetOpaqueFeedback(); }
 

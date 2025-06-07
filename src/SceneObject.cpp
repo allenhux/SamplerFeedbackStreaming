@@ -303,9 +303,7 @@ void SceneObjects::BaseObject::Draw(ID3D12GraphicsCommandList1* in_pCommandList,
 
     if (m_feedbackEnabled)
     {
-        D3D12_GPU_DESCRIPTOR_HANDLE h = descriptorHeapBaseGpu;
-        h.ptr += in_drawParams.m_srvUavCbvDescriptorSize * (UINT)SceneObjects::Descriptors::HeapOffsetFeedback;
-        m_pStreamingResource->QueueFeedback(h);
+        m_pStreamingResource->QueueFeedback();
     }
 
     // uavs and srvs
