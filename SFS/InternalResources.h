@@ -22,7 +22,7 @@ namespace SFS
 
         // finish some initialization until when the packed mips arrive
         // need the swap chain count so we can create per-frame readback buffers
-        void Initialize(ID3D12Device8* in_pDevice, UINT in_swapChainBufferCount);
+        void Initialize(ID3D12Device8* in_pDevice, UINT in_numQueuedFeedback);
 
         ID3D12Resource* GetTiledResource() const { return m_tiledResource.Get(); }
 
@@ -42,12 +42,16 @@ namespace SFS
     private:
         ComPtr<ID3D12Resource> m_tiledResource;
         ComPtr<ID3D12Resource2> m_feedbackResource;
+#if RESOLVE_TO_TEXTURE
 
         // per-swap-buffer cpu readable resolved feedback
         UINT m_readbackStride{ 0 };
         ComPtr<ID3D12Resource> m_readback;
         UINT8* m_readbackCpuAddress{ nullptr };
-
+#else
+        std::vector<ComPtr<ID3D12Resource>> m_readback;
+        std::vector<UINT8*> m_readbackCpuAddress;
+#endif
         void NameStreamingTexture();
     };
 }

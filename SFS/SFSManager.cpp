@@ -22,36 +22,41 @@ SFS::Manager::Manager(const struct SFSManagerDesc& in_desc, ID3D12Device8* in_pD
 {
     ASSERT(in_desc.m_resolveHeapSizeMB);
 
-    // the following limits the implementation to a maximum minmipmap dimension of 64x64,
-    // which supports 16k x 16k BC7 textures. BC1 only requires only 32x64.
-    // maximum texture width / tile width for bc7 = 16k / 256 = 64
-    constexpr UINT BC7_TILE_DIMENSION = 256; // same in u and v
-    constexpr UINT MAX_RESOLVE_DIM = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION / BC7_TILE_DIMENSION; // == 64
-
-    auto textureDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8_UINT, MAX_RESOLVE_DIM, MAX_RESOLVE_DIM, 1, 1);
-    textureDesc.Alignment = D3D12_SMALL_RESOURCE_PLACEMENT_ALIGNMENT;
-
-    // ideally, texture size is 4KB so 32MB is enough for 8192 feedback resolves per frame.
-    const UINT HEAP_SIZE = in_desc.m_resolveHeapSizeMB * 1024 * 1024;
-
-    // from alignment and size, compute maximum resolves we can fit in the heap
-    D3D12_RESOURCE_ALLOCATION_INFO info = in_pDevice->GetResourceAllocationInfo(0, 1, &textureDesc);
-    UINT64 mask = info.Alignment - 1;
-    const UINT allocationStep = UINT((info.SizeInBytes + mask) & ~mask);
-    m_maxNumResolvesPerFrame = HEAP_SIZE / allocationStep;
-
-    m_sharedResolvedResources.resize(m_maxNumResolvesPerFrame);
-    CD3DX12_HEAP_DESC heapDesc(HEAP_SIZE, D3D12_HEAP_TYPE_DEFAULT, 0, D3D12_HEAP_FLAG_DENY_BUFFERS | D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES);
-    ThrowIfFailed(m_device->CreateHeap(&heapDesc, IID_PPV_ARGS(&m_resolvedResourceHeap)));
-
-    auto initialState = D3D12_RESOURCE_STATE_COPY_SOURCE;
-
-    UINT heapOffset = 0;
-    for (auto& r : m_sharedResolvedResources)
+#if RESOLVE_TO_TEXTURE
+    // allocate shared space for per-frame feedback resolves
     {
-        in_pDevice->CreatePlacedResource(m_resolvedResourceHeap.Get(), heapOffset, &textureDesc, initialState, nullptr, IID_PPV_ARGS(&r));
-        heapOffset += allocationStep;
+        // the following limits the implementation to a maximum minmipmap dimension of 64x64,
+        // which supports 16k x 16k BC7 textures. BC1 only requires only 32x64.
+        // maximum texture width / tile width for bc7 = 16k / 256 = 64
+        constexpr UINT BC7_TILE_DIMENSION = 256; // same in u and v
+        constexpr UINT MAX_RESOLVE_DIM = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION / BC7_TILE_DIMENSION; // == 64
+
+        auto textureDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8_UINT, MAX_RESOLVE_DIM, MAX_RESOLVE_DIM, 1, 1);
+        textureDesc.Alignment = D3D12_SMALL_RESOURCE_PLACEMENT_ALIGNMENT;
+
+        // ideally, texture size is 4KB so 32MB is enough for 8192 feedback resolves per frame.
+        const UINT HEAP_SIZE = in_desc.m_resolveHeapSizeMB * 1024 * 1024;
+
+        // from alignment and size, compute maximum resolves we can fit in the heap
+        D3D12_RESOURCE_ALLOCATION_INFO info = in_pDevice->GetResourceAllocationInfo(0, 1, &textureDesc);
+        UINT64 mask = info.Alignment - 1;
+        const UINT allocationStep = UINT((info.SizeInBytes + mask) & ~mask);
+        m_maxNumResolvesPerFrame = HEAP_SIZE / allocationStep;
+
+        m_sharedResolvedResources.resize(m_maxNumResolvesPerFrame);
+        CD3DX12_HEAP_DESC heapDesc(HEAP_SIZE, D3D12_HEAP_TYPE_DEFAULT, 0, D3D12_HEAP_FLAG_DENY_BUFFERS | D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES);
+        ThrowIfFailed(m_device->CreateHeap(&heapDesc, IID_PPV_ARGS(&m_resolvedResourceHeap)));
+
+        auto initialState = D3D12_RESOURCE_STATE_COPY_SOURCE;
+
+        UINT heapOffset = 0;
+        for (auto& r : m_sharedResolvedResources)
+        {
+            in_pDevice->CreatePlacedResource(m_resolvedResourceHeap.Get(), heapOffset, &textureDesc, initialState, nullptr, IID_PPV_ARGS(&r));
+            heapOffset += allocationStep;
+        }
     }
+#endif
 }
 
 //--------------------------------------------
@@ -225,14 +230,6 @@ void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescripto
         m_pendingResources.clear();
     }
 
-    // make readback set visible to ProcessFeedbackThread
-    if (m_pCurrentReadbackSet)
-    {
-        m_pCurrentReadbackSet->m_fenceValue = m_frameFenceValue;
-        m_pCurrentReadbackSet->m_free = false;
-        m_pCurrentReadbackSet = nullptr;
-    }
-
     // every frame, process feedback (also steps eviction history from prior frames)
     m_processFeedbackThread.Wake();
 
@@ -369,7 +366,11 @@ SFSManager::CommandLists SFS::Manager::EndFrame()
             for (UINT i = 0; i < (UINT)m_feedbackReadbacks.size(); i++)
             {
                 m_numTexelsQueued += m_feedbackReadbacks[i]->GetMinMipMapSize();
+#if RESOLVE_TO_TEXTURE
                 m_feedbackReadbacks[i]->ResolveFeedback(pCommandList, m_sharedResolvedResources[i].Get());
+#else
+                m_feedbackReadbacks[i]->ResolveFeedback(pCommandList);
+#endif
             }
 
             // transition all feedback resources RESOLVE_SOURCE->UAV

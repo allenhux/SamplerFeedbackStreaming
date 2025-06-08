@@ -17,7 +17,6 @@ Implementation of SFS Manager
 
 #include "SamplerFeedbackStreaming.h"
 #include "D3D12GpuTimer.h"
-#include "Timer.h"
 #include "Streaming.h" // for ComPtr
 #include "DataUploader.h"
 #include "ResidencyThread.h"
@@ -143,7 +142,7 @@ namespace SFS
             std::vector<ResourceBase*> m_resources;
             UINT64 m_fenceValue{ 0 };
         };
-        std::list<ReadbackSet> m_readbackSets;
+        std::vector<ReadbackSet> m_readbackSets;
         ReadbackSet* m_pCurrentReadbackSet{ nullptr };
         void AddReadback(ResourceBase* in_pResource);
 

@@ -41,7 +41,7 @@ void SFS::InternalResources::CreateTiledResource(ID3D12Device8* in_pDevice, cons
 // Defer creating some resources until after packed mips arrive
 // to reduce impact of creating an SFS Resource
 //-----------------------------------------------------------------------------
-void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_swapChainBufferCount)
+void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_numQueuedFeedback)
 {
     // query the reserved resource for its tile properties
     // allocate data structure according to tile properties
@@ -81,27 +81,52 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_swapC
         D3D12_RESOURCE_DESC rd = CD3DX12_RESOURCE_DESC::Buffer(numTilesWidth * numTilesHeight);
         const auto resolvedHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK);
 
-        auto initialState = D3D12_RESOURCE_STATE_RESOLVE_DEST;
 #if RESOLVE_TO_TEXTURE
         // CopyTextureRegion requires pitch multiple of D3D12_TEXTURE_DATA_PITCH_ALIGNMENT = 256
         constexpr UINT alignmentMask = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1;
         UINT pitch = numTilesWidth;
         pitch = (pitch + alignmentMask) & ~alignmentMask;
         m_readbackStride = pitch * (UINT)numTilesHeight;
-        rd.Width = m_readbackStride * in_swapChainBufferCount;
-
-        initialState = D3D12_RESOURCE_STATE_COPY_DEST;
-#endif
+        rd.Width = m_readbackStride * in_numQueuedFeedback;
 
         ThrowIfFailed(in_pDevice->CreateCommittedResource(
             &resolvedHeapProperties,
             D3D12_HEAP_FLAG_NONE,
-            &rd, initialState,
+            &rd, D3D12_RESOURCE_STATE_COPY_DEST,
             nullptr,
             IID_PPV_ARGS(&m_readback)));
         static UINT resolveCount = 0;
-        m_readback->SetName(L"ResolveDest");
+        m_readback->SetName(L"Readback");
         m_readback->Map(0, nullptr, (void**)&m_readbackCpuAddress);
+#else
+        m_readback.resize(in_numQueuedFeedback);
+        m_readbackCpuAddress.resize(in_numQueuedFeedback);
+
+        //-----------------------------------
+        //
+        // NOTE: Debug Layer incorrectly reports error regarding state of resolve dest if in readback heap.
+        // "D3D12 ERROR: ID3D12CommandList::ResolveSubresourceRegion: Using ResolveSubresourceRegion on Command List (0x000001A375B19C90:'Unnamed ID3D12GraphicsCommandList Object'): Resource state (0x400: D3D12_RESOURCE_STATE_COPY_DEST) of resource (0x000001A367BBE4F0:'ResolveDest 1') (subresource: 0) is invalid for use as a destination subresource.  Expected State Bits (all): 0x1000: D3D12_RESOURCE_STATE_RESOLVE_DEST, Actual State: 0x400: D3D12_RESOURCE_STATE_COPY_DEST, Missing State: 0x1000: D3D12_RESOURCE_STATE_RESOLVE_DEST. [ EXECUTION ERROR #538: INVALID_SUBRESOURCE_STATE]"
+        // 
+        // Microsoft spec for D3D12_HEAP_TYPE_READBACK states:
+        // "Resources in this heap must be created with D3D12_RESOURCE_STATE_COPY_DEST, and cannot be changed away from this."
+        //
+        // However, see Sampler Feedback spec under "Deciding whether to trancode [sic] MinMip feedback maps to a texture or buffer"
+        // "applications may choose to decode to a buffer if direct CPU readback is desired."
+        // 
+        //-----------------------------------
+
+        for (UINT i = 0; i < m_readback.size(); i++)
+        {
+            ThrowIfFailed(in_pDevice->CreateCommittedResource(
+                &resolvedHeapProperties,
+                D3D12_HEAP_FLAG_NONE,
+                &rd, D3D12_RESOURCE_STATE_RESOLVE_DEST,
+                nullptr,
+                IID_PPV_ARGS(&m_readback[i])));
+            m_readback[i]->Map(0, nullptr, (void**)&m_readbackCpuAddress[i]);
+            m_readback[i]->SetName(AutoString(L"ResolveDest_", i).str().c_str());
+        }
+#endif
     }
 }
 
@@ -114,7 +139,7 @@ void SFS::InternalResources::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCm
 #else
 void SFS::InternalResources::ResolveFeedback(ID3D12GraphicsCommandList1 * out_pCmdList, UINT in_index)
 {
-    auto resolveDest = m_resolvedReadback[in_index].Get();
+    auto resolveDest = m_readback[in_index].Get();
 #endif
 
     // resolve the min mip map
@@ -181,7 +206,11 @@ void SFS::InternalResources::NameStreamingTexture()
 //-----------------------------------------------------------------------------
 void* SFS::InternalResources::MapResolvedReadback(UINT in_index) const
 {
+#if RESOLVE_TO_TEXTURE
     return &m_readbackCpuAddress[in_index * m_readbackStride];
+#else
+    return m_readbackCpuAddress[in_index];
+#endif
 }
 
 //-----------------------------------------------------------------------------

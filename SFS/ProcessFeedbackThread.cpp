@@ -10,8 +10,6 @@
 #include "ManagerBase.h"
 #include "ResourceBase.h"
 
-#define USE_POC 0
-
 //=============================================================================
 // severely limited SFSManager interface
 //=============================================================================
@@ -27,19 +25,6 @@ namespace SFS
         void ShareNewResourcesRT(const std::vector<ResourceBase*>& in_resources)
         {
             m_residencyThread.ShareNewResourcesRT(in_resources);
-        }
-        auto GetReadbackSet(UINT64 in_frameFenceValue)
-        {
-            ReadbackSet* pSet = nullptr;
-            for (auto i = m_readbackSets.begin(); i != m_readbackSets.end(); i++)
-            {
-                if ((!i->m_free) && (i->m_fenceValue <= in_frameFenceValue))
-                {
-                    pSet = &(*i);
-                    break;
-                }
-            }
-            return pSet;
         }
     };
 }
@@ -77,52 +62,6 @@ void SFS::ProcessFeedbackThread::SignalFileStreamer()
 {
     m_dataUploader.SignalFileStreamer();
     m_numTotalSubmits.fetch_add(1, std::memory_order_relaxed);
-}
-
-//-----------------------------------------------------------------------------
-// loop over feedback buffers that need processing
-// fairly often, have more than 1 set (frame's worth) of feedback buffers to process
-// start with newest buffer, then only update resources in older buffers
-//     that haven't been updated already (with newer data)
-//-----------------------------------------------------------------------------
-void SFS::ProcessFeedbackThread::ProcessFeedback(UINT64 in_frameFenceValue)
-{
-    //std::set<ResourceBase*> pending;
-    while (1)
-    {
-        auto pReadbackSet = m_pSFSManager->GetReadbackSet(in_frameFenceValue);
-        if (pReadbackSet)
-        {
-            m_activeResources.insert(pReadbackSet->m_resources.begin(), pReadbackSet->m_resources.end());
-#if 0
-            if (0 == pending.size())
-            {
-                pending.insert(pReadbackSet->m_resources.begin(), pReadbackSet->m_resources.end());
-            }
-#endif
-            pReadbackSet->m_resources.clear();
-            pReadbackSet->m_free = true;
-            continue;
-        }
-        break;
-    }
-    for (auto i = m_activeResources.begin(); i != m_activeResources.end();)
-    {
-        auto pResource = *i;
-        pResource->ProcessFeedback(in_frameFenceValue);
-        if (pResource->HasAnyWork())
-        {
-            if (pResource->IsStale())
-            {
-                m_pendingResources.insert(pResource);
-            }
-            i++;
-        }
-        else
-        {
-            i = m_activeResources.erase(i);
-        }
-    }
 }
 
 //-----------------------------------------------------------------------------
@@ -166,7 +105,7 @@ void SFS::ProcessFeedbackThread::Start()
 
                         m_newResources.insert(m_newResources.end(), tmpResources.begin(), tmpResources.end());
                     }
-#if 0==USE_POC
+
                     // check for resources where the application has called QueueFeedback() or QueueEviction()
                     if (m_pendingResourceStaging.size() && m_pendingLock.TryAcquire())
                     {
@@ -176,7 +115,7 @@ void SFS::ProcessFeedbackThread::Start()
                         m_pendingLock.Release();
                         m_activeResources.insert(tmpResources.begin(), tmpResources.end());
                     }
-#endif
+
                     // compare active resources to resources that are to be removed
                     // NOTE: doing this before InitPackedMips and sharing with ResidencyThread
                     //       as m_newResources may contain resources that have not been
@@ -230,9 +169,6 @@ void SFS::ProcessFeedbackThread::Start()
                     // flush any pending uploads from previous frame
                     if (uploadsRequested) { flushPendingUploadRequests = true; }
 
-#if USE_POC
-                    ProcessFeedback(previousFrameFenceValue);
-#else
                     for (auto i = m_activeResources.begin(); i != m_activeResources.end();)
                     {
                         auto pResource = *i;
@@ -249,9 +185,8 @@ void SFS::ProcessFeedbackThread::Start()
                         {
                             i = m_activeResources.erase(i);
                         }
-                    }
-#endif
-                }
+                    } // end loop over active resources
+                } // end if new frame
 
                 // push uploads and evictions for stale resources
                 if (m_pendingResources.size())

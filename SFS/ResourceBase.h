@@ -13,6 +13,7 @@ Base class for SFSResource
 #include <vector>
 #include <d3d12.h>
 #include <string>
+#include <array>
 
 #include "SamplerFeedbackStreaming.h"
 #include "InternalResources.h"
@@ -82,17 +83,15 @@ namespace SFS
         ID3D12Resource* GetOpaqueFeedback() { return m_resources.GetOpaqueFeedback(); }
 
         // call after drawing to get feedback
-        void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, ID3D12Resource* in_pDestination);
 #if RESOLVE_TO_TEXTURE
+        void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, ID3D12Resource* in_pDestination);
         // call after resolving to read back to CPU
         void ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList, ID3D12Resource* in_pResolvedResource);
+#else
+        void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList);
 #endif
 
-        bool FirstUse()
-        {
-            if (m_firstUse) { m_firstUse = false; return true; }
-            return false;
-        }
+        bool& GetFirstUse() { return m_firstUse; }
 
         //-------------------------------------
         // end called by SFSM::EndFrame()
@@ -123,12 +122,12 @@ namespace SFS
 
         bool HasAnyWork() // tiles to load / evict now or later
         {
-            return (m_pendingTileLoads.size() || m_pendingEvictions.Size());
+            return (m_pendingTileLoads.size() || m_delayedEvictions.Size());
         }
 
         bool IsStale() // wants to load / evict tiles this frame
         {
-            return (m_pendingTileLoads.size() || m_pendingEvictions.GetReadyToEvict().size());
+            return (m_pendingTileLoads.size() || m_delayedEvictions.GetReadyToEvict().size());
         }
 
         bool InitPackedMips();
@@ -147,9 +146,9 @@ namespace SFS
     protected:
         const SFSResourceDesc m_resourceDesc;
         std::wstring m_filename; // only used so we can dynamically change file streamer type :/
-        const UINT8 m_maxMip{ 0 }; // equals num standard mips
-        const UINT m_tileReferencesWidth{ 0 };  // function of resource tiling
-        const UINT m_tileReferencesHeight{ 0 }; // function of resource tiling
+        const UINT8 m_maxMip{ 0 }; // equals num standard mips, which is also the first packed mip
+        const UINT16 m_tileReferencesWidth{ 0 };  // function of resource tiling
+        const UINT16 m_tileReferencesHeight{ 0 }; // function of resource tiling
         bool m_firstUse{ true }; // queried on first call to queue feedback
 
         SFS::InternalResources m_resources;
@@ -267,6 +266,9 @@ namespace SFS
         // written by ProcessFeedback()
         std::atomic<bool> m_refCountsZero{ true };
     private:
+        // only using double-buffering for feedback history
+        static constexpr UINT QUEUED_FEEDBACK_FRAMES = 2;
+
         // do not immediately decmap:
         // need to withhold until in-flight command buffers have completed
         class EvictionDelay
@@ -297,7 +299,7 @@ namespace SFS
         private:
             std::list<ResourceCoord> m_mappings;
         };
-        EvictionDelay m_pendingEvictions;
+        EvictionDelay m_delayedEvictions;
 
         std::vector<D3D12_TILED_RESOURCE_COORDINATE> m_pendingTileLoads;
 
@@ -325,7 +327,7 @@ namespace SFS
             UINT64 m_renderFenceForFeedback{ UINT_MAX };
             std::atomic<bool> m_feedbackQueued{ false }; // written by render thread, read by ProcessFeedback() thread
         };
-        std::vector<QueuedFeedback> m_queuedFeedback;
+        std::array<QueuedFeedback, QUEUED_FEEDBACK_FRAMES> m_queuedFeedback;
 
         // update internal refcounts based on the incoming minimum mip
         void SetMinMip(UINT in_x, UINT in_y, UINT in_current, UINT in_desired);

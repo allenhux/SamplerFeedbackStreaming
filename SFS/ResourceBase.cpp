@@ -34,14 +34,13 @@ SFS::ResourceBase::ResourceBase(
     // share heap with other StreamingResources
     SFS::Heap* in_pHeap) :
     m_pSFSManager(in_pSFSManager)
-    , m_queuedFeedback(in_pSFSManager->GetNumSwapBuffers())
-    , m_pendingEvictions(in_pSFSManager->GetEvictionDelay())
+    , m_delayedEvictions(in_pSFSManager->GetEvictionDelay())
     , m_pHeap(in_pHeap)
     , m_resourceDesc(in_desc)
     , m_filename(in_filename)
     , m_maxMip((UINT8)m_resourceDesc.m_mipInfo.m_numStandardMips)
-    , m_tileReferencesWidth(m_resourceDesc.m_standardMipInfo[0].m_widthTiles)
-    , m_tileReferencesHeight(m_resourceDesc.m_standardMipInfo[0].m_heightTiles)
+    , m_tileReferencesWidth((UINT16)m_resourceDesc.m_standardMipInfo[0].m_widthTiles)
+    , m_tileReferencesHeight((UINT16)m_resourceDesc.m_standardMipInfo[0].m_heightTiles)
 {
     // most internal allocation deferred
     // there had better be standard mips, otherwise, why stream?
@@ -76,7 +75,7 @@ void SFS::ResourceBase::DeferredInitialize2()
     // make sure my heap has an atlas corresponding to my format
     m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), (DXGI_FORMAT)m_resourceDesc.m_textureFormat);
 
-    m_resources.Initialize(m_pSFSManager->GetDevice(), (UINT)m_queuedFeedback.size());
+    m_resources.Initialize(m_pSFSManager->GetDevice(), QUEUED_FEEDBACK_FRAMES);
 }
 
 //-----------------------------------------------------------------------------
@@ -172,7 +171,7 @@ void SFS::ResourceBase::DecTileRef(UINT in_x, UINT in_y, UINT in_s)
     if (1 == refCount)
     {
         // queue up a decmapping request that will release the heap index after mapping and clear the resident flag
-        m_pendingEvictions.Append(D3D12_TILED_RESOURCE_COORDINATE{ in_x, in_y, 0, in_s });
+        m_delayedEvictions.Append(D3D12_TILED_RESOURCE_COORDINATE{ in_x, in_y, 0, in_s });
     }
     refCount--;
 }
@@ -281,7 +280,7 @@ void SFS::ResourceBase::SetResidencyChanged()
 void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
 {
     // handle (some) pending evictions
-    m_pendingEvictions.NextFrame();
+    m_delayedEvictions.NextFrame();
 
     bool changed = false;
 
@@ -289,7 +288,7 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
     {
         m_evictAll = false;
 
-        m_pendingEvictions.MoveAllToPending();
+        m_delayedEvictions.MoveAllToPending();
 
         // has this resource already been zeroed? don't clear again, early exit
         // future processing of feedback will set this to false if "changed"
@@ -326,7 +325,7 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
                 {
                     layerChanged = true;
                     refCount = 0;
-                    m_pendingEvictions.Append(D3D12_TILED_RESOURCE_COORDINATE{ i % width, i / width, 0, (UINT)s });
+                    m_delayedEvictions.Append(D3D12_TILED_RESOURCE_COORDINATE{ i % width, i / width, 0, (UINT)s });
                 }
             }
 
@@ -345,38 +344,29 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
     }
     else
     {
-        UINT feedbackIndex = 0;
-
         //------------------------------------------------------------------
         // determine if there is feedback to process
         // if there is more than one feedback ready to process (unlikely), only use the most recent one
         //------------------------------------------------------------------
+        QueuedFeedback* pQueuedFeedback = nullptr;
+        UINT feedbackIndex = 0;
+        for (UINT i = 0; i < (UINT)m_queuedFeedback.size(); i++)
         {
-            bool feedbackFound = false;
-            UINT64 latestFeedbackFenceValue = 0;
-            for (UINT i = 0; i < (UINT)m_queuedFeedback.size(); i++)
+            auto& q = m_queuedFeedback[i];
+            if (q.m_feedbackQueued && (q.m_renderFenceForFeedback <= in_frameFenceCompletedValue))
             {
-                if (m_queuedFeedback[i].m_feedbackQueued)
+                // return the newest set first
+                if ((nullptr == pQueuedFeedback) || (pQueuedFeedback->m_renderFenceForFeedback > q.m_renderFenceForFeedback))
                 {
-                    UINT64 feedbackFenceValue = m_queuedFeedback[i].m_renderFenceForFeedback;
-                    if ((in_frameFenceCompletedValue >= feedbackFenceValue) &&
-                        ((!feedbackFound) || (latestFeedbackFenceValue <= feedbackFenceValue)))
-                    {
-                        feedbackFound = true;
-                        feedbackIndex = i;
-                        latestFeedbackFenceValue = feedbackFenceValue;
-
-                        // this feedback will either be used or skipped. either way it is "consumed"
-                        m_queuedFeedback[i].m_feedbackQueued = false;
-                    }
+                    pQueuedFeedback = &q;
+                    feedbackIndex = i;
                 }
+                q.m_feedbackQueued = false;
             }
-
-            // no new feedback?
-            if (!feedbackFound)
-            {
-                return;
-            }
+        }
+        if (nullptr == pQueuedFeedback)
+        {
+            return;
         }
 
         //------------------------------------------------------------------
@@ -430,7 +420,7 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
             if (m_tileMappingState.GetAnyRefCount())
             {
                 m_refCountsZero = false;
-                m_pendingEvictions.Rescue(m_tileMappingState);
+                m_delayedEvictions.Rescue(m_tileMappingState);
             }
             else
             {
@@ -519,9 +509,9 @@ Note that the multi-frame delay for evictions prevents allocation of an index th
 //-----------------------------------------------------------------------------
 UINT SFS::ResourceBase::QueuePendingTileEvictions()
 {
-    if (0 == m_pendingEvictions.GetReadyToEvict().size()) { return 0; }
+    if (0 == m_delayedEvictions.GetReadyToEvict().size()) { return 0; }
 
-    auto& pendingEvictions = m_pendingEvictions.GetReadyToEvict();
+    auto& pendingEvictions = m_delayedEvictions.GetReadyToEvict();
 
     UINT numDelayed = 0;
     UINT numEvictions = 0;
@@ -881,7 +871,11 @@ bool SFS::ResourceBase::GetPackedMipsNeedTransition()
 //-----------------------------------------------------------------------------
 // command to resolve feedback to the appropriate non-opaque buffer
 //-----------------------------------------------------------------------------
+#if RESOLVE_TO_TEXTURE
 void SFS::ResourceBase::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, ID3D12Resource* in_pDestination)
+#else
+void SFS::ResourceBase::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList)
+#endif
 {
     // move to next readback index
     m_readbackIndex = (m_readbackIndex + 1) % m_queuedFeedback.size();
@@ -920,6 +914,6 @@ void SFS::ResourceBase::ClearAllocations()
     m_tileReferences.assign(m_tileReferences.size(), m_maxMip);
     m_minMipMap.assign(m_minMipMap.size(), m_maxMip);
 
-    m_pendingEvictions.Clear();
+    m_delayedEvictions.Clear();
     m_pendingTileLoads.clear();
 }

@@ -29,7 +29,7 @@ Draw loop:
 // FIXME: resolve to buffer only supported in Win11 and some insider versions of Win10
 // When resolving to texture, must copy to cpu-readable buffer from gpu texture (which cannot be in the readback heap)
 // Setting this to 0 resolves directly to cpu-readable buffer
-#define RESOLVE_TO_TEXTURE 1
+#define RESOLVE_TO_TEXTURE 0
 
 #include <d3d12.h>
 

@@ -9,7 +9,6 @@
 #include "ManagerBase.h"
 #include "ResourceBase.h"
 #include "SFSHeap.h"
-#include "BitVector.h"
 #include "DebugHelper.h"
 
 // agility sdk 1.613.3 or later required for gpu upload heaps 
@@ -286,15 +285,10 @@ void SFS::ManagerBase::AddReadback(ResourceBase* in_pResource)
             if (s.m_free)
             {
                 m_pCurrentReadbackSet = &s;
+                m_pCurrentReadbackSet->m_resources.clear();
                 break;
             }
         }
-    }
-    if ((nullptr == m_pCurrentReadbackSet) && (m_readbackSets.size() < (m_numSwapBuffers + 2)))
-    {
-        m_readbackSets.emplace_back();
-        m_pCurrentReadbackSet = &m_readbackSets.back();
-        m_pCurrentReadbackSet->m_resources.reserve(m_maxNumResolvesPerFrame);
     }
 
     if (m_pCurrentReadbackSet)
@@ -310,8 +304,9 @@ void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource)
 {
     auto pResource = (SFS::ResourceBase*)in_pResource;
 
-    if (pResource->FirstUse())
+    if (pResource->GetFirstUse())
     {
+        pResource->GetFirstUse() = false;
         m_firstTimeClears.push_back(pResource);
     }
 
@@ -319,7 +314,6 @@ void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource)
     {
         // FIXME: only add the resource one time per frame!
         m_feedbackReadbacks.push_back(pResource);
-        //AddReadback(pResource);
     }
 
     // NOTE: feedback buffers will be cleared after readback, in CommandListName::After
