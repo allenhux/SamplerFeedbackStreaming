@@ -10,6 +10,8 @@
 #include "ManagerBase.h"
 #include "ResourceBase.h"
 
+#define USE_POC 0
+
 //=============================================================================
 // severely limited SFSManager interface
 //=============================================================================
@@ -78,6 +80,52 @@ void SFS::ProcessFeedbackThread::SignalFileStreamer()
 }
 
 //-----------------------------------------------------------------------------
+// loop over feedback buffers that need processing
+// fairly often, have more than 1 set (frame's worth) of feedback buffers to process
+// start with newest buffer, then only update resources in older buffers
+//     that haven't been updated already (with newer data)
+//-----------------------------------------------------------------------------
+void SFS::ProcessFeedbackThread::ProcessFeedback(UINT64 in_frameFenceValue)
+{
+    //std::set<ResourceBase*> pending;
+    while (1)
+    {
+        auto pReadbackSet = m_pSFSManager->GetReadbackSet(in_frameFenceValue);
+        if (pReadbackSet)
+        {
+            m_activeResources.insert(pReadbackSet->m_resources.begin(), pReadbackSet->m_resources.end());
+#if 0
+            if (0 == pending.size())
+            {
+                pending.insert(pReadbackSet->m_resources.begin(), pReadbackSet->m_resources.end());
+            }
+#endif
+            pReadbackSet->m_resources.clear();
+            pReadbackSet->m_free = true;
+            continue;
+        }
+        break;
+    }
+    for (auto i = m_activeResources.begin(); i != m_activeResources.end();)
+    {
+        auto pResource = *i;
+        pResource->ProcessFeedback(in_frameFenceValue);
+        if (pResource->HasAnyWork())
+        {
+            if (pResource->IsStale())
+            {
+                m_pendingResources.insert(pResource);
+            }
+            i++;
+        }
+        else
+        {
+            i = m_activeResources.erase(i);
+        }
+    }
+}
+
+//-----------------------------------------------------------------------------
 // per frame, call SFSResource::ProcessFeedback()
 //-----------------------------------------------------------------------------
 void SFS::ProcessFeedbackThread::Start()
@@ -118,17 +166,17 @@ void SFS::ProcessFeedbackThread::Start()
 
                         m_newResources.insert(m_newResources.end(), tmpResources.begin(), tmpResources.end());
                     }
-
+#if 0==USE_POC
                     // check for resources where the application has called QueueFeedback() or QueueEviction()
                     if (m_pendingResourceStaging.size() && m_pendingLock.TryAcquire())
                     {
                         // grab them and release the lock quickly
-                        std::vector<ResourceBase*> tmpResources;
+                        std::set<ResourceBase*> tmpResources;
                         tmpResources.swap(m_pendingResourceStaging);
                         m_pendingLock.Release();
                         m_activeResources.insert(tmpResources.begin(), tmpResources.end());
                     }
-
+#endif
                     // compare active resources to resources that are to be removed
                     // NOTE: doing this before InitPackedMips and sharing with ResidencyThread
                     //       as m_newResources may contain resources that have not been
@@ -182,6 +230,9 @@ void SFS::ProcessFeedbackThread::Start()
                     // flush any pending uploads from previous frame
                     if (uploadsRequested) { flushPendingUploadRequests = true; }
 
+#if USE_POC
+                    ProcessFeedback(previousFrameFenceValue);
+#else
                     for (auto i = m_activeResources.begin(); i != m_activeResources.end();)
                     {
                         auto pResource = *i;
@@ -198,28 +249,6 @@ void SFS::ProcessFeedbackThread::Start()
                         {
                             i = m_activeResources.erase(i);
                         }
-                    }
-#if 0
-                    // FIXME PoC not robust
-                    // loop over feedback buffers that need processing
-                    // fairly often, have more than 1 set (frame's worth) of feedback buffers to process
-                    // start with newest buffer, then only update resources in older buffers
-                    //     that haven't been updated already (with newer data)
-                    std::set<ResourceBase*> pending2;
-                    while (1)
-                    {
-                        auto pReadbackSet = m_pSFSManager->GetReadbackSet(previousFrameFenceValue);
-                        if (pReadbackSet)
-                        {
-                            if (0 == pending2.size())
-                            {
-                                pending2.insert(pReadbackSet->m_resources.begin(), pReadbackSet->m_resources.end());
-                            }
-                            pReadbackSet->m_resources.clear();
-                            pReadbackSet->m_free = true;
-                            continue;
-                        }
-                        break;
                     }
 #endif
                 }
@@ -322,19 +351,20 @@ void SFS::ProcessFeedbackThread::ShareNewResources(const std::vector<ResourceBas
 //-----------------------------------------------------------------------------
 // SFSManager acquires staging area and adds resources that have QueueFeedback() called
 //-----------------------------------------------------------------------------
-void SFS::ProcessFeedbackThread::SharePendingResources(std::vector<ResourceBase*>& in_resources)
+void SFS::ProcessFeedbackThread::SharePendingResources(const std::set<ResourceBase*>& in_resources)
 {
-    m_pendingLock.TryAcquire();
-    m_pendingResourceStaging.insert(m_pendingResourceStaging.end(), in_resources.begin(), in_resources.end());
-    in_resources.clear();
-    m_pendingLock.Release();
+    if (m_pendingLock.TryAcquire())
+    {
+        m_pendingResourceStaging.insert(in_resources.begin(), in_resources.end());
+        m_pendingLock.Release();
+    }
 }
 
 //-----------------------------------------------------------------------------
 // called by SFSManager on the main thread
 // shares the list of resources to remove with processfeedback thread
 //-----------------------------------------------------------------------------
-void SFS::ProcessFeedbackThread::AsyncDestroyResources(std::set<ResourceBase*>& in_resources)
+void SFS::ProcessFeedbackThread::ShareDestroyResources(const std::set<ResourceBase*>& in_resources)
 {
     ASSERT(0 != in_resources.size());
 

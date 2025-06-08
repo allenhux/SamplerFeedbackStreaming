@@ -90,7 +90,7 @@ namespace SFS
         // for each, call AllocateResidencyMap() and AllocateSharedClearUavHeap()
         std::vector<ResourceBase*> m_newResources;
         std::set<ResourceBase*> m_removeResources; // resources that are to be removed (deleted)
-        std::vector<ResourceBase*> m_pendingResources; // resources where feedback or eviction requested
+        std::set<ResourceBase*> m_pendingResources; // resources where feedback or eviction requested
 
         // a thread to update residency maps based on feedback
         ResidencyThread m_residencyThread;

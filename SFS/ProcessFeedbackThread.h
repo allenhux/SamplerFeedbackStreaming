@@ -57,12 +57,12 @@ namespace SFS
         void ShareNewResources(const std::vector<ResourceBase*>& in_resources);
 
         // IF successfully transferred, clears the vector
-        void SharePendingResources(std::vector<ResourceBase*>& in_resources);
+        void SharePendingResources(const std::set<ResourceBase*>& in_resources);
 
         // attempts to indicate resources should be destroyed
         // may not succeed if resources are already in the process of being deleted
         // on success, in_resources will be cleared
-        void AsyncDestroyResources(std::set<ResourceBase*>& in_resources);
+        void ShareDestroyResources(const std::set<ResourceBase*>& in_resources);
 
         // called by SFSManager for Residency thread constructor
         GroupRemoveResources& GetRemoveResources() { return m_removeResources; }
@@ -92,7 +92,7 @@ namespace SFS
         std::vector<ResourceBase*> m_newResourcesStaging; // resources to be shared with ProcessFeedbackThread
         Lock m_newResourcesLock;   // lock between ProcessFeedbackThread and main thread
 
-        std::vector<ResourceBase*> m_pendingResourceStaging; // resources to be shared with ProcessFeedbackThread
+        std::set<ResourceBase*> m_pendingResourceStaging; // resources to be shared with ProcessFeedbackThread
         Lock m_pendingLock;   // lock between ProcessFeedbackThread and main thread
 
         std::vector<ResourceBase*> m_removeResourcesStaging; // resources to be deleted
@@ -114,5 +114,6 @@ namespace SFS
         const UINT m_minNumUploadRequests{ 2000 }; // heuristic to reduce Submit()s
         void SignalFileStreamer();
         void CheckRemoveResources();
+        void ProcessFeedback(UINT64 in_frameFenceValue);
     };
 }

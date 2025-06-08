@@ -109,10 +109,12 @@ void SFS::ResidencyThread::Stop()
 //-----------------------------------------------------------------------------
 void SFS::ResidencyThread::ShareNewResourcesRT(const std::vector<ResourceBase*>& in_resources)
 {
-    m_newResourcesLock.TryAcquire();
-    m_newResourcesStaging.insert(m_newResourcesStaging.end(), in_resources.begin(), in_resources.end());
+    if (m_newResourcesLock.TryAcquire())
+    {
+        m_newResourcesStaging.insert(m_newResourcesStaging.end(), in_resources.begin(), in_resources.end());
 #ifdef _DEBUG
-    for (auto p : m_newResourcesStaging) { ASSERT(p->GetInitialized()); }
+        for (auto p : m_newResourcesStaging) { ASSERT(p->GetInitialized()); }
 #endif
-    m_newResourcesLock.Release();
+        m_newResourcesLock.Release();
+    }
 }

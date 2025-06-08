@@ -68,7 +68,7 @@ namespace SFS
 
         FileHandle* OpenFile(const std::wstring& in_filename) { return m_dataUploader.OpenFile(in_filename); }
 
-        void SetPending(ResourceBase* in_pResource) { m_pendingResources.push_back(in_pResource); }
+        void SetPending(ResourceBase* in_pResource) { m_pendingResources.insert(in_pResource); }
 
         void CreateClearViews(ResourceBase* in_pResource, UINT64 in_offset)
         {

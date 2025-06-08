@@ -252,7 +252,7 @@ void SFS::ManagerBase::RemoveResources()
         }
         //ContainerRemove(m_newResources, m_removeResources);
 #endif
-        m_processFeedbackThread.AsyncDestroyResources(m_removeResources);
+        m_processFeedbackThread.ShareDestroyResources(m_removeResources);
         m_removeResources.clear();
     }
 }
@@ -290,18 +290,18 @@ void SFS::ManagerBase::AddReadback(ResourceBase* in_pResource)
             }
         }
     }
-    if (nullptr == m_pCurrentReadbackSet)
+    if ((nullptr == m_pCurrentReadbackSet) && (m_readbackSets.size() < (m_numSwapBuffers + 2)))
     {
         m_readbackSets.emplace_back();
         m_pCurrentReadbackSet = &m_readbackSets.back();
         m_pCurrentReadbackSet->m_resources.reserve(m_maxNumResolvesPerFrame);
     }
 
-    // something is probably wrong if # readback sets vastly exceeds # swapchain buffers
-    // FIXME: block?
-    ASSERT(m_readbackSets.size() < 5 * m_numSwapBuffers);
-
-    m_pCurrentReadbackSet->m_resources.push_back(in_pResource);
+    if (m_pCurrentReadbackSet)
+    {
+        m_pCurrentReadbackSet->m_resources.push_back(in_pResource);
+    }
+    // else ignore attempt to add readback
 }
 
 //-----------------------------------------------------------------------------
@@ -319,7 +319,7 @@ void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource)
     {
         // FIXME: only add the resource one time per frame!
         m_feedbackReadbacks.push_back(pResource);
-        //AddReadback(pResource); // FIXME PoC not robust
+        //AddReadback(pResource);
     }
 
     // NOTE: feedback buffers will be cleared after readback, in CommandListName::After

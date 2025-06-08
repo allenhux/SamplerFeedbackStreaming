@@ -222,6 +222,7 @@ void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescripto
     if (m_pendingResources.size())
     {
         m_processFeedbackThread.SharePendingResources(m_pendingResources);
+        m_pendingResources.clear();
     }
 
     // make readback set visible to ProcessFeedbackThread
