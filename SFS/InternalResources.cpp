@@ -33,8 +33,8 @@ void SFS::InternalResources::CreateTiledResource(ID3D12Device8* in_pDevice, cons
         D3D12_RESOURCE_STATE_COMMON,
         nullptr,
         IID_PPV_ARGS(&m_tiledResource)));
-
-    NameStreamingTexture();
+    static UINT resourceID;
+    m_tiledResource->SetName(AutoString("m_streamingTexture", resourceID++).str().c_str());
 }
 
 //-----------------------------------------------------------------------------
@@ -191,16 +191,6 @@ void SFS::InternalResources::ReadbackFeedback(ID3D12GraphicsCommandList* out_pCm
         &sourceRegion);
 }
 #endif
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-void SFS::InternalResources::NameStreamingTexture()
-{
-    static UINT m_streamingResourceID = 0;
-    m_tiledResource->SetName(
-        AutoString("m_streamingTexture", m_streamingResourceID).str().c_str());
-    m_streamingResourceID++;
-}
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------

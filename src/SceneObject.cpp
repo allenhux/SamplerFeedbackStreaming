@@ -195,13 +195,13 @@ void SceneObjects::BaseObject::CreatePipelineState(
 //-------------------------------------------------------------------------
 void SceneObjects::BaseObject::CreateResourceViews(D3D12_CPU_DESCRIPTOR_HANDLE in_baseDescriptorHandle, UINT in_srvUavCbvDescriptorSize)
 {
-    // sampler feedback view
-    CD3DX12_CPU_DESCRIPTOR_HANDLE feedbackHandle(in_baseDescriptorHandle, (UINT)Descriptors::HeapOffsetFeedback, in_srvUavCbvDescriptorSize);
-    m_pStreamingResource->CreateFeedbackView(feedbackHandle);
-
     // texture view
     CD3DX12_CPU_DESCRIPTOR_HANDLE textureHandle(in_baseDescriptorHandle, (UINT)Descriptors::HeapOffsetTexture, in_srvUavCbvDescriptorSize);
     m_pStreamingResource->CreateShaderResourceView(textureHandle);
+
+    // sampler feedback view
+    CD3DX12_CPU_DESCRIPTOR_HANDLE feedbackHandle(in_baseDescriptorHandle, (UINT)Descriptors::HeapOffsetFeedback, in_srvUavCbvDescriptorSize);
+    m_pStreamingResource->CreateFeedbackView(feedbackHandle);
 }
 
 //-------------------------------------------------------------------------

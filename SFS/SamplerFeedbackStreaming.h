@@ -242,21 +242,20 @@ struct SFSResourceDesc
     {
         UINT32 m_widthTiles;
         UINT32 m_heightTiles;
-        UINT32 m_depthTiles;
+        //UINT32 m_depthTiles; // FIXME? no plan to support 3D textures
 
         // convenience value, can be computed from sum of previous subresource dimensions
         UINT32 m_subresourceTileIndex;
     };
     std::vector<StandardMipInfo> m_standardMipInfo; // size = MipInfo::m_numStandardMips
 
-    // array TileData[m_numTilesForStandardMips + 1], 1 entry for each tile plus a final entry for packed mips
     struct TileData
     {
         UINT32 m_offset;          // file offset to tile data
         UINT32 m_numBytes;        // # bytes for the tile
     };
 
-    TileData m_packedMipData; // may be unused
+    TileData m_packedMipData; // may be unused. offset and # bytes for packed mips
     std::vector<TileData> m_tileData; // size = MipInfo::m_numTilesForStandardMips
 
     // defines the order of the data in m_tileData

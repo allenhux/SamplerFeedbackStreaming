@@ -232,7 +232,8 @@ Scene::~Scene()
 
     delete m_pFrustumViewer;
 
-    // FIXME: The best (fastest) way to shut down is to Destroy SFS Manager first
+    // NOTE: deleting a streaming resource is not fast
+    // recommend for shutdown, skip deleting sfs resources and let SFSManager take care of it
 
     for (auto o : m_objects)
     {
@@ -801,7 +802,7 @@ void Scene::PrepareScene()
         SFSResourceDesc resourceDesc;
         LoadResourceDesc(resourceDesc, m_args.m_skyTexture);
         m_pSky->SetResource(m_pSFSManager->CreateResource(resourceDesc, pHeap, m_args.m_skyTexture));
-        float scale = m_universeSize * 2; // NOTE: expects universe size to not change
+        float scale = 100.f; // since we don't translate the sky, this just needs to be larger than the aspect ratio (max of w/h or h/w)
         m_pSky->GetModelMatrix() = DirectX::XMMatrixScaling(scale, scale, scale);
         m_objects.push_back(m_pSky);
     }
@@ -851,7 +852,7 @@ void Scene::LoadResourceDesc(SFSResourceDesc& out_desc, const std::wstring& in_f
         {
         .m_widthTiles = mipInfo[i].m_standardMipInfo.m_widthTiles,
         .m_heightTiles = mipInfo[i].m_standardMipInfo.m_heightTiles,
-        .m_depthTiles = mipInfo[i].m_standardMipInfo.m_depthTiles,
+        //.m_depthTiles = mipInfo[i].m_standardMipInfo.m_depthTiles, // FIXME? no plan to support 3D textures
 
         // convenience value, can be computed from sum of previous subresource dimensions
         .m_subresourceTileIndex = mipInfo[i].m_standardMipInfo.m_subresourceTileIndex
@@ -1205,7 +1206,7 @@ void Scene::DrawObjects()
                 {
                     skyObjectSet.push_back({ o, objectIndex });
                 }
-            }
+            } // end if visible
 
             if (queueFeedback)
             {
@@ -1217,10 +1218,12 @@ void Scene::DrawObjects()
                 {
                     m_aliasingBarriers.push_back(CD3DX12_RESOURCE_BARRIER::Aliasing(nullptr, o->GetStreamingResource()->GetTiledResource()));
                 }
-            }
+            } // end if queue feedback
 
+            // will evict objects that are visible but tiny (e.g. far away)
             if (m_args.m_enableTileUpdates && evict)
             {
+                ASSERT(o != m_pSky);
                 o->GetStreamingResource()->QueueEviction();
             }
         }

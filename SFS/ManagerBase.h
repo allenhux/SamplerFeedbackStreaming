@@ -151,6 +151,7 @@ namespace SFS
 
         // do not delete in-use resources - wait until swapchaincount frames have passed
         std::vector<ComPtr<ID3D12Resource>> m_oldSharedResidencyMaps;
+        std::vector<ComPtr<ID3D12DescriptorHeap>> m_oldSharedClearUavHeaps;
         // adds old resource to m_oldSharedResidencyMaps so it can be safely released after n frames
         void AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle);
 

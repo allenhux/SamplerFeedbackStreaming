@@ -52,6 +52,5 @@ namespace SFS
         std::vector<ComPtr<ID3D12Resource>> m_readback;
         std::vector<UINT8*> m_readbackCpuAddress;
 #endif
-        void NameStreamingTexture();
     };
 }

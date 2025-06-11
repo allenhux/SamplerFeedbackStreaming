@@ -172,7 +172,8 @@ void SFS::ProcessFeedbackThread::Start()
                     for (auto i = m_activeResources.begin(); i != m_activeResources.end();)
                     {
                         auto pResource = *i;
-                        pResource->ProcessFeedback(frameFenceValue);
+                        // fairly frequent, in practice, for frame to change while processing feedback
+                        pResource->ProcessFeedback(m_pSFSManager->GetFrameFenceCompletedValue());
                         if (pResource->HasAnyWork())
                         {
                             if (pResource->IsStale())
@@ -201,6 +202,7 @@ void SFS::ProcessFeedbackThread::Start()
                         numEvictions += pResource->QueuePendingTileEvictions();
 
                         if (m_dataUploader.GetNumUpdateListsAvailable()
+                            && (0 == m_newResources.size()) // upload packed mips first
                             // with DirectStorage Queue::EnqueueRequest() can block.
                             // when there are many pending uploads, there can be multiple frames of waiting.
                             // if we wait too long in this loop, we miss calling ProcessFeedback() above which adds pending uploads & evictions

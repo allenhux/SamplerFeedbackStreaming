@@ -51,21 +51,12 @@ void SFS::ResourceBase::CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE in_
 }
 
 //-----------------------------------------------------------------------------
-// IMPORTANT: all min mip maps are stored in a single buffer. offset into the buffer.
-// this saves a massive amount of GPU memory, since each min mip map is much smaller than 64KB
-//-----------------------------------------------------------------------------
-UINT SFS::Resource::GetMinMipMapOffset() const
-{
-    return m_residencyMapOffsetBase;
-}
-
-//-----------------------------------------------------------------------------
 // application should not use this texture before packed mips are loaded AND
 // an offset into the shared residency map buffer has been assigned
 //-----------------------------------------------------------------------------
 bool SFS::Resource::Drawable() const
 {
-    bool drawable = (UINT(-1) != m_residencyMapOffsetBase) && (PackedMipStatus::RESIDENT == m_packedMipStatus);
+    bool drawable = (UINT(-1) != GetMinMipMapOffset()) && (PackedMipStatus::RESIDENT == m_packedMipStatus);
 
     return drawable;
 }

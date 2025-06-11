@@ -41,6 +41,7 @@ namespace SFS
         virtual void CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor) override;
         virtual UINT GetMinMipMapWidth() const override { return m_tileReferencesWidth; }
         virtual UINT GetMinMipMapHeight() const override { return m_tileReferencesHeight; }
+        virtual UINT GetMinMipMapOffset() const override { return m_residencyMapOffsetBase; }
         virtual UINT GetMinMipMapSize() const override { return GetMinMipMapWidth() * GetMinMipMapHeight(); }
 
         //-----------------------------------------------------------------
@@ -76,7 +77,6 @@ namespace SFS
         // the following are called only if the application made a feedback request for the object:
 
         // called after feedback map has been copied to the cpu
-        UINT64 m_clearUavDescriptorOffset{ 0 };
         void SetClearUavDescriptorOffset(UINT64 in_offset) { m_clearUavDescriptorOffset = in_offset; }
         UINT64 GetClearUavDescriptorOffset() const { return m_clearUavDescriptorOffset; }
 
@@ -146,15 +146,6 @@ namespace SFS
     protected:
         const SFSResourceDesc m_resourceDesc;
         std::wstring m_filename; // only used so we can dynamically change file streamer type :/
-        const UINT8 m_maxMip{ 0 }; // equals num standard mips, which is also the first packed mip
-        const UINT16 m_tileReferencesWidth{ 0 };  // function of resource tiling
-        const UINT16 m_tileReferencesHeight{ 0 }; // function of resource tiling
-        bool m_firstUse{ true }; // queried on first call to queue feedback
-
-        SFS::InternalResources m_resources;
-        std::unique_ptr<SFS::FileHandle> m_pFileHandle;
-        SFS::Heap* m_pHeap{ nullptr };
-
         // packed mip status
         enum class PackedMipStatus : UINT32
         {
@@ -164,7 +155,30 @@ namespace SFS
             NEEDS_TRANSITION,  // copy complete, transition to readable
             RESIDENT           // mapped, loaded, and transitioned to pixel shader resource
         };
-        PackedMipStatus m_packedMipStatus{ PackedMipStatus::UNINITIALIZED };
+        PackedMipStatus m_packedMipStatus{ PackedMipStatus::UNINITIALIZED };        
+        const UINT16 m_tileReferencesWidth{ 0 };  // function of resource tiling
+        const UINT16 m_tileReferencesHeight{ 0 }; // function of resource tiling
+        const UINT8 m_maxMip{ 0 }; // equals num standard mips, which is also the first packed mip
+        bool m_firstUse{ true }; // queried on first call to queue feedback
+
+        // set by QueueEviction() - render thread
+        // read by ProcessFeedback()
+        std::atomic<bool> m_evictAll{ false };
+
+        // read by QueueEviction() - render thread, to avoid setting evict all unnecessarily
+        // written by ProcessFeedback()
+        std::atomic<bool> m_refCountsZero{ true };
+
+        // standard tile copy complete notification (not packed mips)
+        // exchanged by UpdateMinMip()
+        // set by ProcessFeedback()
+        std::atomic<bool> m_tileResidencyChanged{ false };
+
+        SFS::InternalResources m_resources;
+        std::unique_ptr<SFS::FileHandle> m_pFileHandle;
+        SFS::Heap* m_pHeap{ nullptr };
+
+        UINT64 m_clearUavDescriptorOffset{ 0 };
 
         // heap indices for packed mips only
         std::vector<UINT> m_packedMipHeapIndices;
@@ -250,21 +264,8 @@ namespace SFS
 
         void SetResidencyChanged();
 
-        //--------------------------------------------------------
-        // for public interface
-        //--------------------------------------------------------
-        UINT m_residencyMapOffsetBase{ UINT(-1) };
-
         void DeferredInitialize1(); // before requesting packed mips (in ProcessFeedbackThread)
         void DeferredInitialize2(); // after packed mips arrive (FenceMonitorThread -> NotifyPackedMips)
-
-        // set by QueueEviction() - render thread
-        // read by ProcessFeedback()
-        std::atomic<bool> m_evictAll{ false };
-
-        // read by QueueEviction() - render thread, to avoid setting evict all unnecessarily
-        // written by ProcessFeedback()
-        std::atomic<bool> m_refCountsZero{ true };
     private:
         // only using double-buffering for feedback history
         static constexpr UINT QUEUED_FEEDBACK_FRAMES = 2;
@@ -317,9 +318,6 @@ namespace SFS
         // drop pending loads that are no longer relevant
         void AbandonPendingLoads();
 
-        // index to next min-mip feedback resolve target
-        UINT m_readbackIndex{ 0 };
-
         // if feedback is queued, it is ready to use after the render fence has reached this value
         // support having a feedback queued every frame (num swap buffers)
         struct QueuedFeedback
@@ -338,9 +336,9 @@ namespace SFS
         // DecRef may decline
         void DecTileRef(UINT in_x, UINT in_y, UINT in_s);
 
-        // standard tile copy complete notification (not packed mips)
-        // exchanged by UpdateMinMip()
-        // set by ProcessFeedback()
-        std::atomic<bool> m_tileResidencyChanged{ false };
+        // index to next min-mip feedback resolve target
+        UINT m_readbackIndex{ 0 };
+
+        UINT m_residencyMapOffsetBase{ UINT(-1) };
     };
 }

@@ -37,7 +37,7 @@ namespace SFS
         //virtual void CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor) override;
         //virtual UINT GetMinMipMapWidth() const override;
         //virtual UINT GetMinMipMapHeight() const override;
-        virtual UINT GetMinMipMapOffset() const override;
+        //virtual UINT GetMinMipMapOffset() const override;
         virtual bool Drawable() const override;
         virtual void QueueFeedback() override;
         virtual void QueueEviction() override;

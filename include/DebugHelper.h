@@ -35,7 +35,11 @@ template<typename ... Ts> void DebugPrint(const Ts& ... ts)
     OutputDebugString(autoString.str().c_str());
 }
 
-#define ThrowIfFailed(expr) { auto h = expr; if (!SUCCEEDED(h)) { DebugPrint("THROW ", h, " ", __FILE__, " line ", __LINE__);} }
+#define GETDEBUGLINE __FILE__ << L" line # " << __LINE__
+
+#define ThrowIfFailed(expr) { HRESULT dbghr = expr; if (!SUCCEEDED(dbghr)) {\
+std::wstringstream sz; sz << "ERROR " << std::hex << HRESULT_FROM_WIN32(dbghr) << " at " << GETDEBUGLINE << L"\n"; OutputDebugString(sz.str().c_str()); ASSERT(false); } }
+
 #else
 #define ASSERT(X)
 #define DebugPrint(...)

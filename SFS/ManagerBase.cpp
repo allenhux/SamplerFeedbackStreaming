@@ -29,6 +29,7 @@ SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_p
     , m_dataUploader(in_pDevice, in_desc.m_maxNumCopyBatches, in_desc.m_stagingBufferSizeMB, in_desc.m_maxTileMappingUpdatesPerApiCall, (int)in_desc.m_threadPriority)
     , m_traceCaptureMode{ in_desc.m_traceCaptureMode }
     , m_oldSharedResidencyMaps(in_desc.m_swapChainBufferCount + 1, nullptr)
+    , m_oldSharedClearUavHeaps(in_desc.m_swapChainBufferCount + 1, nullptr)
     , m_processFeedbackThread((ManagerPFT*)this, m_dataUploader, in_desc.m_minNumUploadRequests, (int)in_desc.m_threadPriority)
     , m_residencyThread((ManagerRT*)this, m_processFeedbackThread.GetRemoveResources(), (int)in_desc.m_threadPriority)
 {
@@ -167,9 +168,8 @@ void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in
 
 		// defer deletion of current residency map
         {
-            auto p = m_residencyMap.Detach();
             auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
-            m_oldSharedResidencyMaps[i].Attach(p);
+            m_oldSharedResidencyMaps[i] = m_residencyMap.GetResource();
         }
 
         m_residencyMap.Allocate(m_device.Get(), requiredSize, uploadHeapProperties);
@@ -204,6 +204,11 @@ void SFS::ManagerBase::AllocateSharedClearUavHeap()
     UINT numDescriptorsNeeded = (UINT)m_streamingResources.size();
     if ((nullptr == m_sharedClearUavHeapNotBound.Get()) || (m_sharedClearUavHeapNotBound->GetDesc().NumDescriptors < numDescriptorsNeeded))
     {
+        {
+            auto i = m_frameFenceValue % m_oldSharedClearUavHeaps.size();
+            m_oldSharedClearUavHeaps[i] = m_sharedClearUavHeapBound.Get();
+        }
+
         D3D12_DESCRIPTOR_HEAP_DESC desc = {};
         desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         desc.NumDescriptors = numDescriptorsNeeded;

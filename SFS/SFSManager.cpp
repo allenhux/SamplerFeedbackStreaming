@@ -184,9 +184,11 @@ void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescripto
     m_frameFenceValue++;
 
     // release old shared residency map
+    // not necessary because they will get released on app exit, but reduces runtime memory
     {
         auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
         m_oldSharedResidencyMaps[i] = nullptr;
+        m_oldSharedClearUavHeaps[i] = nullptr;
     }
 
     // if new StreamingResources have been created...
