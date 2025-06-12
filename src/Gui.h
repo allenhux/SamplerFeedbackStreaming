@@ -27,6 +27,7 @@ public:
         float m_cpuDrawTime;       // time cpu is submitting draw calls (render thread)
         float m_cpuFeedbackTime;   // time cpu is working on feedback & related datastructures (update thread)
         int m_scrollMipDim;
+        UINT m_numObjectsLoaded;
         UINT m_numTilesUploaded;
         UINT m_numTilesEvicted;
         UINT m_numTilesCommitted;

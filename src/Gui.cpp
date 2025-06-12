@@ -344,8 +344,12 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     //---------------------------------------------------------------------
     // number of objects. affects heap occupancy
     //---------------------------------------------------------------------
-    ImGui::SliderInt("Num Objects", &m_numObjects, m_minNumObjects,
-        (int)in_args.m_maxNumObjects);
+    std::string format = "%d";
+    if (in_drawParams.m_numObjectsLoaded != (UINT)m_numObjects)
+    {
+        format = std::to_string(in_drawParams.m_numObjectsLoaded) + "/%d";
+    }
+    ImGui::SliderInt("Num Objects", &m_numObjects, m_minNumObjects, (int)in_args.m_maxNumObjects, format.c_str());
 
     // only change # objects after slider released.
     if (ImGui::IsItemDeactivatedAfterEdit())

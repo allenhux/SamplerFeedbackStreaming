@@ -29,9 +29,8 @@ SceneObjects::BaseObject::Geometries SceneObjects::BaseObject::m_geometries;
 //-------------------------------------------------------------------------
 SceneObjects::Geometry* SceneObjects::BaseObject::ConstructGeometry()
 {
-    auto p = new Geometry;
-    m_geometries.m_members.push_back(p);
-    return p;
+    m_geometries.emplace_back();
+    return &m_geometries.back();
 }
 
 //-------------------------------------------------------------------------

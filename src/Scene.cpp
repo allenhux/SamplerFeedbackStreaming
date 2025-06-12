@@ -1019,7 +1019,6 @@ void Scene::LoadSpheres()
 
     if (m_objects.size() < (UINT)m_args.m_numSpheres)
     {
-        UINT textureIndex = (UINT)m_objects.size();
         while (m_objects.size() < (UINT)m_args.m_numSpheres)
         {
             // this object's index-to-be
@@ -1030,8 +1029,7 @@ void Scene::LoadSpheres()
             auto pHeap = m_sharedHeaps[heapIndex];
 
             // grab the next texture
-            UINT fileIndex = textureIndex % m_args.m_textures.size();
-            textureIndex++;
+            UINT fileIndex = objectIndex % m_args.m_textures.size();
             const auto& textureFilename = m_args.m_textures[fileIndex];
 
             SceneObjects::BaseObject* o = nullptr;
@@ -1172,6 +1170,7 @@ void Scene::DrawObjects()
 
         // round-robin which objects get feedback
         m_queueFeedbackIndex = m_queueFeedbackIndex % m_objects.size();
+        m_numObjectsLoaded = 0;
 
         // loop over n objects starting with the range that we want to get sampler feedback from, then wrap around.
         UINT numObjects = m_queueFeedbackIndex + (UINT)m_objects.size();
@@ -1181,6 +1180,7 @@ void Scene::DrawObjects()
             UINT objectIndex = i % (UINT)m_objects.size();
             auto o = m_objects[objectIndex];
             if (!o->Drawable()) { continue; }
+            m_numObjectsLoaded++;
 
             bool isVisible = o->IsVisible();
             // FIXME: magic number. idea is, no need to stream texture data to tiny objects
@@ -1639,6 +1639,7 @@ void Scene::DrawUI()
         guiDrawParams.m_numTilesVirtual = m_numTilesVirtual;
         guiDrawParams.m_totalHeapSize = m_args.m_streamingHeapSize * (UINT)m_sharedHeaps.size();
         guiDrawParams.m_windowHeight = m_args.m_windowHeight;
+        guiDrawParams.m_numObjectsLoaded = m_numObjectsLoaded;
 
         if (m_args.m_uiModeMini)
         {

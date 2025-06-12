@@ -7,6 +7,7 @@
 #pragma once
 
 #include <d3d12.h>
+#include <list>
 #include "CommandLineArgs.h"
 #include "SamplerFeedbackStreaming.h"
 #include "CreateSphere.h"
@@ -167,13 +168,10 @@ namespace SceneObjects
 
     private:
         // container for per-class object resources
-        static struct Geometries
-        {
-            std::vector<Geometry*> m_members;
-            ~Geometries() {
-                for (auto p : m_members) { delete p; }
-            }
-        } m_geometries;
+        // this allows re-use of geometry across many objects, BUT
+        // FIXME? refecount or something in a real environment
+        using Geometries = std::list<Geometry>;
+        static Geometries m_geometries;
 
         bool m_createResourceViews{ true };
         void CreateResourceViews(D3D12_CPU_DESCRIPTOR_HANDLE in_baseDescriptorHandle, UINT in_srvUavCbvDescriptorSize);

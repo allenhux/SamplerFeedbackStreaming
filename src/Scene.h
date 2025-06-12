@@ -238,6 +238,7 @@ private:
     // each frame, update objects until timeout reached
     UINT m_queueFeedbackIndex{ 0 }; // index based on number of gpu feedback resolves per frame
     UINT m_numFeedbackObjects{ 0 }; // for statistics
+    UINT m_numObjectsLoaded{ 0 }; // for UI
 
     using BarrierList = std::vector<D3D12_RESOURCE_BARRIER>;
     BarrierList m_aliasingBarriers; // optional barrier for performance analysis only
@@ -250,9 +251,6 @@ private:
     class D3D12GpuTimer* m_pGpuTimer { nullptr };
     std::unique_ptr<FrameEventTracing> m_csvFile{ nullptr };
     float m_gpuProcessFeedbackTime{ 0 };
-
-    // render thread can request other threads to stop processing e.g. on time budget exceeded
-    std::atomic<bool> m_interrupt{ false };
 
     // statistics: compute per-frame # evictions & uploads from delta from previous total
     UINT m_numTotalEvictions{ 0 };
