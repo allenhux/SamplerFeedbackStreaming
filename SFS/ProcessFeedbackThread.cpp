@@ -406,8 +406,8 @@ void SFS::ProcessFeedbackThread::CheckRemoveResources()
         }
     }
 
-    // if the residency thread has process removed resources,
-    // isolate the remaining resources that have pending work in DataUploader
+    // after the residency thread has removed resources,
+    // identify any resources that have pending work in DataUploader
     // then delete them as they become available
     if (GroupRemoveResources::Client::ProcessFeedback == m_removeResources.GetFlags())
     {

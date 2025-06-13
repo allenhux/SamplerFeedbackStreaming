@@ -22,10 +22,8 @@ SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_p
     m_numSwapBuffers(in_desc.m_swapChainBufferCount)
     // delay eviction by enough to not affect a pending frame
     , m_evictionDelay(std::max(in_desc.m_swapChainBufferCount + 1, in_desc.m_evictionDelay))
-    , m_renderFrameIndex(0)
     , m_directCommandQueue(in_desc.m_pDirectCommandQueue)
     , m_device(in_pDevice)
-    , m_commandLists((UINT)CommandListName::Num)
     , m_dataUploader(in_pDevice, in_desc.m_maxNumCopyBatches, in_desc.m_stagingBufferSizeMB, in_desc.m_maxTileMappingUpdatesPerApiCall, (int)in_desc.m_threadPriority)
     , m_traceCaptureMode{ in_desc.m_traceCaptureMode }
     , m_oldSharedResidencyMaps(in_desc.m_swapChainBufferCount + 1, nullptr)
@@ -37,26 +35,6 @@ SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_p
 
     ThrowIfFailed(in_pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_frameFence)));
     m_frameFence->SetName(L"SFS::ManagerBase::m_frameFence");
-
-    const UINT numAllocators = m_numSwapBuffers;
-    for (UINT c = 0; c < (UINT)CommandListName::Num; c++)
-    {
-        auto& cl = m_commandLists[c];
-        cl.m_allocators.resize(numAllocators);
-        for (UINT i = 0; i < numAllocators; i++)
-        {
-            ThrowIfFailed(in_pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&cl.m_allocators[i])));
-            cl.m_allocators[i]->SetName(
-                AutoString("SFS::ManagerBase::m_commandLists.m_allocators[",
-                    c, "][", i, "]").str().c_str());
-
-        }
-        ThrowIfFailed(in_pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, cl.m_allocators[m_renderFrameIndex].Get(), nullptr, IID_PPV_ARGS(&cl.m_commandList)));
-        cl.m_commandList->SetName(
-            AutoString("SFS::ManagerBase::m_commandLists.m_commandList[", c, "]").str().c_str());
-
-        cl.m_commandList->Close();
-    }
 
     // GPU upload heap support?
     {
@@ -177,9 +155,6 @@ void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in
     m_residencyMapLock.Release();
 
     CreateMinMipMapView(in_descriptorHandle);
-
-    // remember how many bytes are in use
-    m_residencyMap.m_bytesUsed = requiredSize;
 
     auto srvUavCbvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     auto pDest = m_residencyMap.GetData();

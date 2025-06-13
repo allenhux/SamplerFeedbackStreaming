@@ -77,10 +77,7 @@ namespace SFS
 
         // each SFSResource writes current uploaded tile state to min mip map, separate data for each frame
         // internally, use a single buffer containing all the residency maps
-        struct ResidencyMap : SFS::UploadBuffer
-        {
-            UINT m_bytesUsed{ 0 };
-        } m_residencyMap;
+        SFS::UploadBuffer m_residencyMap;
 
         // lock between ResidencyThread and main thread around shared residency map
         Lock m_residencyMapLock;
@@ -114,26 +111,6 @@ namespace SFS
 
         // should clear feedback buffer before first use
         std::vector<ResourceBase*> m_firstTimeClears;
-
-        //---------------------------------------------------------------------------
-        // SFSM creates 2 command lists to be executed Before & After application draw
-        // these clear & resolve feedback buffers, coalescing all their barriers
-        //---------------------------------------------------------------------------
-        enum class CommandListName
-        {
-            After,    // after all draw calls: resolve feedback
-            Num
-        };
-        ID3D12GraphicsCommandList1* GetCommandList(CommandListName in_name) { return m_commandLists[UINT(in_name)].m_commandList.Get(); }
-
-        UINT m_renderFrameIndex{ 0 }; // between 0 and # swap buffers
-
-        struct CommandList
-        {
-            ComPtr<ID3D12GraphicsCommandList1> m_commandList;
-            std::vector<ComPtr<ID3D12CommandAllocator>> m_allocators;
-        };
-        std::vector<CommandList> m_commandLists;
 
         // track per-frame feedback readback
         struct ReadbackSet

@@ -33,7 +33,7 @@ namespace SFS
         virtual SFSResource* CreateResource(const struct SFSResourceDesc& in_desc,
             SFSHeap* in_pHeap, const std::wstring& in_filename) override;
         virtual void BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle) override;
-        virtual CommandLists EndFrame() override;
+        virtual ID3D12CommandList* EndFrame() override;
         //virtual void UseDirectStorage(bool in_useDS) override;
         //virtual bool GetWithinFrame() const override;
         virtual float GetGpuTexelsPerMs() const override;
@@ -54,9 +54,10 @@ namespace SFS
         virtual ~Manager() {}
     private:
         D3D12GpuTimer m_gpuTimerResolve; // time for feedback resolve
-        SFS::BarrierList m_barrierUavToResolveSrc; // transition copy source to resolve dest
-        SFS::BarrierList m_barrierResolveSrcToUav; // transition resolve dest to copy source
-        SFS::BarrierList m_packedMipTransitionBarriers; // transition packed-mips from common (copy dest)
+        using BarrierList = std::vector<D3D12_RESOURCE_BARRIER>;
+        BarrierList m_barrierUavToResolveSrc; // transition copy source to resolve dest
+        BarrierList m_barrierResolveSrcToUav; // transition resolve dest to copy source
+        BarrierList m_packedMipTransitionBarriers; // transition packed-mips from common (copy dest)
 
         INT64 m_previousFeedbackTime{ 0 }; // m_processFeedbackTime at time of last query
         float m_processFeedbackFrameTime{ 0 }; // cpu time spent processing feedback for the most recent frame
@@ -67,6 +68,19 @@ namespace SFS
         float m_texelsPerMs{ 50 };
         float m_numTexelsQueued{ 0 };
         float m_gpuFeedbackTime{ 0 };
+
+        UINT m_renderFrameIndex{ 0 }; // between 0 and # swap buffers
+
+        struct CommandList
+        {
+            void Allocate(ID3D12Device* in_pDevice, UINT in_numAllocators, std::wstring in_name);
+            void Reset(UINT in_allocatorIndex);
+            ComPtr<ID3D12GraphicsCommandList1> m_commandList;
+            std::vector<ComPtr<ID3D12CommandAllocator>> m_allocators;
+        };
+        // command list to be executed after application draw
+        // clear & resolve feedback buffers, coalesces all barriers
+        CommandList m_commandListEndFrame;
 
 #if RESOLVE_TO_TEXTURE
         ComPtr<ID3D12Heap> m_resolvedResourceHeap;

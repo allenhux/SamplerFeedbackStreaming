@@ -1750,9 +1750,8 @@ bool Scene::WaitForAssetLoad()
             // must give SFSManager a chance to process packed mip requests
             D3D12_CPU_DESCRIPTOR_HANDLE minmipmapDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
             m_pSFSManager->BeginFrame(minmipmapDescriptor);
-            auto commandLists = m_pSFSManager->EndFrame();
-            ID3D12CommandList* pCommandLists[] = { commandLists.m_afterDrawCommands };
-            m_commandQueue->ExecuteCommandLists(_countof(pCommandLists), pCommandLists);
+            auto pCommandList = m_pSFSManager->EndFrame();
+            m_commandQueue->ExecuteCommandLists(1, &pCommandList);
 
             MoveToNextFrame();
 
@@ -1860,10 +1859,10 @@ bool Scene::Draw()
     // execute command lists
     //-------------------------------------------
     m_renderThreadTimes.Set(RenderEvents::PreEndFrame);
-    auto commandLists = m_pSFSManager->EndFrame();
+    auto pCommandList = m_pSFSManager->EndFrame();
     m_renderThreadTimes.Set(RenderEvents::PostEndFrame);
 
-    ID3D12CommandList* pCommandLists[] = { m_commandList.Get(), commandLists.m_afterDrawCommands };
+    ID3D12CommandList* pCommandLists[] = { m_commandList.Get(), pCommandList };
     m_commandQueue->ExecuteCommandLists(_countof(pCommandLists), pCommandLists);
 
     //-------------------------------------------

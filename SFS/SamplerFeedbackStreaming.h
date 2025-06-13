@@ -169,18 +169,13 @@ struct SFSManager
 
     //--------------------------------------------
     // Call EndFrame() last, paired with each BeginFrame() and after all draw commands
-    // returns one command list:
-    //   m_afterDrawCommands: must be called /after/ any draw commands
+    // returns one command list which must be executed immediately after any draw commands
     // e.g.
-    //    auto commandLists = pSFSManager->EndFrame();
-    //    ID3D12CommandList* pCommandLists[] = { myCommandList, commandLists.m_afterDrawCommands };
+    //    auto pCommandList = pSFSManager->EndFrame();
+    //    ID3D12CommandList* pCommandLists[] = { myCommandList, pCommandList };
     //    m_commandQueue->ExecuteCommandLists(_countof(pCommandLists), pCommandLists);
     //--------------------------------------------
-    struct CommandLists
-    {
-        ID3D12CommandList* m_afterDrawCommands;
-    };
-    virtual CommandLists EndFrame() = 0;
+    virtual ID3D12CommandList* EndFrame() = 0;
 
     //--------------------------------------------
     // choose DirectStorage vs. manual tile loading

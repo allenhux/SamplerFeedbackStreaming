@@ -99,6 +99,7 @@ namespace SFS
         Lock m_removeStagingLock;   // lock between ProcessFeedbackThread and main thread
 
         // Resources to delete. Verify other threads (Residency, DataUploader) aren't using them first.
+        // this is shared with ResidencyThread
         GroupRemoveResources m_removeResources;
 
         // sleep until this is set:

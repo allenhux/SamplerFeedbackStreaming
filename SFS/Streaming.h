@@ -19,7 +19,6 @@
 namespace SFS
 {
     template<typename T> using ComPtr = Microsoft::WRL::ComPtr<T>;
-    using BarrierList = std::vector<D3D12_RESOURCE_BARRIER>;
 
     //==================================================
     //==================================================
