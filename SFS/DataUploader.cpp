@@ -358,8 +358,7 @@ void SFS::DataUploader::FenceMonitorThread()
             ASSERT(0 == updateList.GetNumEvictions());
 
             // wait for mapping complete before streaming packed tiles
-            mappingFenceValue = m_mappingFence->GetCompletedValue();
-            if (mappingFenceValue >= updateList.m_mappingFenceValue)
+            if (m_mappingFence->GetCompletedValue() >= updateList.m_mappingFenceValue)
             {
                 updateList.m_pResource->LoadPackedMipInfo(updateList);
                 m_pFileStreamer->StreamPackedMips(updateList);
@@ -378,8 +377,7 @@ void SFS::DataUploader::FenceMonitorThread()
             ASSERT(1 == updateList.GetNumStandardUpdates());
             ASSERT(0 == updateList.GetNumEvictions());
 
-            copyFenceValue = m_pFileStreamer->GetCompletedValue();
-            if ((updateList.m_copyFenceValid) && (copyFenceValue >= updateList.m_copyFenceValue))
+            if ((updateList.m_copyFenceValid) && (m_pFileStreamer->GetCompletedValue() >= updateList.m_copyFenceValue))
             {
                 updateList.m_pResource->NotifyPackedMips();
                 freeUpdateList = true;
@@ -390,8 +388,7 @@ void SFS::DataUploader::FenceMonitorThread()
             ASSERT(0 != updateList.GetNumStandardUpdates());
 
             // only check copy fence if the fence has been set (avoid race condition)
-            copyFenceValue = m_pFileStreamer->GetCompletedValue();
-            if ((updateList.m_copyFenceValid) && (copyFenceValue >= updateList.m_copyFenceValue))
+            if ((updateList.m_copyFenceValid) && (m_pFileStreamer->GetCompletedValue() >= updateList.m_copyFenceValue))
             {
                 updateList.m_executionState = UpdateList::State::STATE_MAP_PENDING;
             }
@@ -402,8 +399,7 @@ void SFS::DataUploader::FenceMonitorThread()
             [[fallthrough]];
 
         case UpdateList::State::STATE_MAP_PENDING:
-            mappingFenceValue = m_mappingFence->GetCompletedValue();
-            if (mappingFenceValue >= updateList.m_mappingFenceValue)
+            if (m_mappingFence->GetCompletedValue() >= updateList.m_mappingFenceValue)
             {
 #if 0
                 // NOTE: dead code. currently not un-mapping tiles
@@ -459,7 +455,8 @@ void SFS::DataUploader::FenceMonitorThread()
     {
         ThrowIfFailed(m_mappingFence->SetEventOnCompletion(mappingFenceValue + 1, m_fenceEvents[0]));
         m_pFileStreamer->SetEventOnCompletion(copyFenceValue + 1, m_fenceEvents[1]);
-        WaitForMultipleObjects(2, m_fenceEvents, false, 1000); // 1s timeout
+        // wait for a bit. expect signal soon.
+        WaitForMultipleObjects(2, m_fenceEvents, false, 180);
     }
 
 }

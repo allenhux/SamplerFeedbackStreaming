@@ -44,11 +44,10 @@ namespace SFS
         void QueueFeedback(SFSResource* in_pResource);
 
         // force all outstanding commands to complete.
-        // used by ~ManagerBase() and to delete an SFSResource
+        // used by ~ManagerBase(), UseDirectStorage(), and SetVisualizationMode()
         void Finish();
 
         ManagerBase(const struct SFSManagerDesc& in_desc, ID3D12Device8* in_pDevice);
-
         virtual ~ManagerBase();
 
     protected:

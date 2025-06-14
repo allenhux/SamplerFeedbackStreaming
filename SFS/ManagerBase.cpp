@@ -61,11 +61,22 @@ SFS::ManagerBase::~ManagerBase()
     {
         delete p;
     }
+
+    // the application may have deleted some, but not all, of the resources
+    // possible for a resource to be in both m_removeResources and m_streamingResources if
+    //    an application desctructor calls Resource::Destroy() but then doesn't call BeginFrame() (because it shouldn't)
+    for (auto p : m_streamingResources)
+    {
+        if (!m_removeResources.contains(p))
+        {
+            delete p;
+        }
+    }
+
     for (auto p : m_streamingHeaps)
     {
-        p->Destroy();
+        delete p;
     }
-    RemoveHeaps();
 }
 
 //-----------------------------------------------------------------------------

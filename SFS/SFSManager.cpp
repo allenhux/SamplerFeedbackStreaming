@@ -367,13 +367,13 @@ ID3D12CommandList* SFS::Manager::EndFrame()
         UINT numFeedbackReadbacks = (UINT)m_feedbackReadbacks.size();
         for (UINT i = 0; i < numFeedbackReadbacks; i++)
         {
-            auto pResource = m_feedbackReadbacks[i];
+            auto pResource = m_feedbackReadbacks[i]->GetOpaqueFeedback();
             // after drawing, transition the opaque feedback resources from UAV to resolve source
             // transition the feedback decode target to resolve_dest
-            m_barrierUavToResolveSrc[i] = CD3DX12_RESOURCE_BARRIER::Transition(pResource->GetOpaqueFeedback(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+            m_barrierUavToResolveSrc[i] = CD3DX12_RESOURCE_BARRIER::Transition(pResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
 
             // after resolving, transition the opaque resources back to UAV. Transition the resolve destination to copy source for read back on cpu
-            m_barrierResolveSrcToUav[i] = CD3DX12_RESOURCE_BARRIER::Transition(pResource->GetOpaqueFeedback(), D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            m_barrierResolveSrcToUav[i] = CD3DX12_RESOURCE_BARRIER::Transition(pResource, D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 #if RESOLVE_TO_TEXTURE
             // resolve to texture incurs a subsequent copy to linear buffer
@@ -416,13 +416,15 @@ ID3D12CommandList* SFS::Manager::EndFrame()
 
         // feedback array consumed, clear for next frame
         m_feedbackReadbacks.clear();
+
+        // there was feedback this frame, so include it when measuring texels/ms
+        m_numFeedbackTimingFrames++;
     }
 
     pCommandList->Close();
 
     m_withinFrame = false;
 
-    m_numFeedbackTimingFrames++;
     if (m_numFeedbackTimingFrames >= m_feedbackTimingFrequency)
     {
         m_numFeedbackTimingFrames = 0;

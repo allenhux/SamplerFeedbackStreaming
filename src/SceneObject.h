@@ -111,10 +111,6 @@ namespace SceneObjects
 
         void Spin(float in_radians); // spin this object around its desired axis
 
-        // for visualization
-        ID3D12Resource* GetTiledResource() const { return m_pStreamingResource->GetTiledResource(); }
-        ID3D12Resource* GetMinMipMap() const { return m_pStreamingResource->GetMinMipMap(); }
-
         SFSResource* GetStreamingResource() const { return m_pStreamingResource; }
         void SetResource(SFSResource* in_pResource) { m_pStreamingResource = in_pResource; }
 

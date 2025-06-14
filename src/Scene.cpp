@@ -1468,12 +1468,12 @@ void Scene::CreateTerrainViewers()
 
         // create viewer for the streaming resource
         m_pTextureViewer = new TextureViewer(
-            m_pTerrain->GetTiledResource(),
+            m_pTerrain->GetStreamingResource()->GetTiledResource(),
             SharedConstants::SWAP_CHAIN_FORMAT, m_srvHeap.Get(),
             heapOffset);
 
         D3D12_PACKED_MIP_INFO info;
-        m_device->GetResourceTiling(m_pTerrain->GetTiledResource(), nullptr, &info,
+        m_device->GetResourceTiling(m_pTerrain->GetStreamingResource()->GetTiledResource(), nullptr, &info,
             nullptr, nullptr, 0, nullptr);
         m_maxNumTextureViewerWindows = info.NumStandardMips;
 
@@ -1489,7 +1489,7 @@ void Scene::CreateTerrainViewers()
 
         // note: the residency map will be invalid until after object is drawable
         m_pMinMipMapViewer = new BufferViewer(
-            m_pTerrain->GetMinMipMap(),
+            m_pTerrain->GetStreamingResource()->GetMinMipMap(),
             feedbackWidth, feedbackHeight, feedbackWidth,
             m_pTerrain->GetStreamingResource()->GetMinMipMapOffset(),
             SharedConstants::SWAP_CHAIN_FORMAT,
