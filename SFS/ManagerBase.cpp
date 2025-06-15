@@ -112,7 +112,7 @@ void SFS::ManagerBase::Finish()
 // assign offsets to new resources and update all resources on resource allocation
 // descriptor handle required to update the assoiated shader resource view
 //-----------------------------------------------------------------------------
-void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle)
+void SFS::ManagerBase::AllocateSharedResidencyMap()
 {
     static constexpr UINT alignmentMask = std::hardware_destructive_interference_size - 1; // cache line size
     static constexpr UINT gpuPageSizeMask = (64 * 1024) - 1;
@@ -164,8 +164,6 @@ void SFS::ManagerBase::AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in
         m_residencyMap.Allocate(m_device.Get(), requiredSize, uploadHeapProperties);
     }
     m_residencyMapLock.Release();
-
-    CreateMinMipMapView(in_descriptorHandle);
 
     auto srvUavCbvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     auto pDest = m_residencyMap.GetData();
@@ -250,18 +248,24 @@ void SFS::ManagerBase::RemoveResources()
 //-----------------------------------------------------------------------------
 // destroy heaps that are no longer depended upon
 // FIXME: when to call this during runtime? also keep an array of pending remove heaps?
+// FIXME: test this?
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::RemoveHeaps()
 {
-    for (auto& p : m_streamingHeaps)
+    for (UINT i = 0; i < m_streamingHeaps.size();)
     {
+        auto p = m_streamingHeaps[i];
         if (p->GetDestroyable() && (0 == p->GetAllocator().GetAllocated()))
         {
             delete p;
-            p = nullptr;
+            m_streamingHeaps[i] = m_streamingHeaps.back();
+            m_streamingHeaps.pop_back();
+        }
+        else
+        {
+            i++;
         }
     }
-    m_streamingHeaps.erase(std::remove(m_streamingHeaps.begin(), m_streamingHeaps.end(), nullptr), m_streamingHeaps.end());
 }
 
 //-----------------------------------------------------------------------------
@@ -293,19 +297,34 @@ void SFS::ManagerBase::AddReadback(ResourceBase* in_pResource)
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource)
 {
-    auto pResource = (SFS::ResourceBase*)in_pResource;
+    auto pResource = (ResourceBase*)in_pResource;
 
     if (pResource->GetFirstUse())
     {
         pResource->GetFirstUse() = false;
-        m_firstTimeClears.push_back(pResource);
+        m_firstTimeClears.insert(pResource);
     }
 
-    if (m_maxNumResolvesPerFrame > m_feedbackReadbacks.size())
+    if ((m_maxNumResolvesPerFrame > m_feedbackReadbacks.size()) && (!m_feedbackReadbacks.contains(pResource)))
     {
-        // FIXME: only add the resource one time per frame!
-        m_feedbackReadbacks.push_back(pResource);
+        m_feedbackReadbacks.insert(pResource);
+        m_numTexelsQueued += pResource->GetMinMipMapSize();
+
+        auto pOpaque = pResource->GetOpaqueFeedback();
+        m_barrierUavToResolveSrc.push_back(CD3DX12_RESOURCE_BARRIER::Transition(pOpaque, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RESOLVE_SOURCE));
+
+        // after resolving, transition the opaque resources back to UAV. Transition the resolve destination to copy source for read back on cpu
+        m_barrierResolveSrcToUav.push_back(CD3DX12_RESOURCE_BARRIER::Transition(pOpaque, D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+
+
+#if RESOLVE_TO_TEXTURE
+        // resolve to texture incurs a subsequent copy to linear buffer
+        UINT i = (UINT)m_feedbackReadbacks.size() - 1;
+        auto pResolved = m_sharedResolvedResources[i].Get();
+        m_barrierUavToResolveSrc.push_back(CD3DX12_RESOURCE_BARRIER::Transition(pResolved, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RESOLVE_DEST));
+        m_barrierResolveSrcToUav.push_back(CD3DX12_RESOURCE_BARRIER::Transition(pResolved, D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE));
+#endif
     }
 
-    // NOTE: feedback buffers will be cleared after readback, in CommandListName::After
+    // NOTE: feedback buffers will be cleared after readback
 }

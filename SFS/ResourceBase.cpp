@@ -872,9 +872,9 @@ bool SFS::ResourceBase::GetPackedMipsNeedTransition()
 // command to resolve feedback to the appropriate non-opaque buffer
 //-----------------------------------------------------------------------------
 #if RESOLVE_TO_TEXTURE
-void SFS::ResourceBase::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, ID3D12Resource* in_pDestination)
+void SFS::ResourceBase::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, UINT64 in_frameFenceValue, ID3D12Resource* in_pDestination)
 #else
-void SFS::ResourceBase::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList)
+void SFS::ResourceBase::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, UINT64 in_frameFenceValue)
 #endif
 {
     // move to next readback index
@@ -882,7 +882,7 @@ void SFS::ResourceBase::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList
 
     // remember that feedback was queued, and which frame it was queued in.
     auto& f = m_queuedFeedback[m_readbackIndex];
-    f.m_renderFenceForFeedback = m_pSFSManager->GetFrameFenceValue();
+    f.m_renderFenceForFeedback = in_frameFenceValue;
     f.m_feedbackQueued = true;
 
 #if RESOLVE_TO_TEXTURE

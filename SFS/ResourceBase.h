@@ -21,7 +21,6 @@ Base class for SFSResource
 namespace SFS
 {
     class ManagerSR;
-    struct UpdateList;
     class Heap;
     class FileHandle;
 
@@ -84,11 +83,11 @@ namespace SFS
 
         // call after drawing to get feedback
 #if RESOLVE_TO_TEXTURE
-        void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, ID3D12Resource* in_pDestination);
+        void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, UINT64 in_frameFenceValue, ID3D12Resource* in_pDestination);
         // call after resolving to read back to CPU
         void ReadbackFeedback(ID3D12GraphicsCommandList* out_pCmdList, ID3D12Resource* in_pResolvedResource);
 #else
-        void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList);
+        void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, UINT64 in_frameFenceValue);
 #endif
 
         bool& GetFirstUse() { return m_firstUse; }

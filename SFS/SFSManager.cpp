@@ -194,17 +194,15 @@ void SFS::Manager::CaptureTraceFile(bool in_captureTrace)
 // Call this method once for each SFSManager that shares heap/upload buffers
 // expected to be called once per frame, before anything is drawn.
 //-----------------------------------------------------------------------------
-void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle)
+void SFS::Manager::BeginFrame()
 {
     ASSERT(!GetWithinFrame());
-
-    // accumulate gpu time from last frame
-    m_gpuFeedbackTime += GetGpuTime();
-
-    // delete resources that have been requested via Remove()
-    RemoveResources();
-
     m_withinFrame = true;
+
+    // delete resources that have been requested via SFSResource::Destroy()
+    RemoveResources();
+    // delete heaps that have been requested via SFSHeap::Destroy() and are no longer in use
+    RemoveHeaps();
 
     // the frame fence is used to determine when to read feedback:
     // read back the feedback after the frame that writes to it has completed
@@ -213,47 +211,11 @@ void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescripto
     m_directCommandQueue->Signal(m_frameFence.Get(), m_frameFenceValue);
     m_frameFenceValue++;
 
-    // release old shared residency map
-    // not necessary because they will get released on app exit, but reduces runtime memory
-    {
-        auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
-        m_oldSharedResidencyMaps[i] = nullptr;
-        m_oldSharedClearUavHeaps[i] = nullptr;
-    }
+    // accumulate gpu time from last frame
+    m_gpuFeedbackTime += GetGpuTime();
 
-    // if new StreamingResources have been created...
-    if (m_newResources.size())
-    {
-        AllocateSharedResidencyMap(out_minmipmapDescriptorHandle);
-
-        // monitor new resources for when they need packed mip transition barriers
-        m_packedMipTransitionResources.insert(m_packedMipTransitionResources.end(), m_newResources.begin(), m_newResources.end());
-
-        // share new resources with PFT. PFT will share with residency thread
-        m_processFeedbackThread.ShareNewResources(m_newResources);
-        m_newResources.clear();
-    }
-
-    if (m_packedMipTransitionResources.size())
-    {
-        for (UINT i = 0; i < m_packedMipTransitionResources.size();)
-        {
-            auto p = m_packedMipTransitionResources[i];
-            if (p->GetPackedMipsNeedTransition())
-            {
-                D3D12_RESOURCE_BARRIER b = CD3DX12_RESOURCE_BARRIER::Transition(
-                    p->GetTiledResource(),
-                    D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-                m_packedMipTransitionBarriers.push_back(b);
-                m_packedMipTransitionResources[i] = m_packedMipTransitionResources.back();
-                m_packedMipTransitionResources.pop_back();
-            }
-            else
-            {
-                i++;
-            }
-        }
-    }
+    // index used to track command list allocators, timers, etc.
+    m_renderFrameIndex = m_frameFenceValue % m_numSwapBuffers;
 
     // if feedback requested last frame, post affected resources
     if (m_pendingResources.size())
@@ -271,17 +233,13 @@ void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescripto
         m_processFeedbackFrameTime = m_processFeedbackThread.GetSecondsFromDelta(processFeedbackTime - m_previousFeedbackTime);
         m_previousFeedbackTime = processFeedbackTime; // remember current time for next call
     }
-
-    // step to next frame
-    // this happens here in case, someday, BeginFrame() needs to know this e.g. to have its own commandList
-    m_renderFrameIndex = (m_renderFrameIndex + 1) % m_numSwapBuffers;
 }
 
 //-----------------------------------------------------------------------------
 // create clear commands for each feedback buffer used this frame
 // also initializes the descriptors, which can change if the heaps are reallocated
 //-----------------------------------------------------------------------------
-void SFS::Manager::ClearFeedback(ID3D12GraphicsCommandList* in_pCommandList, const std::vector<ResourceBase*>& in_resources)
+void SFS::Manager::ClearFeedback(ID3D12GraphicsCommandList* in_pCommandList, const std::set<ResourceBase*>& in_resources)
 {
     // note clear value is ignored when clearing feedback maps
     UINT clearValue[4]{};
@@ -316,17 +274,63 @@ void SFS::Manager::ClearFeedback(ID3D12GraphicsCommandList* in_pCommandList, con
 //    - copy feedback to readback buffers
 //    - clear feedback
 //-----------------------------------------------------------------------------
-ID3D12CommandList* SFS::Manager::EndFrame()
+ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle)
 {
     // NOTE: we are "within frame" until the end of EndFrame()
     ASSERT(GetWithinFrame());
+
+    // release old shared residency map
+    // not necessary because they will get released on app exit, but reduces runtime memory
+    {
+        auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
+        m_oldSharedResidencyMaps[i] = nullptr;
+        m_oldSharedClearUavHeaps[i] = nullptr;
+    }
+
+    // if new StreamingResources have been created...
+    if (m_newResources.size())
+    {
+        AllocateSharedResidencyMap();
+
+        // monitor new resources for when they need packed mip transition barriers
+        m_packedMipTransitionResources.insert(m_packedMipTransitionResources.end(), m_newResources.begin(), m_newResources.end());
+
+        // share new resources with PFT. PFT will share with residency thread
+        m_processFeedbackThread.ShareNewResources(m_newResources);
+        m_newResources.clear();
+    }
+
+    // create a view for shared minmipmap, used by the application's pixel shaders
+    CreateMinMipMapView(out_minmipmapDescriptorHandle);
+
+    // transition those new resources that are ready to be drawn (after packed mips have arrived)
+    if (m_packedMipTransitionResources.size())
+    {
+        for (UINT i = 0; i < m_packedMipTransitionResources.size();)
+        {
+            auto p = m_packedMipTransitionResources[i];
+            if (p->GetPackedMipsNeedTransition())
+            {
+                D3D12_RESOURCE_BARRIER b = CD3DX12_RESOURCE_BARRIER::Transition(
+                    p->GetTiledResource(),
+                    D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                m_packedMipTransitionBarriers.push_back(b);
+                m_packedMipTransitionResources[i] = m_packedMipTransitionResources.back();
+                m_packedMipTransitionResources.pop_back();
+            }
+            else
+            {
+                i++;
+            }
+        }
+    }
 
     // start command list for this frame
     m_commandListEndFrame.Reset(m_renderFrameIndex);
 
     auto pCommandList = m_commandListEndFrame.m_commandList.Get();
 
-    // clear UAV requires heap (to access gpu descriptor)
+    // clear UAV heap must be bound to command list
     ID3D12DescriptorHeap* ppHeaps[] = { m_sharedClearUavHeapBound.Get() };
     pCommandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
@@ -352,62 +356,45 @@ ID3D12CommandList* SFS::Manager::EndFrame()
             m_firstTimeClears.clear();
         }
 
-        // barrier coalescing
-        UINT barrierArraySize = (UINT)m_feedbackReadbacks.size();
-#if RESOLVE_TO_TEXTURE
-        barrierArraySize *= 2;
-#endif
-        if (m_barrierResolveSrcToUav.size() < barrierArraySize)
-        {
-            m_barrierUavToResolveSrc.assign(barrierArraySize, {});
-            m_barrierResolveSrcToUav.assign(barrierArraySize, {});
-        }
-
-        // resolve to texture incurs a subsequent copy to linear buffer
-        UINT numFeedbackReadbacks = (UINT)m_feedbackReadbacks.size();
-        for (UINT i = 0; i < numFeedbackReadbacks; i++)
-        {
-            auto pResource = m_feedbackReadbacks[i]->GetOpaqueFeedback();
-            // after drawing, transition the opaque feedback resources from UAV to resolve source
-            // transition the feedback decode target to resolve_dest
-            m_barrierUavToResolveSrc[i] = CD3DX12_RESOURCE_BARRIER::Transition(pResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
-
-            // after resolving, transition the opaque resources back to UAV. Transition the resolve destination to copy source for read back on cpu
-            m_barrierResolveSrcToUav[i] = CD3DX12_RESOURCE_BARRIER::Transition(pResource, D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-#if RESOLVE_TO_TEXTURE
-            // resolve to texture incurs a subsequent copy to linear buffer
-            auto pResolved = m_sharedResolvedResources[i].Get();
-            m_barrierUavToResolveSrc[numFeedbackReadbacks + i] = CD3DX12_RESOURCE_BARRIER::Transition(pResolved, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RESOLVE_DEST);
-            m_barrierResolveSrcToUav[numFeedbackReadbacks + i] = CD3DX12_RESOURCE_BARRIER::Transition(pResolved, D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE);
-#endif
-        } // end barrier coalescing
-
         // transition all feedback resources UAV->RESOLVE_SOURCE
         // also transition the (non-opaque) resolved resources COPY_SOURCE->RESOLVE_DEST
-        pCommandList->ResourceBarrier(barrierArraySize, m_barrierUavToResolveSrc.data());
+        pCommandList->ResourceBarrier((UINT)m_barrierUavToResolveSrc.size(), m_barrierUavToResolveSrc.data());
 
         // do the feedback resolves
-        for (UINT i = 0; i < (UINT)m_feedbackReadbacks.size(); i++)
-        {
-            m_numTexelsQueued += m_feedbackReadbacks[i]->GetMinMipMapSize();
 #if RESOLVE_TO_TEXTURE
-            m_feedbackReadbacks[i]->ResolveFeedback(pCommandList, m_sharedResolvedResources[i].Get());
-#else
-            m_feedbackReadbacks[i]->ResolveFeedback(pCommandList);
-#endif
+        {
+            UINT i = 0;
+            for (auto p : m_feedbackReadbacks)
+            {
+                p->ResolveFeedback(pCommandList, m_frameFenceValue, m_sharedResolvedResources[i].Get());
+                i++;
+            }
         }
+#else
+        for (auto p : m_feedbackReadbacks)
+        {
+            p->ResolveFeedback(pCommandList, m_frameFenceValue);
+        }
+#endif
+
+        // paranoia?
+        m_barrierResolveSrcToUav.push_back(CD3DX12_RESOURCE_BARRIER::UAV(nullptr));
 
         // transition all feedback resources RESOLVE_SOURCE->UAV
         // also transition the (non-opaque) resolved resources RESOLVE_DEST->COPY_SOURCE
-        pCommandList->ResourceBarrier(barrierArraySize, m_barrierResolveSrcToUav.data());
+        pCommandList->ResourceBarrier((UINT)m_barrierResolveSrcToUav.size(), m_barrierResolveSrcToUav.data());
 
 #if RESOLVE_TO_TEXTURE
-        for (UINT i = 0; i < (UINT)m_feedbackReadbacks.size(); i++)
         {
-            m_feedbackReadbacks[i]->ReadbackFeedback(pCommandList, m_sharedResolvedResources[i].Get());
+            UINT i = 0;
+            for (auto p : m_feedbackReadbacks)
+            {
+                p->ReadbackFeedback(pCommandList, m_sharedResolvedResources[i].Get());
+                i++;
+            }
         }
 #endif
+
         // now safe to clear feedback buffers
         ClearFeedback(pCommandList, m_feedbackReadbacks);
 
@@ -416,6 +403,8 @@ ID3D12CommandList* SFS::Manager::EndFrame()
 
         // feedback array consumed, clear for next frame
         m_feedbackReadbacks.clear();
+        m_barrierUavToResolveSrc.clear();
+        m_barrierResolveSrcToUav.clear();
 
         // there was feedback this frame, so include it when measuring texels/ms
         m_numFeedbackTimingFrames++;

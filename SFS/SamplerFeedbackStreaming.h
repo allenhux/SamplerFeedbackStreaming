@@ -161,21 +161,23 @@ struct SFSManager
     //--------------------------------------------
     // Call BeginFrame() first,
     // once for all SFSManagers that share heap/upload buffers
-    // the shader resource view for the min mip map will be set
-    //    (only changes if StreamingResources are created/destroyed)
-    // NOTE: the root signature should set the associated descriptor range as descriptor and data volatile
     //--------------------------------------------
-    virtual void BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle) = 0;
+    virtual void BeginFrame() = 0;
 
     //--------------------------------------------
     // Call EndFrame() last, paired with each BeginFrame() and after all draw commands
     // returns one command list which must be executed immediately after any draw commands
-    // e.g.
-    //    auto pCommandList = pSFSManager->EndFrame();
+    // the shader resource view descriptor will be set for the min mip map (used as a mip clamp in the pixel shader)
+    // NOTE: CreateShaderResourceView() occurs every frame to support rendering architectures that need it,
+    //     but the resource only changes if StreamingResources are created/destroyed
+    // NOTE: the root signature should set the associated descriptor range as descriptor and data volatile
+    //
+    // example usage:
+    //    auto pCommandList = pSFSManager->EndFrame(minmipmapDescriptor);
     //    ID3D12CommandList* pCommandLists[] = { myCommandList, pCommandList };
     //    m_commandQueue->ExecuteCommandLists(_countof(pCommandLists), pCommandLists);
     //--------------------------------------------
-    virtual ID3D12CommandList* EndFrame() = 0;
+    virtual ID3D12CommandList* EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle) = 0;
 
     //--------------------------------------------
     // choose DirectStorage vs. manual tile loading

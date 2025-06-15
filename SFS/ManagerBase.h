@@ -106,10 +106,21 @@ namespace SFS
         // direct queue is used to monitor progress of render frames so we know when feedback buffers are ready to be used
         ComPtr<ID3D12CommandQueue> m_directCommandQueue;
 
-        std::vector<ResourceBase*> m_feedbackReadbacks;
+        std::set<ResourceBase*> m_feedbackReadbacks;
+        float m_numTexelsQueued{ 0 }; // for computing texels/ms
+
+#if RESOLVE_TO_TEXTURE
+        // NOTE: this heap and array of resources is allocated in SFSManager.cpp
+        ComPtr<ID3D12Heap> m_resolvedResourceHeap;
+        // feedback resolved on gpu
+        std::vector<ComPtr<ID3D12Resource>> m_sharedResolvedResources;
+#endif
 
         // should clear feedback buffer before first use
-        std::vector<ResourceBase*> m_firstTimeClears;
+        std::set<ResourceBase*> m_firstTimeClears;
+        using BarrierList = std::vector<D3D12_RESOURCE_BARRIER>;
+        BarrierList m_barrierUavToResolveSrc; // transition copy source to resolve dest
+        BarrierList m_barrierResolveSrcToUav; // transition resolve dest to copy source
 
         // track per-frame feedback readback
         struct ReadbackSet
@@ -129,7 +140,7 @@ namespace SFS
         std::vector<ComPtr<ID3D12Resource>> m_oldSharedResidencyMaps;
         std::vector<ComPtr<ID3D12DescriptorHeap>> m_oldSharedClearUavHeaps;
         // adds old resource to m_oldSharedResidencyMaps so it can be safely released after n frames
-        void AllocateSharedResidencyMap(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptorHandle);
+        void AllocateSharedResidencyMap();
 
         // descriptor heaps to clear feedback resources, shared by all resources
         ComPtr<ID3D12DescriptorHeap> m_sharedClearUavHeapNotBound;

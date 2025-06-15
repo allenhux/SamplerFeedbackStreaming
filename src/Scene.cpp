@@ -667,6 +667,23 @@ void Scene::StartStreamingLibrary()
 }
 
 //-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+XMMATRIX Scene::ObjectPoses::GetMatrix(std::default_random_engine& in_gen, UINT i)
+{
+    static std::uniform_real_distribution<float> rDis(0, XM_2PI);
+
+    auto m = XMMatrixTranslationFromVector(m_positions[i]);
+    float radius = XMVectorGetW(m_positions[i]);
+    m.r[0] = XMVectorSet(radius, 0, 0, 0);
+    m.r[1] = XMVectorSet(0, radius, 0, 0);
+    m.r[2] = XMVectorSet(0, 0, radius, 0);
+
+    // spin each sphere in a random direction
+    auto rotate = XMMatrixRotationRollPitchYaw(rDis(in_gen), rDis(in_gen), 0);
+    return rotate * m;
+}
+
+//-----------------------------------------------------------------------------
 // scene and texture fixup,
 // precompute position and radius of all objects
 //-----------------------------------------------------------------------------
@@ -767,7 +784,7 @@ void Scene::PrepareScene()
         .maxRadius = SharedConstants::SPHERE_RADIUS * SharedConstants::MAX_SPHERE_SCALE
     };
 	PlanetPoseGenerator poseGenerator(settings);
-    m_universeSize = poseGenerator.GeneratePoses(m_objectPoses.m_matrix, m_objectPoses.m_radius);
+    m_universeSize = poseGenerator.GeneratePoses(m_objectPoses.m_positions);
 
     // load texture file headers
     m_sfsResourceDescs.resize(m_args.m_textures.size());
@@ -1047,7 +1064,7 @@ void Scene::LoadSpheres()
                 o->SetAxis(DirectX::XMVector3NormalizeEst(DirectX::XMVectorSet(dis(m_gen), dis(m_gen), dis(m_gen), 0)));
             }
             o->SetResource(m_pSFSManager->CreateResource(m_sfsResourceDescs[fileIndex], pHeap, textureFilename));
-            o->GetModelMatrix() = m_objectPoses.m_matrix[objectIndex];
+            o->GetModelMatrix() = m_objectPoses.GetMatrix(m_gen, objectIndex);
             m_objects.push_back(o);
         }
     } // end if adding objects
@@ -1479,7 +1496,7 @@ void Scene::CreateTerrainViewers()
 
     }
 
-    // NOTE: shared minmipmap will be nullptr until after SFSM::BeginFrame()
+    // NOTE: shared minmipmap will be invalid until after SFSM::BeginFrame()
     // NOTE: the data will be delayed by 1 + 1 frame for each swap buffer (e.g. 3 for double-buffering)
     if (nullptr == m_pMinMipMapViewer)
     {
@@ -1749,8 +1766,8 @@ bool Scene::WaitForAssetLoad()
         {
             // must give SFSManager a chance to process packed mip requests
             D3D12_CPU_DESCRIPTOR_HANDLE minmipmapDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
-            m_pSFSManager->BeginFrame(minmipmapDescriptor);
-            auto pCommandList = m_pSFSManager->EndFrame();
+            m_pSFSManager->BeginFrame();
+            auto pCommandList = m_pSFSManager->EndFrame(minmipmapDescriptor);
             m_commandQueue->ExecuteCommandLists(1, &pCommandList);
 
             MoveToNextFrame();
@@ -1807,8 +1824,7 @@ bool Scene::Draw()
     m_gpuProcessFeedbackTime = m_pSFSManager->GetGpuTime();
 
     // prepare to update Feedback & stream textures
-    D3D12_CPU_DESCRIPTOR_HANDLE minmipmapDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
-    m_pSFSManager->BeginFrame(minmipmapDescriptor);
+    m_pSFSManager->BeginFrame();
 
     Animate();
 
@@ -1859,7 +1875,8 @@ bool Scene::Draw()
     // execute command lists
     //-------------------------------------------
     m_renderThreadTimes.Set(RenderEvents::PreEndFrame);
-    auto pCommandList = m_pSFSManager->EndFrame();
+    D3D12_CPU_DESCRIPTOR_HANDLE minmipmapDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
+    auto pCommandList = m_pSFSManager->EndFrame(minmipmapDescriptor);
     m_renderThreadTimes.Set(RenderEvents::PostEndFrame);
 
     ID3D12CommandList* pCommandLists[] = { m_commandList.Get(), pCommandList };

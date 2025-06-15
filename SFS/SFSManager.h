@@ -32,8 +32,8 @@ namespace SFS
         virtual SFSHeap* CreateHeap(UINT in_maxNumTilesHeap) override;
         virtual SFSResource* CreateResource(const struct SFSResourceDesc& in_desc,
             SFSHeap* in_pHeap, const std::wstring& in_filename) override;
-        virtual void BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle) override;
-        virtual ID3D12CommandList* EndFrame() override;
+        virtual void BeginFrame() override;
+        virtual ID3D12CommandList* EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle) override;
         //virtual void UseDirectStorage(bool in_useDS) override;
         //virtual bool GetWithinFrame() const override;
         virtual float GetGpuTexelsPerMs() const override;
@@ -54,9 +54,6 @@ namespace SFS
         virtual ~Manager() {}
     private:
         D3D12GpuTimer m_gpuTimerResolve; // time for feedback resolve
-        using BarrierList = std::vector<D3D12_RESOURCE_BARRIER>;
-        BarrierList m_barrierUavToResolveSrc; // transition copy source to resolve dest
-        BarrierList m_barrierResolveSrcToUav; // transition resolve dest to copy source
         BarrierList m_packedMipTransitionBarriers; // transition packed-mips from common (copy dest)
 
         INT64 m_previousFeedbackTime{ 0 }; // m_processFeedbackTime at time of last query
@@ -66,7 +63,6 @@ namespace SFS
         UINT m_feedbackTimingFrequency{ 100 };
         UINT m_numFeedbackTimingFrames{ 0 };
         float m_texelsPerMs{ 50 };
-        float m_numTexelsQueued{ 0 };
         float m_gpuFeedbackTime{ 0 };
 
         UINT m_renderFrameIndex{ 0 }; // between 0 and # swap buffers
@@ -82,11 +78,6 @@ namespace SFS
         // clear & resolve feedback buffers, coalesces all barriers
         CommandList m_commandListEndFrame;
 
-#if RESOLVE_TO_TEXTURE
-        ComPtr<ID3D12Heap> m_resolvedResourceHeap;
-        // feedback resolved on gpu
-        std::vector<ComPtr<ID3D12Resource>> m_sharedResolvedResources;
-#endif
-        void ClearFeedback(ID3D12GraphicsCommandList* in_pCommandList, const std::vector<ResourceBase*>& in_resources);
+        void ClearFeedback(ID3D12GraphicsCommandList* in_pCommandList, const std::set<ResourceBase*>& in_resources);
     };
 }

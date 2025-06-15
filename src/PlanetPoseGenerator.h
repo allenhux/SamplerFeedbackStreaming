@@ -27,7 +27,7 @@ public:
 	PlanetPoseGenerator(const Settings& in_settings) : m_settings(in_settings) {}
 
     // returns universe size
-    float GeneratePoses(std::vector<DirectX::XMMATRIX>& out_matrices, std::vector<float>& out_radii);
+    float GeneratePoses(std::vector<DirectX::XMVECTOR>& out_planetPose);
 private:
     Settings m_settings;
     float m_universeSize{ 0 };

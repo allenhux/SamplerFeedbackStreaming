@@ -26,7 +26,7 @@ public:
     bool Draw();
     void SetFullScreen(bool in_fullScreen)
     {
-        // if the full screen state desired != current, then the window is tranisitioning
+        // if the full screen state desired != current, then the window is transitioning
         // ignore requests unless not transitioning
         if (m_desiredFullScreen == m_fullScreen)
         {
@@ -219,10 +219,10 @@ private:
 
     struct ObjectPoses
     {
-        void reserve(UINT in_size) { m_matrix.reserve(in_size); m_radius.reserve(in_size); }
-        size_t size() const { return m_matrix.size(); }
-        std::vector<DirectX::XMMATRIX> m_matrix;
-        std::vector<float> m_radius;
+        void reserve(UINT in_size) { m_positions.reserve(in_size); }
+        size_t size() const { return m_positions.size(); }
+        DirectX::XMMATRIX GetMatrix(std::default_random_engine& in_gen, UINT i);
+        std::vector<DirectX::XMVECTOR> m_positions; // w is planet radius
     };
     ObjectPoses m_objectPoses;
     float m_universeSize{ 0 };

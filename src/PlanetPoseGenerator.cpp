@@ -52,7 +52,7 @@ float PlanetPoseGenerator::AddPose(Pos& pose, Layer* in_pLayer, Layer* pPrevious
     bool fits = false;
     for (UINT i = 0; i < m_numTries; i++)
     {
-        rotate = XMQuaternionRotationRollPitchYaw(rDis(m_gen), rDis(m_gen), rDis(m_gen));
+        rotate = XMQuaternionRotationRollPitchYaw(rDis(m_gen), rDis(m_gen), 0);
 
         distance = xDis(m_gen);
         pose.pos = XMVector3Rotate(XMVectorSet(0, 0, distance, 1.f), rotate);
@@ -78,9 +78,12 @@ float PlanetPoseGenerator::AddPose(Pos& pose, Layer* in_pLayer, Layer* pPrevious
 }
 
 //-----------------------------------------------------------------------------
+// returns array of {x, y, z, radius}
 //-----------------------------------------------------------------------------
-float PlanetPoseGenerator::GeneratePoses(std::vector<XMMATRIX>& out_matrices, std::vector<float>& out_radii)
+float PlanetPoseGenerator::GeneratePoses(std::vector<XMVECTOR>& out_planetPose)
 {
+    out_planetPose.reserve(m_settings.numPoses);
+
     float range = m_settings.maxRadius - m_settings.minRadius;
     float midPoint = .5f * range;
     float stdDev = range / 5.f;
@@ -121,26 +124,8 @@ float PlanetPoseGenerator::GeneratePoses(std::vector<XMMATRIX>& out_matrices, st
             pCurrentLayer = &layers.back();
         }
         pCurrentLayer->m_poses.push_back(pose);
+        out_planetPose.push_back(XMVectorSetW(pose.pos, pose.radius));
     }
-
-    // now have layers full of positions. Convert into matrices.
-    std::uniform_real_distribution<float> rDis(0, XM_2PI);
-    for (auto& layer : layers)
-    {
-        for (auto& pose : layer.m_poses)
-        {
-            out_radii.push_back(pose.radius);
-
-            auto m =  XMMatrixTranslationFromVector(pose.pos);
-            m.r[0] = XMVectorSet(pose.radius, 0, 0, 0);
-            m.r[1] = XMVectorSet(0, pose.radius, 0, 0);
-            m.r[2] = XMVectorSet(0, 0, pose.radius, 0);
-
-            // spin each sphere in a random direction
-            auto rotate = XMMatrixRotationRollPitchYaw(rDis(m_gen), rDis(m_gen), rDis(m_gen));
-            out_matrices.push_back(rotate * m);
-        }
-	}
 
     return m_universeSize;
 }
