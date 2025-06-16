@@ -190,11 +190,6 @@ void SFS::DataUploader::StartThreads()
 
             while (m_threadsRunning)
             {
-                // if no outstanding work, sleep
-                if (0 == m_updateListAllocator.GetAllocated())
-                {
-                    m_fenceMonitorFlag.Wait();
-                }
                 FenceMonitorThread();
             }
         });
@@ -332,6 +327,13 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
 //-----------------------------------------------------------------------------
 void SFS::DataUploader::FenceMonitorThread()
 {
+    // if no outstanding work, sleep
+    // m_updateListAllocator.GetAllocated() would be a more conservative test for whether there are any active tasks
+    if (0 == m_monitorTaskAlloc.GetReadyToRead())
+    {
+        m_fenceMonitorFlag.Wait();
+    }
+
     bool loadPackedMips = false;
 
     UINT64 mappingFenceValue = m_mappingFence->GetCompletedValue();

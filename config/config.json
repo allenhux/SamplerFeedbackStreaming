@@ -35,7 +35,7 @@
   "fullScreen": false,
   "vsync": false,
   "windowWidth": 1280,
-  "windowHeight": 800,
+  "windowHeight": 1024,
   "sampleCount": 4, // multisample anti-aliasing
   "lodBias": 0, // sampler bias. positive is blurrier
   "anisotropy": 4, // sampler anisotropy

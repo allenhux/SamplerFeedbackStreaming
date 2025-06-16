@@ -427,7 +427,7 @@ void SFS::ProcessFeedbackThread::CheckRemoveResources()
             }
         }
 
-        // m_removeResources is the resources to delete that don't have in-flight work
+        // m_removeResources contains the resources to delete that don't have in-flight work
         for (auto p : m_removeResources)
         {
             delete p;

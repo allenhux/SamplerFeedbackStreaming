@@ -99,8 +99,10 @@ SFS::AllocatorMT::~AllocatorMT()
 void SFS::AllocatorMT::Allocate(UINT* out_pIndices, UINT in_numIndices)
 {
     ASSERT(m_ringBuffer.GetAvailableToWrite() >= in_numIndices);
-    UINT baseIndex = m_ringBuffer.GetWriteIndex();
-    memcpy(out_pIndices, &m_indices[baseIndex], in_numIndices * sizeof(UINT));
+    for (UINT i = 0; i < in_numIndices; i++)
+    {
+        out_pIndices[i] = m_indices[m_ringBuffer.GetWriteIndex(i)];
+    }
     m_ringBuffer.Allocate(in_numIndices);
 }
 
@@ -108,8 +110,10 @@ void SFS::AllocatorMT::Allocate(UINT* out_pIndices, UINT in_numIndices)
 //-----------------------------------------------------------------------------
 void SFS::AllocatorMT::Free(const UINT* in_pIndices, UINT in_numIndices)
 {
-    UINT baseIndex = m_ringBuffer.GetReadIndex();
-    memcpy(&m_indices[baseIndex], in_pIndices, in_numIndices * sizeof(UINT));
+    for (UINT i = 0; i < in_numIndices; i++)
+    {
+        m_indices[m_ringBuffer.GetReadIndex(i)] = in_pIndices[i];
+    }
     m_ringBuffer.Free(in_numIndices);
 }
 
