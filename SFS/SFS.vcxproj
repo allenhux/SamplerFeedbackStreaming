@@ -103,6 +103,7 @@
     <ClInclude Include="ResourceDU.h" />
     <ClInclude Include="ManagerBase.h" />
     <ClInclude Include="ManagerSR.h" />
+    <ClInclude Include="SynchronizationUtils.h" />
     <ClInclude Include="UpdateList.h" />
   </ItemGroup>
   <ItemGroup>

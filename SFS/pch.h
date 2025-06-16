@@ -18,8 +18,9 @@
 
 #include <string>
 #include <vector>
-#include <memory>      // for unique_ptr
+#include <set>
 #include <list>
+#include <memory>      // for unique_ptr
 #include <wrl.h>
 #include <shellapi.h>
 #include <sstream>
@@ -28,6 +29,6 @@
 #include <algorithm>
 #include <thread>
 #include <filesystem>
-#include <set>
+#include <synchapi.h>
 
 #include "d3dx12.h"

@@ -271,13 +271,6 @@ SFS::UpdateList* SFS::DataUploader::AllocateUpdateList(SFS::ResourceDU* in_pStre
 
         pUpdateList->Reset(in_pStreamingResource);
         pUpdateList->m_executionState = UpdateList::State::STATE_ALLOCATED;
-
-        // start fence polling thread now
-        {
-            m_monitorTasks[m_monitorTaskAlloc.GetWriteIndex()] = pUpdateList;
-            m_monitorTaskAlloc.Allocate();
-            m_fenceMonitorFlag.Set();
-        }
     }
 
     return pUpdateList;
@@ -319,6 +312,13 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
         m_submitTaskAlloc.Allocate();
         m_submitFlag.Set();
     }
+
+    // add to fence polling thread
+    {
+        m_monitorTasks[m_monitorTaskAlloc.GetWriteIndex()] = &in_updateList;
+        m_monitorTaskAlloc.Allocate();
+        m_fenceMonitorFlag.Set();
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -341,11 +341,13 @@ void SFS::DataUploader::FenceMonitorThread()
         UINT taskIndex = m_monitorTaskAlloc.GetReadIndex(i);
         auto& updateList = *m_monitorTasks[taskIndex];
 
+        ASSERT(UpdateList::State::STATE_FREE != updateList.m_executionState);
+
         bool freeUpdateList = false;
 
         // assign a start time to every in-flight update list. this will give us an upper bound on latency.
         // latency is only measured for tile uploads
-        if ((UpdateList::State::STATE_FREE != updateList.m_executionState) && (0 == updateList.m_copyLatencyTimer))
+        if (0 == updateList.m_copyLatencyTimer)
         {
             updateList.m_copyLatencyTimer = m_pFenceThreadTimer->GetTime();
         }
@@ -418,10 +420,8 @@ void SFS::DataUploader::FenceMonitorThread()
                     updateList.m_pResource->NotifyCopyComplete(updateList.m_coords);
 
                     auto updateLatency = m_pFenceThreadTimer->GetTime() - updateList.m_copyLatencyTimer;
-                    m_totalTileCopyLatency.fetch_add(updateLatency * updateList.GetNumStandardUpdates(), std::memory_order_relaxed);
-
+                    m_totalTileCopyLatency.fetch_add(updateLatency, std::memory_order_relaxed);
                     m_numTotalUploads.fetch_add(updateList.GetNumStandardUpdates(), std::memory_order_relaxed);
-
                 }
 
                 freeUpdateList = true;
@@ -451,7 +451,10 @@ void SFS::DataUploader::FenceMonitorThread()
         m_pFileStreamer->Signal();
     }
 
-    if (m_monitorTaskAlloc.GetReadyToRead())
+    // if still have tasks but fences haven't advanced, can sleep for a bit
+    if ((m_monitorTaskAlloc.GetReadyToRead()) &&
+        (m_mappingFence->GetCompletedValue() == mappingFenceValue) &&
+        (m_pFileStreamer->GetCompletedValue() == copyFenceValue))
     {
         ThrowIfFailed(m_mappingFence->SetEventOnCompletion(mappingFenceValue + 1, m_fenceEvents[0]));
         m_pFileStreamer->SetEventOnCompletion(copyFenceValue + 1, m_fenceEvents[1]);

@@ -14,7 +14,7 @@ Thread to interpret sampler feedback and generate tile loads/evictions
 #include <thread>
 #include <set>
 #include <atomic>
-#include "Streaming.h"
+#include "SynchronizationUtils.h"
 #include "Timer.h"
 
 //=============================================================================

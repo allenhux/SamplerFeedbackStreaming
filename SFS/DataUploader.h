@@ -14,6 +14,7 @@
 #include "Timer.h"
 
 #include "SimpleAllocator.h"
+#include "SynchronizationUtils.h"
 
 //=============================================================================
 // Internal class that uploads texture data into a reserved resource

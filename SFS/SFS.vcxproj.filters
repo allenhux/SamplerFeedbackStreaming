@@ -74,6 +74,9 @@
     <ClInclude Include="SFSManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SynchronizationUtils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">

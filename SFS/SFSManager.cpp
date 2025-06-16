@@ -341,7 +341,14 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
     //       CopyTiles() won't complain because this library always targets an atlas that is always state_copy_dest
     if (m_packedMipTransitionBarriers.size())
     {
-        pCommandList->ResourceBarrier((UINT)m_packedMipTransitionBarriers.size(), m_packedMipTransitionBarriers.data());
+        if (m_feedbackReadbacks.size())
+        {
+            m_barrierUavToResolveSrc.insert(m_barrierUavToResolveSrc.end(), m_packedMipTransitionBarriers.begin(), m_packedMipTransitionBarriers.end());
+        }
+        else
+        {
+            pCommandList->ResourceBarrier((UINT)m_packedMipTransitionBarriers.size(), m_packedMipTransitionBarriers.data());
+        }
         m_packedMipTransitionBarriers.clear();
     }
 
