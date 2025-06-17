@@ -27,8 +27,8 @@ SFS::DataUploader::DataUploader(
     , m_stagingBufferSizeMB(in_stagingBufferSizeMB)
     , m_mappingUpdater(in_maxTileMappingUpdatesPerApiCall)
     , m_threadPriority(in_threadPriority)
-    , m_submitTaskAlloc(in_maxCopyBatches), m_submitTasks(in_maxCopyBatches)
-    , m_monitorTaskAlloc(in_maxCopyBatches), m_monitorTasks(in_maxCopyBatches)
+    , m_submitTasks(in_maxCopyBatches)
+    , m_monitorTasks(in_maxCopyBatches)
 {
     // copy queue just for UpdateTileMappings() on reserved resources
     {
@@ -229,10 +229,10 @@ void SFS::DataUploader::StopThreads()
 //-----------------------------------------------------------------------------
 void SFS::DataUploader::FlushCommands()
 {
-    if (m_updateListAllocator.GetAllocated())
+    if (m_updateListAllocator.GetReadableCount())
     {
-        DebugPrint("DataUploader waiting on ", m_updateListAllocator.GetAllocated(), " tasks to complete\n");
-        while (m_updateListAllocator.GetAllocated()) // wait so long as there is outstanding work
+        DebugPrint("DataUploader waiting on ", m_updateListAllocator.GetReadableCount(), " tasks to complete\n");
+        while (m_updateListAllocator.GetReadableCount()) // wait so long as there is outstanding work
         {
             m_submitFlag.Set(); // (paranoia)
             m_fenceMonitorFlag.Set(); // (paranoia)
@@ -258,10 +258,10 @@ SFS::UpdateList* SFS::DataUploader::AllocateUpdateList(SFS::ResourceDU* in_pStre
 {
     UpdateList* pUpdateList = nullptr;
 
-    if (m_updateListAllocator.GetAvailable())
+    if (m_updateListAllocator.GetWritableCount())
     {
-        UINT index = m_updateListAllocator.Allocate();
-        pUpdateList = &m_updateLists[index];
+        pUpdateList = &m_updateLists[m_updateListAllocator.GetWriteableValue()];
+        m_updateListAllocator.Commit();
         ASSERT(UpdateList::State::STATE_FREE == pUpdateList->m_executionState);
 
         pUpdateList->Reset(in_pStreamingResource);
@@ -282,7 +282,8 @@ void SFS::DataUploader::FreeUpdateList(SFS::UpdateList& in_updateList)
 
     // return the index to this updatelist to the pool
     UINT i = UINT(&in_updateList - m_updateLists.data());
-    m_updateListAllocator.Free(i);
+    m_updateListAllocator.GetReadableValue() = i;
+    m_updateListAllocator.Free();
 }
 
 //-----------------------------------------------------------------------------
@@ -303,15 +304,15 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
 
     // add to submit task queue
     {
-        m_submitTasks[m_submitTaskAlloc.GetWriteIndex()] = &in_updateList;
-        m_submitTaskAlloc.Allocate();
+        m_submitTasks.GetWriteableValue() = &in_updateList;
+        m_submitTasks.Commit();
         m_submitFlag.Set();
     }
 
     // add to fence polling thread
     {
-        m_monitorTasks[m_monitorTaskAlloc.GetWriteIndex()] = &in_updateList;
-        m_monitorTaskAlloc.Allocate();
+        m_monitorTasks.GetWriteableValue() = &in_updateList;
+        m_monitorTasks.Commit();
         m_fenceMonitorFlag.Set();
     }
 }
@@ -328,8 +329,8 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
 void SFS::DataUploader::FenceMonitorThread()
 {
     // if no outstanding work, sleep
-    // m_updateListAllocator.GetAllocated() would be a more conservative test for whether there are any active tasks
-    if (0 == m_monitorTaskAlloc.GetReadyToRead())
+    // m_updateListAllocator.GetReadableCount() would be a more conservative test for whether there are any active tasks
+    if (0 == m_monitorTasks.GetReadableCount())
     {
         m_fenceMonitorFlag.Wait();
     }
@@ -338,10 +339,9 @@ void SFS::DataUploader::FenceMonitorThread()
 
     UINT64 mappingFenceValue = m_mappingFence->GetCompletedValue();
     UINT64 copyFenceValue = m_pFileStreamer->GetCompletedValue();
-    for (UINT i = 0; i < m_monitorTaskAlloc.GetReadyToRead();)
+    for (UINT i = 0; i < m_monitorTasks.GetReadableCount();)
     {
-        UINT taskIndex = m_monitorTaskAlloc.GetReadIndex(i);
-        auto& updateList = *m_monitorTasks[taskIndex];
+        auto& updateList = *m_monitorTasks.GetReadableValue(i);
 
         ASSERT(UpdateList::State::STATE_FREE != updateList.m_executionState);
 
@@ -436,9 +436,7 @@ void SFS::DataUploader::FenceMonitorThread()
 
         if (freeUpdateList)
         {
-            // O(1) array compaction: move the first element to the position of the element to be freed, then reduce size by 1.
-            m_monitorTasks[taskIndex] = m_monitorTasks[m_monitorTaskAlloc.GetReadIndex()];
-            m_monitorTaskAlloc.Free();
+            m_monitorTasks.FreeByIndex(i);
             FreeUpdateList(updateList);
         }
         else
@@ -454,7 +452,7 @@ void SFS::DataUploader::FenceMonitorThread()
     }
 
     // if still have tasks but fences haven't advanced, can sleep for a bit
-    if ((m_monitorTaskAlloc.GetReadyToRead()) &&
+    if ((m_monitorTasks.GetReadableCount()) &&
         (m_mappingFence->GetCompletedValue() == mappingFenceValue) &&
         (m_pFileStreamer->GetCompletedValue() == copyFenceValue))
     {
@@ -479,12 +477,12 @@ void SFS::DataUploader::SubmitThread()
     bool signalMap = false;
 
     // look through tasks
-    while (m_submitTaskAlloc.GetReadyToRead())
+    while (m_submitTasks.GetReadableCount())
     {
         signalMap = true;
 
-        auto& updateList = *m_submitTasks[m_submitTaskAlloc.GetReadIndex()]; // get the next task
-        m_submitTaskAlloc.Free(); // consume this task. not FREE yet, just no longer tracking in this thread
+        auto& updateList = *m_submitTasks.GetReadableValue(); // get the next task
+        m_submitTasks.Free(); // consume this task. not FREE yet, just no longer tracking in this thread
 
         ASSERT(UpdateList::State::STATE_SUBMITTED == updateList.m_executionState);
 

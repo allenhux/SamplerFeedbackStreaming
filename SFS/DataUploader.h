@@ -43,7 +43,7 @@ namespace SFS
 
         ID3D12CommandQueue* GetMappingQueue() const { return m_mappingCommandQueue.Get(); }
 
-        UINT GetNumUpdateListsAvailable() const { return m_updateListAllocator.GetAvailable(); }
+        UINT GetNumUpdateListsAvailable() const { return m_updateListAllocator.GetWritableCount(); }
 
         // may return null. called by SFSResource.
         UpdateList* AllocateUpdateList(ResourceDU* in_pStreamingResource);
@@ -87,7 +87,27 @@ namespace SFS
 
         // pool of all updatelists
         std::vector<UpdateList> m_updateLists;
-        SFS::AllocatorMT m_updateListAllocator;
+        class AllocatorUINT : public AllocatorMT<UINT>
+        {
+        public:
+            AllocatorUINT(UINT n) : AllocatorMT(n)
+            {
+                for (UINT i = 0; i < n; i++) { m_values[i] = i; }
+            }
+            ~AllocatorUINT()
+            {
+#ifdef _DEBUG
+                ASSERT(0 == GetReadableCount());
+                // verify all indices accounted for and unique
+                std::sort(m_values.begin(), m_values.end());
+                for (UINT i = 0; i < (UINT)m_values.size(); i++)
+                {
+                    ASSERT(i == m_values[i]);
+                }
+#endif
+            }
+        };
+        AllocatorUINT m_updateListAllocator;
 
         // only the fence thread (which looks for final completion) frees UpdateLists
         void FreeUpdateList(SFS::UpdateList& in_updateList);
@@ -102,8 +122,7 @@ namespace SFS
         void SubmitThread();
         std::thread m_submitThread;
         SFS::SynchronizationFlag m_submitFlag; // sleeps until flag set
-        std::vector<UpdateList*> m_submitTasks;
-        RingBuffer m_submitTaskAlloc;
+        AllocatorMT<UpdateList*> m_submitTasks;
 
         // thread to poll copy and mapping fences
         // this thread could have been designed using WaitForMultipleObjects, but it was found that SetEventOnCompletion() was expensive in a tight thread loop
@@ -111,10 +130,9 @@ namespace SFS
         void FenceMonitorThread();
         std::thread m_fenceMonitorThread;
         SFS::SynchronizationFlag m_fenceMonitorFlag; // sleeps until flag set
-        std::vector<UpdateList*> m_monitorTasks;
-        RingBuffer m_monitorTaskAlloc;
         HANDLE m_fenceEvents[2]{};
         RawCpuTimer* m_pFenceThreadTimer{ nullptr }; // init timer on the thread that uses it. can't really worry about thread migration.
+        AllocatorMT<UpdateList*> m_monitorTasks;
 
         void StartThreads();
         void StopThreads();

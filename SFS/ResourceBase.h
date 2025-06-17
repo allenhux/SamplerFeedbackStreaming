@@ -274,12 +274,12 @@ namespace SFS
         class EvictionDelay
         {
         public:
-            using ResourceCoord = std::vector<D3D12_TILED_RESOURCE_COORDINATE>;
+            using Coords = std::vector<D3D12_TILED_RESOURCE_COORDINATE>;
 
             EvictionDelay(UINT in_numSwapBuffers);
 
             void Append(D3D12_TILED_RESOURCE_COORDINATE in_coord) { m_mappings.front().push_back(in_coord); }
-            ResourceCoord& GetReadyToEvict() { return m_mappings.back(); }
+            Coords& GetReadyToEvict() { return m_mappings.back(); }
 
             void NextFrame();
             void Clear();
@@ -297,7 +297,7 @@ namespace SFS
                 return s;
             }
         private:
-            std::list<ResourceCoord> m_mappings;
+            std::list<Coords> m_mappings;
         };
         EvictionDelay m_delayedEvictions;
 

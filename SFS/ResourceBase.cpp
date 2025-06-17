@@ -288,8 +288,6 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
     {
         m_evictAll = false;
 
-        m_delayedEvictions.MoveAllToPending();
-
         // has this resource already been zeroed? don't clear again, early exit
         // future processing of feedback will set this to false if "changed"
         if (m_refCountsZero)
@@ -336,6 +334,8 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
             }
             changed = true;
         } // end loop over layers
+
+        m_delayedEvictions.MoveAllToPending();
 
         // abandon all pending loads - all refcounts are 0
         m_pendingTileLoads.clear();
