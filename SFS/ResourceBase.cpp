@@ -284,6 +284,8 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
 
     bool changed = false;
 
+    // idea of evictall is that the application knows the object is no longer visible (e.g. offscreen),
+    // so no reason to draw it then read and process feedback to tell it what it already knows 
     if (m_evictAll)
     {
         m_evictAll = false;
@@ -335,12 +337,13 @@ void SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
             changed = true;
         } // end loop over layers
 
-        m_delayedEvictions.MoveAllToPending();
+        // this would bypass the usual delay
+        // m_delayedEvictions.MoveAllToPending();
 
         // abandon all pending loads - all refcounts are 0
         m_pendingTileLoads.clear();
 
-        // FIXME: could reset the min mip map now, avoiding updateminmipmap via setresidencychanged. any chance of a race?
+        // FIXME? could reset the min mip map now, avoiding updateminmipmap via setresidencychanged. any chance of a race?
     }
     else
     {
