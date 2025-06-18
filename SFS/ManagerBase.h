@@ -65,7 +65,7 @@ namespace SFS
         UINT m_maxNumResolvesPerFrame{ UINT(-1) };
 
         // track the objects that this resource created
-        // used to discover which resources have been updated within a frame
+        // used by destructor, to allocate shared residence map and shared clear uav heap, SetVisualizationMode(), and UseDirectStorage()
         std::vector<ResourceBase*> m_streamingResources;
 
         // track the heaps resources depend on
@@ -82,8 +82,18 @@ namespace SFS
         Lock m_residencyMapLock;
 
         // list of newly created resources
-        // for each, call AllocateResidencyMap() and AllocateSharedClearUavHeap()
-        std::vector<ResourceBase*> m_newResources;
+        template<typename T> class LockedContainer
+        {
+        public:
+            auto& Acquire() { m_lock.Acquire(); return m_values; }
+            void Release() { m_lock.Release(); }
+            size_t size() { return  m_values.size(); }
+        private:
+            Lock m_lock;
+            std::vector<T> m_values;
+        };
+        LockedContainer<ResourceBase*> m_newResources;
+
         std::set<ResourceBase*> m_removeResources; // resources that are to be removed (deleted)
         std::set<ResourceBase*> m_pendingResources; // resources where feedback or eviction requested
 
@@ -146,7 +156,7 @@ namespace SFS
         ComPtr<ID3D12DescriptorHeap> m_sharedClearUavHeapNotBound;
         ComPtr<ID3D12DescriptorHeap> m_sharedClearUavHeapBound;
 
-        void AllocateSharedClearUavHeap();
+        void AllocateSharedClearUavHeap(UINT in_numDescriptors);
 
         // after packed mips have arrived for new resources, transition them from copy_dest
         std::vector<ResourceBase*> m_packedMipTransitionResources;

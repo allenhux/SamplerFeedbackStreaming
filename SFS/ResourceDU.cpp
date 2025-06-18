@@ -26,8 +26,6 @@ void SFS::ResourceDU::LoadPackedMipInfo(UpdateList& out_updateList)
 //-----------------------------------------------------------------------------
 void SFS::ResourceDU::MapPackedMips(ID3D12CommandQueue* in_pCommandQueue)
 {
-    DeferredInitialize1();
-
     UINT firstSubresource = m_resourceDesc.m_mipInfo.m_numStandardMips;
 
     // mapping packed mips is different from regular tiles: must be mapped before we can use copytextureregion() instead of copytiles()

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <random>
+#include <thread>
 
 #include "CommandLineArgs.h"
 #include "SharedConstants.h"
@@ -233,7 +234,16 @@ private:
     std::vector<SFSResourceDesc> m_sfsResourceDescs;
     void LoadResourceDesc(SFSResourceDesc& out_desc, const std::wstring& in_filename);
 
-    void LoadSpheres(); // progressively over multiple frames
+    void LoadSpheres(); // adjust # of objects
+    std::thread m_loadObjectThread;
+    enum LoadingThread : UINT
+    {
+        Idle = 0,
+        Running = 1,
+        Done = 2
+    };
+    std::atomic<LoadingThread> m_loadingThreadState{ Idle };
+    void LoadObjectThread(UINT in_numObjects, UINT in_index); // async object creation
 
     // each frame, update objects until timeout reached
     UINT m_queueFeedbackIndex{ 0 }; // index based on number of gpu feedback resolves per frame

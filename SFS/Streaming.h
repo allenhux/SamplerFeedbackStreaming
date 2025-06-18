@@ -84,15 +84,21 @@ namespace SFS
     };
 
     //==================================================
+    // hybrid CPU helper. 0 = default policy, 1 = prefer performance, -1 = prefer power efficiency
+    // https://www.intel.com/content/www/us/en/developer/articles/guide/12th-gen-intel-core-processor-gamedev-guide.html
     //==================================================
     inline void SetThreadPriority(std::thread& in_thread, int in_priority)
     {
+        // default power policy, mask and state = 0
+        THREAD_POWER_THROTTLING_STATE throttlingState{ THREAD_POWER_THROTTLING_CURRENT_VERSION, 0, 0 };
         if (in_priority) // 0 = default (do nothing). -1 = efficiency. otherwise, performance.
         {
-            THREAD_POWER_THROTTLING_STATE throttlingState{ THREAD_POWER_THROTTLING_CURRENT_VERSION, THREAD_POWER_THROTTLING_EXECUTION_SPEED, 0 };
-            if (-1 == in_priority) { throttlingState.StateMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED; } // speed, speed = prefer e cores
-            ::SetThreadInformation(in_thread.native_handle(), ThreadPowerThrottling, &throttlingState, sizeof(throttlingState));
+            // state set to 0 prefers performance (hint to OS to use p-cores)
+            throttlingState = { THREAD_POWER_THROTTLING_CURRENT_VERSION, THREAD_POWER_THROTTLING_EXECUTION_SPEED, 0 };
+            //  state to "THROTTLING_EXECUTION_SPEED" to hint to OS that it use low-speed processors (e-cores)
+            if (-1 == in_priority) { throttlingState.StateMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED; }
         }
+        ::SetThreadInformation(in_thread.native_handle(), ThreadPowerThrottling, &throttlingState, sizeof(throttlingState));
     }
 
     //==================================================

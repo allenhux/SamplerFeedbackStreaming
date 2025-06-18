@@ -108,9 +108,9 @@ void SFS::ManagerBase::Finish()
 }
 
 //-----------------------------------------------------------------------------
-// allocate residency map buffer large enough for numswapbuffers * min mip map buffers for each SFSResource
+// allocate residency map buffer large enough all SFSResources
 // assign offsets to new resources and update all resources on resource allocation
-// descriptor handle required to update the assoiated shader resource view
+// also allocate shared descriptor heaps for clear UAV
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::AllocateSharedResidencyMap()
 {
@@ -118,7 +118,7 @@ void SFS::ManagerBase::AllocateSharedResidencyMap()
     static constexpr UINT gpuPageSizeMask = (64 * 1024) - 1;
 
     // if new resources, will probably need to expand clear descriptor heap. just always re-allocate.
-    AllocateSharedClearUavHeap();
+    AllocateSharedClearUavHeap((UINT)m_streamingResources.size());
 
     // get the buffer size
     UINT bufferSize = 0;
@@ -134,11 +134,18 @@ void SFS::ManagerBase::AllocateSharedResidencyMap()
     // because there may have been deletions, there could be "holes"
     // rather than building a proper memory manager, just reset everything on any allocation
     UINT requiredSize = 0;
-    for (auto r : m_streamingResources)
+    UINT descriptorOffset = 0;
+    const auto srvUavCbvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    for (auto p : m_streamingResources)
     {
-        r->SetResidencyMapOffset(requiredSize);
+        p->SetResidencyMapOffset(requiredSize);
         // align to cache line size
-        requiredSize += (r->GetMinMipMapSize() + alignmentMask) & ~alignmentMask;
+        requiredSize += (p->GetMinMipMapSize() + alignmentMask) & ~alignmentMask;
+
+        // set clear uav descriptor heap offset
+        // note these are views are invalid until set within NotifyPackedMips()
+        p->SetClearUavDescriptorOffset(descriptorOffset);
+        descriptorOffset += srvUavCbvDescriptorSize;
     }
 
     if (requiredSize > bufferSize)
@@ -165,17 +172,11 @@ void SFS::ManagerBase::AllocateSharedResidencyMap()
     }
     m_residencyMapLock.Release();
 
-    auto srvUavCbvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     auto pDest = m_residencyMap.GetData();
-    UINT offset = 0;
-    for (auto r : m_streamingResources)
+    for (auto p : m_streamingResources)
     {
         // copy current minmipmap state or initialize to default state
-        r->WriteMinMipMap((UINT8*)pDest);
-        // set clear uav descriptor heap offset
-        // note these are views are invalid until set within NotifyPackedMips()
-        r->SetClearUavDescriptorOffset(offset);
-        offset += srvUavCbvDescriptorSize;
+        p->WriteMinMipMap((UINT8*)pDest);
     }
 }
 
@@ -183,10 +184,9 @@ void SFS::ManagerBase::AllocateSharedResidencyMap()
 // create a shared heap for clearing the feedback resources
 // this heap will not be bound to a command list
 //-----------------------------------------------------------------------------
-void SFS::ManagerBase::AllocateSharedClearUavHeap()
+void SFS::ManagerBase::AllocateSharedClearUavHeap(UINT in_numDescriptors)
 {
-    UINT numDescriptorsNeeded = (UINT)m_streamingResources.size();
-    if ((nullptr == m_sharedClearUavHeapNotBound.Get()) || (m_sharedClearUavHeapNotBound->GetDesc().NumDescriptors < numDescriptorsNeeded))
+    if ((nullptr == m_sharedClearUavHeapNotBound.Get()) || (m_sharedClearUavHeapNotBound->GetDesc().NumDescriptors < in_numDescriptors))
     {
         {
             auto i = m_frameFenceValue % m_oldSharedClearUavHeaps.size();
@@ -195,8 +195,9 @@ void SFS::ManagerBase::AllocateSharedClearUavHeap()
 
         D3D12_DESCRIPTOR_HEAP_DESC desc = {};
         desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        desc.NumDescriptors = numDescriptorsNeeded;
+        desc.NumDescriptors = in_numDescriptors;
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
         ThrowIfFailed(m_device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_sharedClearUavHeapNotBound)));
         m_sharedClearUavHeapNotBound->SetName(L"m_sharedClearUavHeapNotBound");
 
@@ -232,14 +233,23 @@ void SFS::ManagerBase::RemoveResources()
         ContainerRemove(m_pendingResources, m_removeResources);
         ContainerRemove(m_packedMipTransitionResources, m_removeResources);
 
-        // theoretically possible? would have to create and destroy the same resource in the same frame
-#ifdef _DEBUG
-        for (auto p : m_newResources)
+        // FIXME? would rather not need to delete newly created resources
+        if (m_newResources.size())
         {
-            ASSERT(!m_removeResources.contains(p));
-        }
-        //ContainerRemove(m_newResources, m_removeResources);
+#if 0
+            // #ifdef _DEBUG
+            auto& t = m_newResources.Acquire();
+            for (auto p : t)
+            {
+                ASSERT(!m_removeResources.contains(p));
+            }
+            m_newResources.Release();
 #endif
+
+            ContainerRemove(m_newResources.Acquire(), m_removeResources);
+            m_newResources.Release();
+        }
+
         m_processFeedbackThread.ShareDestroyResources(m_removeResources);
         m_removeResources.clear();
     }

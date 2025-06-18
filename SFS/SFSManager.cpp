@@ -121,12 +121,11 @@ SFSHeap* SFS::Manager::CreateHeap(UINT in_maxNumTilesHeap)
 SFSResource* SFS::Manager::CreateResource(const struct SFSResourceDesc& in_desc,
     SFSHeap* in_pHeap, const std::wstring& in_filename)
 {
-    ASSERT(!m_withinFrame);
-
     ResourceBase* pRsrc = new Resource(in_filename, in_desc, (SFS::ManagerSR*)this, (SFS::Heap*)in_pHeap);
 
-    m_streamingResources.push_back(pRsrc);
-    m_newResources.push_back(pRsrc);
+    // NOTE: m_streamingResources won't be updated until EndFrame()
+    m_newResources.Acquire().push_back(pRsrc);
+    m_newResources.Release();
 
     return pRsrc;
 }
@@ -146,9 +145,9 @@ void SFS::ManagerBase::UseDirectStorage(bool in_useDS)
 
     auto pOldStreamer = m_dataUploader.SetStreamer(streamerType, m_traceCaptureMode);
 
-    for (auto& s : m_streamingResources)
+    for (auto p : m_streamingResources)
     {
-        s->SetFileHandle(&m_dataUploader);
+        p->SetFileHandle(&m_dataUploader);
     }
 
     delete pOldStreamer;
@@ -173,9 +172,9 @@ void SFS::Manager::SetVisualizationMode(UINT in_mode)
 {
     ASSERT(!GetWithinFrame());
     Finish();
-    for (auto o : m_streamingResources)
+    for (auto p : m_streamingResources)
     {
-        o->ClearAllocations();
+        p->ClearAllocations();
     }
 
     m_dataUploader.SetVisualizationMode(in_mode);
@@ -290,14 +289,18 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
     // if new StreamingResources have been created...
     if (m_newResources.size())
     {
+        std::vector<ResourceBase*> newResources;
+        m_newResources.Acquire().swap(newResources);
+        m_newResources.Release();
+
+        m_streamingResources.insert(m_streamingResources.end(), newResources.begin(), newResources.end());
         AllocateSharedResidencyMap();
 
         // monitor new resources for when they need packed mip transition barriers
-        m_packedMipTransitionResources.insert(m_packedMipTransitionResources.end(), m_newResources.begin(), m_newResources.end());
+        m_packedMipTransitionResources.insert(m_packedMipTransitionResources.end(), newResources.begin(), newResources.end());
 
         // share new resources with PFT. PFT will share with residency thread
-        m_processFeedbackThread.ShareNewResources(m_newResources);
-        m_newResources.clear();
+        m_processFeedbackThread.ShareNewResources(newResources);
     }
 
     // create a view for shared minmipmap, used by the application's pixel shaders

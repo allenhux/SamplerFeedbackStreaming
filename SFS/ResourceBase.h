@@ -99,7 +99,9 @@ namespace SFS
         // Called by ResidencyThread (and also on creation via BeginFrame()
         // exits fast if tile residency has not changed (due to addmap or decmap)
         bool UpdateMinMipMap();
-        inline void WriteMinMipMap(UINT8* out_pDest) // do this fast!! inside lock
+
+        // do this fast!! inside lock
+        inline void WriteMinMipMap(UINT8* out_pDest)
         {
             memcpy(m_residencyMapOffsetBase + out_pDest, m_minMipMap.data(), m_minMipMap.size());
         }
@@ -119,12 +121,12 @@ namespace SFS
         // returns # tiles evicted
         UINT QueuePendingTileEvictions();
 
-        bool HasAnyWork() // tiles to load / evict now or later
+        bool HasDelayedWork() // tiles to load / evict now or later
         {
-            return (m_pendingTileLoads.size() || m_delayedEvictions.Size());
+            return m_delayedEvictions.HasDelayedWork();
         }
 
-        bool IsStale() // wants to load / evict tiles this frame
+        bool HasPendingWork() // wants to load / evict tiles this frame
         {
             return (m_pendingTileLoads.size() || m_delayedEvictions.GetReadyToEvict().size());
         }
@@ -262,9 +264,6 @@ namespace SFS
         TileMappingState m_tileMappingState;
 
         void SetResidencyChanged();
-
-        void DeferredInitialize1(); // before requesting packed mips (in ProcessFeedbackThread)
-        void DeferredInitialize2(); // after packed mips arrive (FenceMonitorThread -> NotifyPackedMips)
     private:
         // only using double-buffering for feedback history
         static constexpr UINT QUEUED_FEEDBACK_FRAMES = 2;
@@ -290,11 +289,25 @@ namespace SFS
             void Rescue(const TileMappingState& in_tileMappingState);
 
             // total # tiles being tracked
-            UINT Size() const
+            bool HasDelayedWork() const
             {
-                UINT s = 0;
-                for (auto& e : m_mappings) { s += (UINT)e.size(); }
-                return s;
+                ASSERT(m_mappings.size());
+#if 1
+                auto end = m_mappings.end()--;
+                for (auto i = m_mappings.begin(); i != end; i++)
+                {
+                    if (i->size()) { return true; }
+                }
+#else
+                UINT sz = (UINT)m_mappings.size() - 1;
+                for (auto& e : m_mappings)
+                {
+                    if (e.size()) { return true; }
+                    sz--;
+                    if (0 == sz) { break; }
+                }
+#endif
+                return false;
             }
         private:
             std::list<Coords> m_mappings;

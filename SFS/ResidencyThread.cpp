@@ -64,12 +64,16 @@ void SFS::ResidencyThread::Start()
                 if (GroupRemoveResources::Client::Residency & m_removeResources.GetFlags())
                 {
                     m_removeResources.Acquire();
-                    ContainerRemove(m_streamingResources, m_removeResources);
+                    // number of resources likely > # to be removed
+                    std::set<ResourceBase*> tmp = m_removeResources;
                     m_removeResources.Release();
                     m_removeResources.ClearFlag(GroupRemoveResources::Client::Residency);
+                    ContainerRemove(m_streamingResources, tmp);
                 }
 
                 std::vector<ResourceBase*> updated;
+                updated.reserve(m_streamingResources.size());
+                // FIXME: would like to focus on a subset that is likely to change
                 for (auto p : m_streamingResources)
                 {
                     if (p->UpdateMinMipMap())

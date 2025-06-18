@@ -373,7 +373,6 @@ void SFS::DataUploader::FenceMonitorThread()
             break; // give other resources a chance to start streaming
 
         case UpdateList::State::STATE_PACKED_INITIALIZE:
-            updateList.m_pResource->DeferredInitialize();
             updateList.m_executionState = UpdateList::State::STATE_PACKED_COPY_PENDING;
             [[fallthrough]];
 

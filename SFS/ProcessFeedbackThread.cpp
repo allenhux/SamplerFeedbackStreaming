@@ -172,14 +172,19 @@ void SFS::ProcessFeedbackThread::Start()
                     for (auto i = m_activeResources.begin(); i != m_activeResources.end();)
                     {
                         auto pResource = *i;
+
                         // fairly frequent, in practice, for frame to change while processing feedback
                         pResource->ProcessFeedback(m_pSFSManager->GetFrameFenceCompletedValue());
-                        if (pResource->HasAnyWork())
+
+                        // resource may now have loads to process asap and evictions scheduled for now or the future
+
+                        if (pResource->HasPendingWork())
                         {
-                            if (pResource->IsStale())
-                            {
-                                m_pendingResources.insert(pResource);
-                            }
+                            m_pendingResources.insert(pResource);
+                        }
+
+                        if (pResource->HasDelayedWork())
+                        {
                             i++;
                         }
                         else
@@ -214,7 +219,7 @@ void SFS::ProcessFeedbackThread::Start()
                             uploadsRequested += pResource->QueuePendingTileLoads();
                         }
 
-                        if (pResource->IsStale()) // still have work to do?
+                        if (pResource->HasPendingWork()) // still have work to do?
                         {
                             i++;
                         }

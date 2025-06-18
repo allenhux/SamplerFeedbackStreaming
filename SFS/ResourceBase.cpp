@@ -23,6 +23,8 @@
 
 //=============================================================================
 // data structure to manage reserved resource
+// NOTE: constructor must be thread safe
+//       because thread-safe, AllocateAtlas() must be called elsewhere
 //=============================================================================
 SFS::ResourceBase::ResourceBase(
     // file containing streaming texture and tile offsets
@@ -48,23 +50,9 @@ SFS::ResourceBase::ResourceBase(
 
     // with m_maxMip and m_minMipMap, SFSManager will be able allocate/init the shared residency map
     m_minMipMap.assign(GetMinMipMapSize(), m_maxMip);
-}
 
-//-----------------------------------------------------------------------------
-// allocating internal d3d resources is expensive, so moved from main thread to internal threads
-// first, create just the tiled resource and the streaming file handle
-//-----------------------------------------------------------------------------
-void SFS::ResourceBase::DeferredInitialize1()
-{
     m_resources.CreateTiledResource(m_pSFSManager->GetDevice(), m_resourceDesc);
-    m_pFileHandle.reset(m_pSFSManager->OpenFile(m_filename));
-}
 
-//-----------------------------------------------------------------------------
-// finish creating/initializing internal resources
-//-----------------------------------------------------------------------------
-void SFS::ResourceBase::DeferredInitialize2()
-{
     m_tileMappingState.Init(m_resourceDesc.m_standardMipInfo);
 
     // initialize a structure that holds ref counts with dimensions equal to min-mip-map
@@ -72,10 +60,10 @@ void SFS::ResourceBase::DeferredInitialize2()
     // m_minMipMap represents the tiles we actually have, and is read directly by pixel shaders
     m_tileReferences.assign(GetMinMipMapSize(), m_maxMip);
 
-    // make sure my heap has an atlas corresponding to my format
-    m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), (DXGI_FORMAT)m_resourceDesc.m_textureFormat);
 
     m_resources.Initialize(m_pSFSManager->GetDevice(), QUEUED_FEEDBACK_FRAMES);
+
+    m_pFileHandle.reset(m_pSFSManager->OpenFile(m_filename));
 }
 
 //-----------------------------------------------------------------------------
@@ -801,6 +789,7 @@ void SFS::ResourceBase::SetFileHandle(const DataUploader* in_pDataUploader)
 
 //-----------------------------------------------------------------------------
 // set mapping and initialize bits for the packed tile(s)
+// called by ProcessFeedbackThread
 //-----------------------------------------------------------------------------
 bool SFS::ResourceBase::InitPackedMips()
 {
@@ -814,12 +803,12 @@ bool SFS::ResourceBase::InitPackedMips()
     UINT numTilesForPackedMips = m_resourceDesc.m_mipInfo.m_numTilesForPackedMips;
 
     // no packed mips? odd, but possible. no need to check/update this variable again.
-    // NOTE: in this case, for simplicity, initialize now (usually deferred)
     if (0 == numTilesForPackedMips)
     {
-        DeferredInitialize1();
-        DeferredInitialize2();
-        m_packedMipStatus = PackedMipStatus::RESIDENT;
+        // make sure my heap has an atlas corresponding to my format
+        m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), (DXGI_FORMAT)m_resourceDesc.m_textureFormat);
+
+        m_packedMipStatus = PackedMipStatus::NEEDS_TRANSITION;
         return true;
     }
 
@@ -845,6 +834,9 @@ bool SFS::ResourceBase::InitPackedMips()
 
     if (pUpdateList)
     {
+        // make sure my heap has an atlas corresponding to my format
+        m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), (DXGI_FORMAT)m_resourceDesc.m_textureFormat);
+
         m_packedMipStatus = PackedMipStatus::REQUESTED;
 
         pUpdateList->m_heapIndices = m_packedMipHeapIndices;

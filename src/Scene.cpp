@@ -235,6 +235,12 @@ Scene::~Scene()
     // NOTE: deleting a streaming resource is not fast
     // recommend for shutdown, skip deleting sfs resources and let SFSManager take care of it
 
+    m_loadingThreadState = LoadingThread::Idle;
+    if (m_loadObjectThread.joinable())
+    {
+        m_loadObjectThread.join();
+    }
+
     for (auto o : m_objects)
     {
         delete o;
@@ -1028,45 +1034,85 @@ void Scene::CreateSampler()
 }
 
 //-----------------------------------------------------------------------------
+// async object creation with thread-safe SFSManager::CreateResource()
+//-----------------------------------------------------------------------------
+void Scene::LoadObjectThread(UINT in_numObjects, UINT in_index)
+{
+    ASSERT(m_objects.size() == in_numObjects + in_index);
+    for (UINT i = 0; i < in_numObjects; i++)
+    {
+        if (LoadingThread::Running != m_loadingThreadState) { break; }
+
+        UINT objectIndex = i + in_index;
+        // put this resource into one of our shared heaps
+        UINT heapIndex = objectIndex % m_sharedHeaps.size();
+        auto pHeap = m_sharedHeaps[heapIndex];
+        // grab the next texture
+        UINT fileIndex = objectIndex % m_args.m_textures.size();
+        const auto& textureFilename = m_args.m_textures[fileIndex];
+
+        SceneObjects::BaseObject* o = nullptr;
+
+        // earth
+        if ((0 == fileIndex) && m_args.m_earthTexture.size())
+        {
+            o = new SceneObjects::Earth(this);
+        }
+        // planet
+        else
+        {
+            o = new SceneObjects::Planet(this);
+            static std::uniform_real_distribution<float> dis(-1.f, 1.f);
+            o->SetAxis(DirectX::XMVector3NormalizeEst(DirectX::XMVectorSet(dis(m_gen), dis(m_gen), dis(m_gen), 0)));
+        }
+        o->SetResource(m_pSFSManager->CreateResource(m_sfsResourceDescs[fileIndex], pHeap, textureFilename));
+        o->GetModelMatrix() = m_objectPoses.GetMatrix(m_gen, objectIndex);
+
+        ASSERT(nullptr == m_objects[objectIndex]);
+        m_objects[objectIndex] = o;
+    }
+    m_loadingThreadState = LoadingThread::Done;
+}
+
+//-----------------------------------------------------------------------------
 // progressively over multiple frames, if there are many
 //-----------------------------------------------------------------------------
 void Scene::LoadSpheres()
 {
-    bool updateNumTiles = (m_objects.size() != (UINT)m_args.m_numSpheres);
+    // if async loading in progress, do not add or delete any more
+    switch (m_loadingThreadState)
+    {
+    case LoadingThread::Done:
+        ASSERT(m_loadObjectThread.joinable());
+        m_loadObjectThread.join();
+        m_loadingThreadState = LoadingThread::Idle;
+        break;
+    case LoadingThread::Running:
+    {
+        // update # allocated tiles
+        m_numTilesVirtual = 0;
+        for (auto& o : m_objects)
+        {
+            if (nullptr != o)
+            {
+                m_numTilesVirtual += o->GetStreamingResource()->GetNumTilesVirtual();
+            }
+        }
+        return;
+    }
+    default:
+        break;
+    }
 
     if (m_objects.size() < (UINT)m_args.m_numSpheres)
     {
-        while (m_objects.size() < (UINT)m_args.m_numSpheres)
-        {
-            // this object's index-to-be
-            UINT objectIndex = (UINT)m_objects.size();
+        ASSERT(LoadingThread::Idle == m_loadingThreadState);
 
-            // put this resource into one of our shared heaps
-            UINT heapIndex = objectIndex % m_sharedHeaps.size();
-            auto pHeap = m_sharedHeaps[heapIndex];
-
-            // grab the next texture
-            UINT fileIndex = objectIndex % m_args.m_textures.size();
-            const auto& textureFilename = m_args.m_textures[fileIndex];
-
-            SceneObjects::BaseObject* o = nullptr;
-
-            // earth
-            if ((0 == fileIndex) && m_args.m_earthTexture.size())
-            {
-                o = new SceneObjects::Earth(this);
-            }
-            // planet
-            else
-            {
-                o = new SceneObjects::Planet(this);
-                static std::uniform_real_distribution<float> dis(-1.f, 1.f);
-                o->SetAxis(DirectX::XMVector3NormalizeEst(DirectX::XMVectorSet(dis(m_gen), dis(m_gen), dis(m_gen), 0)));
-            }
-            o->SetResource(m_pSFSManager->CreateResource(m_sfsResourceDescs[fileIndex], pHeap, textureFilename));
-            o->GetModelMatrix() = m_objectPoses.GetMatrix(m_gen, objectIndex);
-            m_objects.push_back(o);
-        }
+        UINT numToLoad = (UINT)m_args.m_numSpheres - (UINT)m_objects.size();
+        UINT index = (UINT)m_objects.size();
+        m_objects.resize(m_objects.size() + numToLoad, nullptr);
+        m_loadingThreadState = LoadingThread::Running;
+        m_loadObjectThread = std::thread([=, this] { this->LoadObjectThread(numToLoad, index); });
     } // end if adding objects
     else if (m_objects.size() > (UINT)m_args.m_numSpheres) // else evict objects
     {
@@ -1088,14 +1134,6 @@ void Scene::LoadSpheres()
 
             delete pObject;
             m_objects.resize(m_objects.size() - 1);
-        }
-    }
-    if (updateNumTiles)
-    {
-        m_numTilesVirtual = 0;
-        for (auto& o : m_objects)
-        {
-            m_numTilesVirtual += o->GetStreamingResource()->GetNumTilesVirtual();
         }
     }
 }
@@ -1196,7 +1234,7 @@ void Scene::DrawObjects()
         {
             UINT objectIndex = i % (UINT)m_objects.size();
             auto o = m_objects[objectIndex];
-            if (!o->Drawable()) { continue; }
+            if ((nullptr == o) || (!o->Drawable())) { continue; }
             m_numObjectsLoaded++;
 
             bool isVisible = o->IsVisible();
@@ -1227,6 +1265,9 @@ void Scene::DrawObjects()
 
             if (queueFeedback)
             {
+                // round-robin feedback by starting after where we left off this time
+                m_queueFeedbackIndex = objectIndex + 1;
+
                 m_numFeedbackObjects++;
                 numTexels += o->GetStreamingResource()->GetMinMipMapSize();
 
@@ -1244,10 +1285,6 @@ void Scene::DrawObjects()
                 o->GetStreamingResource()->QueueEviction();
             }
         }
-
-        // next time, start feedback where we left off this time.
-        // note m_queueFeedbackIndex will be adjusted to # of objects next time, above
-        m_queueFeedbackIndex += m_numFeedbackObjects;
     }
 
     // set common draw state
@@ -1456,17 +1493,20 @@ void Scene::Animate()
     const float cotHdiv2 = XMVectorGetY(m_projection.r[1]);
     concurrency::parallel_for_each(m_objects.begin(), m_objects.end(), [&](auto o)
         {
-            if (m_pSky != o)
+            if (nullptr != o)
             {
-                o->Spin(rotation);
-                o->SetCombinedMatrix(worldProj, m_windowHeight, cotWdiv2, cotHdiv2, m_zFar);
-            }
-            else
-            {
-                // remove translation from worldproj
-                auto tmp = worldProj;
-                tmp.r[3] = m_projection.r[3];
-                o->SetCombinedMatrix(tmp, m_windowHeight, cotWdiv2, cotHdiv2, m_zFar);
+                if (m_pSky != o)
+                {
+                    o->Spin(rotation);
+                    o->SetCombinedMatrix(worldProj, m_windowHeight, cotWdiv2, cotHdiv2, m_zFar);
+                }
+                else
+                {
+                    // remove translation from worldproj
+                    auto tmp = worldProj;
+                    tmp.r[3] = m_projection.r[3];
+                    o->SetCombinedMatrix(tmp, m_windowHeight, cotWdiv2, cotHdiv2, m_zFar);
+                }
             }
         });
 }
