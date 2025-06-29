@@ -18,8 +18,7 @@
 //-----------------------------------------------------------------------------
 void SFS::Resource::Destroy()
 {
-    // tell SFSManager to stop tracking and delete
-    m_pSFSManager->Remove(this);
+    delete this;
 }
 
 //-----------------------------------------------------------------------------

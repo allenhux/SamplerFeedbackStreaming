@@ -29,7 +29,7 @@ SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_p
     , m_oldSharedResidencyMaps(in_desc.m_swapChainBufferCount + 1, nullptr)
     , m_oldSharedClearUavHeaps(in_desc.m_swapChainBufferCount + 1, nullptr)
     , m_processFeedbackThread((ManagerPFT*)this, m_dataUploader, in_desc.m_minNumUploadRequests, (int)in_desc.m_threadPriority)
-    , m_residencyThread((ManagerRT*)this, m_processFeedbackThread.GetRemoveResources(), (int)in_desc.m_threadPriority)
+    , m_residencyThread((ManagerRT*)this, m_processFeedbackThread.GetFlushResources(), (int)in_desc.m_threadPriority)
 {
     ASSERT(D3D12_COMMAND_LIST_TYPE_DIRECT == m_directCommandQueue->GetDesc().Type);
 
@@ -53,21 +53,37 @@ SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_p
     StartThreads();
 }
 
+//-----------------------------------------------------------------------------
+// destructor
+//-----------------------------------------------------------------------------
 SFS::ManagerBase::~ManagerBase()
 {
     // force DataUploader to flush now, rather than waiting for its destructor
     Finish();
-    for (auto p : m_removeResources)
-    {
-        delete p;
-    }
 
     // the application may have deleted some, but not all, of the resources
+
+
+    // if a resource is in removeResources, it has already been deleted.
+    std::set<ResourceBase*> removeResources;
+    m_removeResources.swap(removeResources);
+
     // possible for a resource to be in both m_removeResources and m_streamingResources if
-    //    an application desctructor calls Resource::Destroy() but then doesn't call BeginFrame() (because it shouldn't)
+    //    an application destructor calls Resource::Destroy() but then doesn't call Begin/EndFrame()
     for (auto p : m_streamingResources)
     {
-        if (!m_removeResources.contains(p))
+        if (!removeResources.contains(p))
+        {
+            delete p;
+        }
+    }
+
+    // possible for a resource to be in newResources if app shut down before resource finished initializing
+    std::vector<ResourceBase*> newResources;
+    m_newResources.swap(newResources);
+    for (auto p : newResources)
+    {
+        if (!removeResources.contains(p))
         {
             delete p;
         }
@@ -222,42 +238,37 @@ void SFS::ManagerBase::CreateMinMipMapView(D3D12_CPU_DESCRIPTOR_HANDLE in_descri
 }
 
 //-----------------------------------------------------------------------------
-// delete resources that have been requested via Remove()
-// only used by BeginFrame()
+// stop tracking resources that have been Destroy()ed
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::RemoveResources()
 {
     if (m_removeResources.size())
     {
-        ContainerRemove(m_streamingResources, m_removeResources);
-        ContainerRemove(m_pendingResources, m_removeResources);
-        ContainerRemove(m_packedMipTransitionResources, m_removeResources);
+        std::set<ResourceBase*> tmp;
+        m_removeResources.swap(tmp);
+        ContainerRemove(m_streamingResources, tmp);
+    }
+}
 
-        // FIXME? would rather not need to delete newly created resources
-        if (m_newResources.size())
-        {
-#if 0
-            // #ifdef _DEBUG
-            auto& t = m_newResources.Acquire();
-            for (auto p : t)
-            {
-                ASSERT(!m_removeResources.contains(p));
-            }
-            m_newResources.Release();
-#endif
+//-----------------------------------------------------------------------------
+// Handle FlushResources()
+// called by BeginFrame()
+//-----------------------------------------------------------------------------
+void SFS::ManagerBase::FlushResourcesInternal()
+{
+    if (m_flushResources.size())
+    {
+        std::set<ResourceBase*> removeResources;
+        m_flushResources.swap(removeResources);
 
-            ContainerRemove(m_newResources.Acquire(), m_removeResources);
-            m_newResources.Release();
-        }
-
-        m_processFeedbackThread.ShareDestroyResources(m_removeResources);
-        m_removeResources.clear();
+        ContainerRemove(m_pendingResources, removeResources);
+        ContainerRemove(m_packedMipTransitionResources, removeResources);
     }
 }
 
 //-----------------------------------------------------------------------------
 // destroy heaps that are no longer depended upon
-// FIXME: when to call this during runtime? also keep an array of pending remove heaps?
+// FIXME: Heaps need refcounting so they aren't destroyed when objects don't have packed mips
 // FIXME: test this?
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::RemoveHeaps()

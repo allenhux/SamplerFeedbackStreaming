@@ -14,6 +14,7 @@
 
 #include "DebugHelper.h"
 #include "d3dx12.h"
+#include "SynchronizationUtils.h"
 
 namespace SFS
 {
@@ -126,4 +127,19 @@ namespace SFS
             }
         }
     }
+
+    // container accessed via lock
+    // e.g. LockedContainer<std::vector<Object*>> objects;
+    template<typename T> class LockedContainer
+    {
+    public:
+        auto& Acquire() { m_lock.Acquire(); return m_values; }
+        void Release() { m_size = m_values.size(); m_lock.Release(); }
+        size_t size() { return  m_size; }
+        void swap(T& v) { Acquire().swap(v); Release(); }
+    protected:
+        Lock m_lock;
+        T m_values;
+        size_t m_size{ 0 }; // maintained so lock not required
+    };
 }

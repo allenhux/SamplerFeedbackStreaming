@@ -51,6 +51,8 @@ struct SFSHeap
 //=============================================================================
 struct SFSResource
 {
+    // There may be internal threads or queues that are actively updating the resource
+    // MUST call SFSManager::FlushResources() first. After event signaled, call SFSResource::Destroy()
     virtual void Destroy() = 0;
 
     //--------------------------------------------
@@ -152,11 +154,22 @@ struct SFSManager
     virtual SFSHeap* CreateHeap(UINT in_maxNumTilesHeap) = 0;
 
     //--------------------------------------------
+    // <thread safe>
     // Create StreamingResources using a common SFSManager
     // Optionally provide a file header (e.g. if app opens many files or uses a custom file format)
     //--------------------------------------------
     virtual SFSResource* CreateResource(const struct SFSResourceDesc& in_desc,
         SFSHeap* in_pHeap, const std::wstring& in_filename) = 0;
+
+    //--------------------------------------------
+    // <thread safe>
+    // WARNING: blocks until previous call to FlushResources() has signaled
+    // Call FlushResources with a vector of resources and an event handle
+    //   e.g. pMgr->FlushResources(myVector, eventToSignal)
+    // After the event is signaled, the application can SFSResource::Destroy() each resource
+    // The resources do not have to be destroyed: they can be used again later.
+    //--------------------------------------------
+    virtual void FlushResources(const std::vector<SFSResource*>& in_resources, HANDLE in_event) = 0;
 
     //--------------------------------------------
     // Call BeginFrame() first,

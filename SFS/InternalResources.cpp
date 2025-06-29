@@ -15,34 +15,30 @@ SFS::InternalResources::InternalResources()
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-void SFS::InternalResources::CreateTiledResource(ID3D12Device8* in_pDevice, const SFSResourceDesc& in_resourceDesc)
+void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, const SFSResourceDesc& in_resourceDesc, UINT in_numQueuedFeedback)
 {
-    D3D12_RESOURCE_DESC rd = CD3DX12_RESOURCE_DESC::Tex2D(
-        (DXGI_FORMAT)in_resourceDesc.m_textureFormat,
-        in_resourceDesc.m_width,
-        in_resourceDesc.m_height, 1,
-        (UINT16)in_resourceDesc.m_mipInfo.m_numStandardMips + (UINT16)in_resourceDesc.m_mipInfo.m_numPackedMips
-    );
+    // Create tiled resource
+    {
+        D3D12_RESOURCE_DESC rd = CD3DX12_RESOURCE_DESC::Tex2D(
+            (DXGI_FORMAT)in_resourceDesc.m_textureFormat,
+            in_resourceDesc.m_width,
+            in_resourceDesc.m_height, 1,
+            (UINT16)in_resourceDesc.m_mipInfo.m_numStandardMips + (UINT16)in_resourceDesc.m_mipInfo.m_numPackedMips
+        );
 
-    // Layout must be D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE when creating reserved resources
-    rd.Layout = D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
+        // Layout must be D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE when creating reserved resources
+        rd.Layout = D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
 
-    ThrowIfFailed(in_pDevice->CreateReservedResource(
-        &rd,
-        // application is allowed to use before packed mips are loaded, but it's really a copy dest
-        D3D12_RESOURCE_STATE_COMMON,
-        nullptr,
-        IID_PPV_ARGS(&m_tiledResource)));
-    static UINT resourceID;
-    m_tiledResource->SetName(AutoString("m_streamingTexture", resourceID++).str().c_str());
-}
+        ThrowIfFailed(in_pDevice->CreateReservedResource(
+            &rd,
+            // application is allowed to use before packed mips are loaded, but it's really a copy dest
+            D3D12_RESOURCE_STATE_COMMON,
+            nullptr,
+            IID_PPV_ARGS(&m_tiledResource)));
+        static UINT resourceID;
+        m_tiledResource->SetName(AutoString("m_streamingTexture", resourceID++).str().c_str());
+    }
 
-//-----------------------------------------------------------------------------
-// Defer creating some resources until after packed mips arrive
-// to reduce impact of creating an SFS Resource
-//-----------------------------------------------------------------------------
-void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, UINT in_numQueuedFeedback)
-{
     // query the reserved resource for its tile properties
     // allocate data structure according to tile properties
     D3D12_TILE_SHAPE tileShape{}; // e.g. a 64K tile may contain 128x128 texels @ 4B/pixel

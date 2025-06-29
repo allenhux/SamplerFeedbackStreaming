@@ -14,8 +14,11 @@ Thread to interpret sampler feedback and generate tile loads/evictions
 #include <thread>
 #include <set>
 #include <atomic>
+#include "Streaming.h"
 #include "SynchronizationUtils.h"
 #include "Timer.h"
+
+struct SFSResource;
 
 //=============================================================================
 // a thread to process feedback (when available) and queue tile loads / evictions to datauploader
@@ -26,7 +29,7 @@ namespace SFS
     class ResourceBase;
     class DataUploader;
 
-    class GroupRemoveResources : public std::set<ResourceBase*>, public Lock
+    class GroupRemoveResources : public LockedContainer<std::set<ResourceBase*>>
     {
     public:
         enum Client : UINT32
@@ -38,6 +41,10 @@ namespace SFS
         UINT32 GetFlags() const { return m_flags; }
         void ClearFlag(Client c) { m_flags &= ~c; }
         void SetFlag(Client c) { m_flags |= c; }
+
+        // the lock is between app/main thread and PFT/Residency threads
+        // PFT and Residency maintain coherency via m_flags, and can safely bypass the lock
+        auto& BypassLockGetValues() { return m_values; }
     private:
         std::atomic<UINT32> m_flags;
     };
@@ -59,13 +66,12 @@ namespace SFS
         // IF successfully transferred, clears the vector
         void SharePendingResources(const std::set<ResourceBase*>& in_resources);
 
-        // attempts to indicate resources should be destroyed
-        // may not succeed if resources are already in the process of being deleted
-        // on success, in_resources will be cleared
-        void ShareDestroyResources(const std::set<ResourceBase*>& in_resources);
+        // indicate resources should be flushed
+        // in_resources will be cleared
+        void ShareFlushResources(const std::vector<SFSResource*>& in_resources, HANDLE in_event);
 
         // called by SFSManager for Residency thread constructor
-        GroupRemoveResources& GetRemoveResources() { return m_removeResources; }
+        GroupRemoveResources& GetFlushResources() { return m_flushResources; }
 
         UINT GetTotalNumSubmits() const { return m_numTotalSubmits; }
         UINT64 GetTotalProcessTime() const { return m_processFeedbackTime; }
@@ -89,18 +95,16 @@ namespace SFS
         // resources that need tiles loaded/evicted asap
         std::set<ResourceBase*> m_pendingResources;
 
-        std::vector<ResourceBase*> m_newResourcesStaging; // resources to be shared with ProcessFeedbackThread
-        Lock m_newResourcesLock;   // lock between ProcessFeedbackThread and main thread
+        // new resources to be shared with ProcessFeedbackThread
+        LockedContainer<std::vector<ResourceBase*>> m_newResourcesStaging;
 
-        std::set<ResourceBase*> m_pendingResourceStaging; // resources to be shared with ProcessFeedbackThread
-        Lock m_pendingLock;   // lock between ProcessFeedbackThread and main thread
-
-        std::vector<ResourceBase*> m_removeResourcesStaging; // resources to be deleted
-        Lock m_removeStagingLock;   // lock between ProcessFeedbackThread and main thread
+        // resources that have feedback queued
+        LockedContainer<std::set<ResourceBase*>> m_pendingResourceStaging;
 
         // Resources to delete. Verify other threads (Residency, DataUploader) aren't using them first.
         // this is shared with ResidencyThread
-        GroupRemoveResources m_removeResources;
+        GroupRemoveResources m_flushResources;
+        HANDLE m_flushResourcesEvent{ nullptr };
 
         // sleep until this is set:
         SFS::SynchronizationFlag m_processFeedbackFlag;

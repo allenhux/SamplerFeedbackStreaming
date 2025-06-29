@@ -51,7 +51,7 @@ SFS::ResourceBase::ResourceBase(
     // with m_maxMip and m_minMipMap, SFSManager will be able allocate/init the shared residency map
     m_minMipMap.assign(GetMinMipMapSize(), m_maxMip);
 
-    m_resources.CreateTiledResource(m_pSFSManager->GetDevice(), m_resourceDesc);
+    m_resources.Initialize(m_pSFSManager->GetDevice(), m_resourceDesc, QUEUED_FEEDBACK_FRAMES);
 
     m_tileMappingState.Init(m_resourceDesc.m_standardMipInfo);
 
@@ -59,9 +59,6 @@ SFS::ResourceBase::ResourceBase(
     // m_tileReferences tracks what tiles we want to have
     // m_minMipMap represents the tiles we actually have, and is read directly by pixel shaders
     m_tileReferences.assign(GetMinMipMapSize(), m_maxMip);
-
-
-    m_resources.Initialize(m_pSFSManager->GetDevice(), QUEUED_FEEDBACK_FRAMES);
 
     m_pFileHandle.reset(m_pSFSManager->OpenFile(m_filename));
 }
@@ -72,6 +69,8 @@ SFS::ResourceBase::ResourceBase(
 //-----------------------------------------------------------------------------
 SFS::ResourceBase::~ResourceBase()
 {
+    m_pSFSManager->Remove(this);
+
     // remove tile allocations from the heap
     m_tileMappingState.FreeHeapAllocations(m_pHeap);
 
@@ -842,21 +841,6 @@ bool SFS::ResourceBase::InitPackedMips()
         pUpdateList->m_heapIndices = m_packedMipHeapIndices;
         m_pSFSManager->SubmitUpdateList(*pUpdateList);
 
-        return true;
-    }
-
-    return false;
-}
-
-//-----------------------------------------------------------------------------
-// FIXME? could handle packed mips completely separate
-// NOTE: this query will only return true one time
-//-----------------------------------------------------------------------------
-bool SFS::ResourceBase::GetPackedMipsNeedTransition()
-{
-    if (PackedMipStatus::NEEDS_TRANSITION == m_packedMipStatus)
-    {
-        m_packedMipStatus = PackedMipStatus::RESIDENT;
         return true;
     }
 

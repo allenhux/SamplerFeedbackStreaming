@@ -34,7 +34,7 @@ SFS::ResidencyThread::ResidencyThread(ManagerRT* in_pSFSManager, GroupRemoveReso
     int in_threadPriority) :
     m_pSFSManager(in_pSFSManager)
     , m_threadPriority(in_threadPriority)
-    , m_removeResources(in_grr)
+    , m_flushResources(in_grr)
 {}
 
 //-----------------------------------------------------------------------------
@@ -50,37 +50,26 @@ void SFS::ResidencyThread::Start()
             {
                 m_residencyChangedFlag.Wait();
 
-                // add new resources?
-                if (m_newResourcesStaging.size() && m_newResourcesLock.TryAcquire())
+                // flush resources?
+                if (GroupRemoveResources::Client::Residency & m_flushResources.GetFlags())
                 {
-                    std::vector<ResourceBase*> newResources;
-                    newResources.swap(m_newResourcesStaging);
-                    m_newResourcesLock.Release();
-
-                    m_streamingResources.insert(m_streamingResources.end(), newResources.begin(), newResources.end());
-                }
-
-                // remove resources?
-                if (GroupRemoveResources::Client::Residency & m_removeResources.GetFlags())
-                {
-                    m_removeResources.Acquire();
                     // number of resources likely > # to be removed
-                    std::set<ResourceBase*> tmp = m_removeResources;
-                    m_removeResources.Release();
-                    m_removeResources.ClearFlag(GroupRemoveResources::Client::Residency);
-                    ContainerRemove(m_streamingResources, tmp);
+                    ContainerRemove(m_resources.Acquire(), m_flushResources.BypassLockGetValues());
+                    m_resources.Release();
+                    m_flushResources.ClearFlag(GroupRemoveResources::Client::Residency);
                 }
 
                 std::vector<ResourceBase*> updated;
-                updated.reserve(m_streamingResources.size());
-                // FIXME: would like to focus on a subset that is likely to change
-                for (auto p : m_streamingResources)
+                updated.reserve(m_resources.size());
+                for (auto p : m_resources.Acquire())
                 {
                     if (p->UpdateMinMipMap())
                     {
                         updated.push_back(p);
                     }
                 }
+                m_resources.Release();
+
                 if (updated.size())
                 {
                     // only blocks if resource buffer is being re-allocated (effectively never)
@@ -111,14 +100,19 @@ void SFS::ResidencyThread::Stop()
 //-----------------------------------------------------------------------------
 // SFSManager acquires staging area and adds new resources
 //-----------------------------------------------------------------------------
-void SFS::ResidencyThread::ShareNewResourcesRT(const std::vector<ResourceBase*>& in_resources)
+void SFS::ResidencyThread::SharePendingResourcesRT(const std::set<ResourceBase*>& in_resources)
 {
-    if (m_newResourcesLock.TryAcquire())
+    std::vector<ResourceBase*> n;
+    n.insert(n.begin(), in_resources.begin(), in_resources.end());
+
+    auto& v = m_resources.Acquire();
+    for (auto r : v)
     {
-        m_newResourcesStaging.insert(m_newResourcesStaging.end(), in_resources.begin(), in_resources.end());
-#ifdef _DEBUG
-        for (auto p : m_newResourcesStaging) { ASSERT(p->GetInitialized()); }
-#endif
-        m_newResourcesLock.Release();
+        if ((!in_resources.contains(r)) && (r->HasInFlightUpdates()))
+        {
+            n.push_back(r);
+        }
     }
+    v.swap(n);
+    m_resources.Release();
 }

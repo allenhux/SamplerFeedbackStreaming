@@ -265,6 +265,7 @@ SFS::UpdateList* SFS::DataUploader::AllocateUpdateList(SFS::ResourceDU* in_pStre
         ASSERT(UpdateList::State::STATE_FREE == pUpdateList->m_executionState);
 
         pUpdateList->Reset(in_pStreamingResource);
+        in_pStreamingResource->AddUpdateList(); // increment resource's count of in-flight updatelists
         pUpdateList->m_executionState = UpdateList::State::STATE_ALLOCATED;
     }
 

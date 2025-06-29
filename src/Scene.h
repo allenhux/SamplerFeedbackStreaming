@@ -244,6 +244,7 @@ private:
     };
     std::atomic<LoadingThread> m_loadingThreadState{ Idle };
     void LoadObjectThread(UINT in_numObjects, UINT in_index); // async object creation
+    void DeleteObjectThread(std::vector<class SceneObjects::BaseObject*> in_objects, UINT64 in_waitFenceValue);
 
     // each frame, update objects until timeout reached
     UINT m_queueFeedbackIndex{ 0 }; // index based on number of gpu feedback resolves per frame

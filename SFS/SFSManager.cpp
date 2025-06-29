@@ -131,6 +131,27 @@ SFSResource* SFS::Manager::CreateResource(const struct SFSResourceDesc& in_desc,
 }
 
 //-----------------------------------------------------------------------------
+// resources begin to be flushed in BeginFrame()
+//-----------------------------------------------------------------------------
+void SFS::Manager::FlushResources(const std::vector<SFSResource*>& in_resources, HANDLE in_event)
+{
+    ASSERT(in_event);
+    ASSERT(in_resources.size());
+
+    // flush from SFSManager internal structures
+    auto& v = m_flushResources.Acquire();
+    ASSERT(0 == v.size());
+    for (auto r : in_resources)
+    {
+        v.insert((ResourceBase*)r);
+    }
+    m_flushResources.Release();
+
+    // flush from internal threads
+    m_processFeedbackThread.ShareFlushResources(in_resources, in_event);
+}
+
+//-----------------------------------------------------------------------------
 // set which file streaming system to use
 // will reset even if previous setting was the same. so?
 //-----------------------------------------------------------------------------
@@ -197,11 +218,6 @@ void SFS::Manager::BeginFrame()
 {
     ASSERT(!GetWithinFrame());
     m_withinFrame = true;
-
-    // delete resources that have been requested via SFSResource::Destroy()
-    RemoveResources();
-    // delete heaps that have been requested via SFSHeap::Destroy() and are no longer in use
-    RemoveHeaps();
 
     // the frame fence is used to determine when to read feedback:
     // read back the feedback after the frame that writes to it has completed
@@ -286,6 +302,12 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
         m_oldSharedClearUavHeaps[i] = nullptr;
     }
 
+    // stop tracking resources that have been Destroy()ed
+    // must remove resources before calling AllocateSharedResidencyMap()
+    RemoveResources();
+    // delete heaps that have been requested via SFSHeap::Destroy() and are no longer in use
+    RemoveHeaps();
+
     // if new StreamingResources have been created...
     if (m_newResources.size())
     {
@@ -303,6 +325,9 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
         m_processFeedbackThread.ShareNewResources(newResources);
     }
 
+    // handle FlushResources(). note occurs after PFT::ShareNewResources
+    FlushResourcesInternal();
+
     // create a view for shared minmipmap, used by the application's pixel shaders
     CreateMinMipMapView(out_minmipmapDescriptorHandle);
 
@@ -314,6 +339,7 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
             auto p = m_packedMipTransitionResources[i];
             if (p->GetPackedMipsNeedTransition())
             {
+                p->SetPackedMipsTransitioned();
                 D3D12_RESOURCE_BARRIER b = CD3DX12_RESOURCE_BARRIER::Transition(
                     p->GetTiledResource(),
                     D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);

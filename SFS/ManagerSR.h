@@ -39,8 +39,8 @@ namespace SFS
         // stop tracking this SFSResource. Called by its destructor
         void Remove(ResourceBase* in_pResource)
         {
-            ASSERT(!GetWithinFrame());
-            m_removeResources.insert(in_pResource);
+            m_removeResources.Acquire().insert(in_pResource);
+            m_removeResources.Release();
         }
 
         UploadBuffer& GetResidencyMap() { return m_residencyMap; }

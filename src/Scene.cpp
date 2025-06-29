@@ -241,6 +241,8 @@ Scene::~Scene()
         m_loadObjectThread.join();
     }
 
+    // NOTE: being lazy here and not calling SFSManager::FlushResources() or SFSResource::Destroy()
+    //       because SFSManager->Destroy() will clean up for us
     for (auto o : m_objects)
     {
         delete o;
@@ -506,7 +508,7 @@ void Scene::CreateFence()
     m_renderFenceEvent = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
     if (m_renderFenceEvent == nullptr)
     {
-        ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
+        ThrowIfFailed(GetLastError());
     }
 }
 
@@ -1075,6 +1077,59 @@ void Scene::LoadObjectThread(UINT in_numObjects, UINT in_index)
 }
 
 //-----------------------------------------------------------------------------
+// async object destruction with thread-safe SFSResource::Destroy()
+//-----------------------------------------------------------------------------
+void Scene::DeleteObjectThread(std::vector<class SceneObjects::BaseObject*> in_objects, UINT64 in_waitFenceValue)
+{
+    std::vector<SFSResource*> v;
+    v.reserve(in_objects.size());
+    for (auto o : in_objects)
+    {
+        v.push_back(o->GetStreamingResource());
+    }
+
+    // wait for frame to reach future value
+    // "If hEvent is a null handle, then this API will not return until the specified fence value(s) have been reached."
+    ThrowIfFailed(m_renderFence->SetEventOnCompletion(in_waitFenceValue, NULL));
+
+    HANDLE event = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (nullptr == event)
+    {
+        ThrowIfFailed(GetLastError());
+    }
+    m_pSFSManager->FlushResources(v, event);
+
+    // gpu is not using these objects, can delete them...
+    for (auto o : in_objects)
+    {
+        if (m_pTerrain == o)
+        {
+            DeleteTerrainViewers();
+            m_pTerrain = nullptr;
+        }
+
+        if (m_pSky == o)
+        {
+            m_pSky = nullptr;
+        }
+
+        // safe to delete object BECAUSE object destructors do NOT destroy SFS resources
+        delete o;
+    }
+
+    WaitForSingleObject(event, INFINITE);
+    CloseHandle(event);
+
+    // now safe to destroy SFS resources
+    for (auto r : v)
+    {
+        r->Destroy();
+    }
+
+    m_loadingThreadState = LoadingThread::Done;
+}
+
+//-----------------------------------------------------------------------------
 // progressively over multiple frames, if there are many
 //-----------------------------------------------------------------------------
 void Scene::LoadSpheres()
@@ -1112,29 +1167,18 @@ void Scene::LoadSpheres()
         UINT index = (UINT)m_objects.size();
         m_objects.resize(m_objects.size() + numToLoad, nullptr);
         m_loadingThreadState = LoadingThread::Running;
-        m_loadObjectThread = std::thread([=, this] { this->LoadObjectThread(numToLoad, index); });
+        m_loadObjectThread = std::thread(&Scene::LoadObjectThread, this, numToLoad, index);
     } // end if adding objects
     else if (m_objects.size() > (UINT)m_args.m_numSpheres) // else evict objects
     {
-        WaitForGpu();
-        while (m_objects.size() > (UINT)m_args.m_numSpheres)
-        {
-            SceneObjects::BaseObject* pObject = m_objects.back();
-
-            if (m_pTerrain == pObject)
-            {
-                DeleteTerrainViewers();
-                m_pTerrain = nullptr;
-            }
-
-            if (m_pSky == pObject)
-            {
-                m_pSky = nullptr;
-            }
-
-            delete pObject;
-            m_objects.resize(m_objects.size() - 1);
-        }
+        UINT numToDelete = (UINT)m_objects.size() - (UINT)m_args.m_numSpheres;
+        std::vector<class SceneObjects::BaseObject*> deleteObjects;
+        // put objects to be deleted into an array
+        deleteObjects.insert(deleteObjects.begin(), m_objects.begin() + m_objects.size() - numToDelete, m_objects.end());
+        // remove objects from the scenegraph (so they won't be drawn again)
+        m_objects.resize(m_objects.size() - numToDelete);
+        m_loadingThreadState = LoadingThread::Running;
+        m_loadObjectThread = std::thread(&Scene::DeleteObjectThread, this, std::move(deleteObjects), m_renderFenceValue + m_swapBufferCount);
     }
 }
 

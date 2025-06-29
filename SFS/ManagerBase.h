@@ -82,20 +82,16 @@ namespace SFS
         Lock m_residencyMapLock;
 
         // list of newly created resources
-        template<typename T> class LockedContainer
-        {
-        public:
-            auto& Acquire() { m_lock.Acquire(); return m_values; }
-            void Release() { m_lock.Release(); }
-            size_t size() { return  m_values.size(); }
-        private:
-            Lock m_lock;
-            std::vector<T> m_values;
-        };
-        LockedContainer<ResourceBase*> m_newResources;
+        LockedContainer<std::vector<ResourceBase*>> m_newResources;
 
-        std::set<ResourceBase*> m_removeResources; // resources that are to be removed (deleted)
-        std::set<ResourceBase*> m_pendingResources; // resources where feedback or eviction requested
+        // resources that are being flushed
+        LockedContainer<std::set<ResourceBase*>> m_flushResources;
+
+        // resources that have been Destroy()ed
+        LockedContainer<std::set<ResourceBase*>> m_removeResources;
+
+        // resources where feedback or eviction requested
+        std::set<ResourceBase*> m_pendingResources;
 
         // a thread to update residency maps based on feedback
         ResidencyThread m_residencyThread;
@@ -161,6 +157,8 @@ namespace SFS
         // after packed mips have arrived for new resources, transition them from copy_dest
         std::vector<ResourceBase*> m_packedMipTransitionResources;
 
+        // handle FlushResources()
+        void FlushResourcesInternal();
         // delete resources that have been requested via Remove()
         void RemoveResources();
         // delete heaps that have been requested via Destroy()

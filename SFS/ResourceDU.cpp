@@ -66,6 +66,7 @@ void SFS::ResourceDU::NotifyCopyComplete(const std::vector<D3D12_TILED_RESOURCE_
     }
 
     SetResidencyChanged();
+    m_numUpdateLists--; // increment resource's count of in-flight updatelists
 }
 #if 0
 // NOTE: dead code. currently not un-mapping tiles
@@ -83,6 +84,7 @@ void SFS::ResourceDU::NotifyEvicted(const std::vector<D3D12_TILED_RESOURCE_COORD
     }
 
     SetResidencyChanged();
+    m_numUpdateLists--; // increment resource's count of in-flight updatelists
 }
 #endif
 //-----------------------------------------------------------------------------
@@ -91,4 +93,5 @@ void SFS::ResourceDU::NotifyEvicted(const std::vector<D3D12_TILED_RESOURCE_COORD
 void SFS::ResourceDU::NotifyPackedMips()
 {
     m_packedMipStatus = PackedMipStatus::NEEDS_TRANSITION;
+    m_numUpdateLists--; // increment resource's count of in-flight updatelists
 }

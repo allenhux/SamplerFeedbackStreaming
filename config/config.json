@@ -43,7 +43,7 @@
   "adapter": "", // create device on adapter with description containig substring ignoring case e.g. "intel"
   "arch": 0, // create device with specified architecture {0, 1, 2} {default, discrete, integrated} 
 
-  "animationRate": 0.1f, // rotation of individual objects
+  "animationRate": 0.1, // rotation of individual objects
   "cameraRate": 0, // camera motion rate
   "rollerCoaster": false, // fly through, vs. orbiting, planets
 

@@ -78,7 +78,8 @@ namespace SceneObjects
 
         virtual ~BaseObject()
         {
-            m_pStreamingResource->Destroy();
+            // since we need to SFSManager::FlushResources() first, better to explicitly destroy them outside the destructor
+            // m_pStreamingResource->Destroy();
         }
 
         // state re-used by a number of objects

@@ -18,11 +18,9 @@ namespace SFS
     public:
         InternalResources();
 
-        void CreateTiledResource(ID3D12Device8* in_pDevice, const SFSResourceDesc& in_resourceDesc);
-
         // finish some initialization until when the packed mips arrive
         // need the swap chain count so we can create per-frame readback buffers
-        void Initialize(ID3D12Device8* in_pDevice, UINT in_numQueuedFeedback);
+        void Initialize(ID3D12Device8* in_pDevice, const SFSResourceDesc& in_resourceDesc, UINT in_numQueuedFeedback);
 
         ID3D12Resource* GetTiledResource() const { return m_tiledResource.Get(); }
 

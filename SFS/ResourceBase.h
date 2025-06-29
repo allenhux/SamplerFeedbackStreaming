@@ -69,9 +69,10 @@ namespace SFS
         // note: that is, called once per frame
         //-------------------------------------
 
-        // returns true if packed mips are loaded
-        // NOTE: this query will only return true one time
-        bool GetPackedMipsNeedTransition();
+        // returns true if packed mips need transition
+        bool GetPackedMipsNeedTransition() { return (PackedMipStatus::NEEDS_TRANSITION == m_packedMipStatus); }
+        // call after resource has been transitioned to D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE
+        void SetPackedMipsTransitioned() { m_packedMipStatus = PackedMipStatus::RESIDENT; }
 
         // the following are called only if the application made a feedback request for the object:
 
@@ -144,6 +145,9 @@ namespace SFS
         // called by SFSM::SetVisualizationMode()
         void ClearAllocations();
 
+        // Residency Thread needs to update or may need to update soon
+        bool HasInFlightUpdates() const { return m_tileResidencyChanged || (0 != m_numUpdateLists); }
+
     protected:
         const SFSResourceDesc m_resourceDesc;
         std::wstring m_filename; // only used so we can dynamically change file streamer type :/
@@ -174,6 +178,8 @@ namespace SFS
         // exchanged by UpdateMinMip()
         // set by ProcessFeedback()
         std::atomic<bool> m_tileResidencyChanged{ false };
+
+        std::atomic<UINT> m_numUpdateLists{ 0 };
 
         SFS::InternalResources m_resources;
         std::unique_ptr<SFS::FileHandle> m_pFileHandle;
@@ -292,21 +298,13 @@ namespace SFS
             bool HasDelayedWork() const
             {
                 ASSERT(m_mappings.size());
-#if 1
-                auto end = m_mappings.end()--;
+
+                auto end = std::prev(m_mappings.end());
                 for (auto i = m_mappings.begin(); i != end; i++)
                 {
                     if (i->size()) { return true; }
                 }
-#else
-                UINT sz = (UINT)m_mappings.size() - 1;
-                for (auto& e : m_mappings)
-                {
-                    if (e.size()) { return true; }
-                    sz--;
-                    if (0 == sz) { break; }
-                }
-#endif
+
                 return false;
             }
         private:

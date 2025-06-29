@@ -22,9 +22,9 @@ namespace SFS
 
         void WakeResidencyThread() { m_residencyThread.Wake(); }
 
-        void ShareNewResourcesRT(const std::vector<ResourceBase*>& in_resources)
+        void SharePendingResourcesRT(const std::set<ResourceBase*>& in_resources)
         {
-            m_residencyThread.ShareNewResourcesRT(in_resources);
+            m_residencyThread.SharePendingResourcesRT(in_resources);
         }
     };
 }
@@ -45,15 +45,11 @@ SFS::ProcessFeedbackThread::ProcessFeedbackThread(ManagerPFT* in_pSFSManager,
 SFS::ProcessFeedbackThread::~ProcessFeedbackThread()
 {
     // delete resources that were in the progress of deletion when the thread was stopped
-    for (auto p : m_removeResources)
+    for (auto p : m_flushResources.Acquire())
     {
         delete p;
     }
-
-    for (auto p : m_removeResourcesStaging)
-    {
-        delete p;
-    }
+    m_flushResources.Release();
 }
 
 //-----------------------------------------------------------------------------
@@ -95,24 +91,23 @@ void SFS::ProcessFeedbackThread::Start()
                 // only look for new or to-delete resources once per frame
                 if (newFrame)
                 {
-                    // check for new resources
-                    if (m_newResourcesStaging.size() && m_newResourcesLock.TryAcquire())
+                    // check for new resources, which probably need to load pack mips
+                    if (m_newResourcesStaging.size())
                     {
                         // grab them and release the lock quickly
                         std::vector<ResourceBase*> tmpResources;
-                        tmpResources.swap(m_newResourcesStaging);
-                        m_newResourcesLock.Release();
-
+                        m_newResourcesStaging.swap(tmpResources);
+                        // accumulate because maybe hasn't been emptied from last time
                         m_newResources.insert(m_newResources.end(), tmpResources.begin(), tmpResources.end());
                     }
 
                     // check for resources where the application has called QueueFeedback() or QueueEviction()
-                    if (m_pendingResourceStaging.size() && m_pendingLock.TryAcquire())
+                    if (m_pendingResourceStaging.size())
                     {
                         // grab them and release the lock quickly
                         std::set<ResourceBase*> tmpResources;
-                        tmpResources.swap(m_pendingResourceStaging);
-                        m_pendingLock.Release();
+                        m_pendingResourceStaging.swap(tmpResources);
+                        // accumulate because maybe hasn't been emptied from last time
                         m_activeResources.insert(tmpResources.begin(), tmpResources.end());
                     }
 
@@ -121,18 +116,6 @@ void SFS::ProcessFeedbackThread::Start()
                     //       as m_newResources may contain resources that have not been
                     //       propagated to residency thread
                     CheckRemoveResources();
-
-                    // propagate new resources to residency thread only after they have packed mips in-flight
-                    // note these are new resources that completed initialization last frame
-                    // note only propagating once per frame
-                    if (m_residencyShareNewResources.size())
-                    {
-#ifdef _DEBUG
-                        for (auto p : m_residencyShareNewResources) { ASSERT(p->GetInitialized()); }
-#endif
-                        m_pSFSManager->ShareNewResourcesRT(m_residencyShareNewResources);
-                        m_residencyShareNewResources.clear();
-                    }
                 }
 
                 // prioritize loading packed mips, as objects shouldn't be displayed until packed mips load                
@@ -192,6 +175,9 @@ void SFS::ProcessFeedbackThread::Start()
                             i = m_activeResources.erase(i);
                         }
                     } // end loop over active resources
+
+                    // share updated pending resource set with ResidencyThread
+                    m_pSFSManager->SharePendingResourcesRT(m_pendingResources);
                 } // end if new frame
 
                 // push uploads and evictions for stale resources
@@ -285,9 +271,9 @@ void SFS::ProcessFeedbackThread::Stop()
 //-----------------------------------------------------------------------------
 void SFS::ProcessFeedbackThread::ShareNewResources(const std::vector<ResourceBase*>& in_resources)
 {
-    m_newResourcesLock.Acquire();
-    m_newResourcesStaging.insert(m_newResourcesStaging.end(), in_resources.begin(), in_resources.end());
-    m_newResourcesLock.Release();
+    auto& v = m_newResourcesStaging.Acquire();
+    v.insert(v.end(), in_resources.begin(), in_resources.end());
+    m_newResourcesStaging.Release();
 }
 
 //-----------------------------------------------------------------------------
@@ -295,31 +281,37 @@ void SFS::ProcessFeedbackThread::ShareNewResources(const std::vector<ResourceBas
 //-----------------------------------------------------------------------------
 void SFS::ProcessFeedbackThread::SharePendingResources(const std::set<ResourceBase*>& in_resources)
 {
-    if (m_pendingLock.TryAcquire())
-    {
-        m_pendingResourceStaging.insert(in_resources.begin(), in_resources.end());
-        m_pendingLock.Release();
-    }
+    auto& v = m_pendingResourceStaging.Acquire();
+    v.insert(in_resources.begin(), in_resources.end());
+    m_pendingResourceStaging.Release();
 }
 
 //-----------------------------------------------------------------------------
 // called by SFSManager on the main thread
-// shares the list of resources to remove with processfeedback thread
+// shares the list of resources to flush with processfeedback thread
 //-----------------------------------------------------------------------------
-void SFS::ProcessFeedbackThread::ShareDestroyResources(const std::set<ResourceBase*>& in_resources)
+void SFS::ProcessFeedbackThread::ShareFlushResources(const std::vector<SFSResource*>& in_resources, HANDLE in_event)
 {
-    ASSERT(0 != in_resources.size());
+    // should not ever be possible for only the one bit to be set:
+    ASSERT(GroupRemoveResources::Client::Residency != m_flushResources.GetFlags());
 
-    // should not be possible for only the one bit to be set:
-    ASSERT(GroupRemoveResources::Client::Residency != m_removeResources.GetFlags());
+    // add resources to flush to staging
+    // WARNING: will block if another flush is in progress
+    std::set<ResourceBase*> v;
+    for (auto r : in_resources)
+    {
+        v.insert((ResourceBase*)r);
+    }
+    m_flushResources.swap(v); // updates size attribute
+    ASSERT(0 == v.size());
 
-    // add resources to remove to staging
-    m_removeStagingLock.Acquire();
-    m_removeResourcesStaging.insert(m_removeResourcesStaging.end(), in_resources.begin(), in_resources.end());
-    m_removeStagingLock.Release();
-    m_removeResources.SetFlag(GroupRemoveResources::Client::Initialize);
+    // do not release until flush is complete
+    m_flushResources.Acquire();
 
-    Wake();
+    ASSERT(nullptr == m_flushResourcesEvent);
+
+    m_flushResourcesEvent = in_event;
+    m_flushResources.SetFlag(GroupRemoveResources::Client::Initialize);
 }
 
 //-----------------------------------------------------------------------------
@@ -333,118 +325,71 @@ void SFS::ProcessFeedbackThread::ShareDestroyResources(const std::set<ResourceBa
 //-----------------------------------------------------------------------------
 void SFS::ProcessFeedbackThread::CheckRemoveResources()
 {
-    UINT flags = m_removeResources.GetFlags();
+    UINT flags = m_flushResources.GetFlags();
     if (0 == flags)
     {
-        ASSERT(0 == m_removeResources.size());
+        // race: possible size changes after reading flags! ASSERT(0 == m_flushResources.size());
         return;
     }
 
     if (GroupRemoveResources::Client::Initialize & flags)
     {
-        ASSERT(m_removeResourcesStaging.size());
+        ASSERT(GroupRemoveResources::Client::Initialize == flags);
+        ASSERT(m_flushResources.size());
 
-        // move the staged changes local
-        std::vector<ResourceBase*> tmp;
-        m_removeStagingLock.Acquire();
-        m_removeResourcesStaging.swap(tmp);
-        m_removeResources.ClearFlag(GroupRemoveResources::Client::Initialize);
-        m_removeStagingLock.Release();
-        ASSERT(tmp.size());
-
-        // 3 possibilities at this point:
-        // flags = 0, flags = pft, flags = pft | res
-        // technically init could be set again, meaning more work is in staging, but don't worry about it
-
-        // form what will be the future m_removeResources
-        std::set<ResourceBase*> tmpSet = m_removeResources;
-        tmpSet.insert(tmp.begin(), tmp.end());
+        m_flushResources.ClearFlag(GroupRemoveResources::Client::Initialize);
 
         // remove from my vectors
-        ContainerRemove(m_residencyShareNewResources, tmpSet);
-        ContainerRemove(m_activeResources, tmpSet);
-        ContainerRemove(m_pendingResources, tmpSet);
+        ContainerRemove(m_activeResources, m_flushResources.BypassLockGetValues());
+        ContainerRemove(m_pendingResources, m_flushResources.BypassLockGetValues());
 
-        // if new resources haven't got packed mips yet, then residency won't know about them
-        // therefore, they are safe to delete
-        UINT num = (UINT)m_newResources.size();
-        for (UINT i = 0; i < num;)
-        {
-            auto pResource = m_newResources[i];
-            // NOTE: this method is called before InitPackedMips
-            // there may be previously created resources that have not had packed mips scheduled
-            // all those resources are safe to delete, because no other internal threads are using them
-            auto t = tmpSet.find(pResource);
-            if (t != tmpSet.end())
-            {
-                ASSERT(!pResource->GetInitialized());
-                // if found: delete resource, remove from both new set and new resource
-                delete pResource;
-                tmpSet.erase(t);
-                num--;
-                m_newResources[i] = m_newResources[num];
-            }
-            else
-            {
-                i++;
-            }
-        }
-        m_newResources.resize(num);
+        // tell residency thread there's work to do
+        m_flushResources.SetFlag(GroupRemoveResources::Client::Residency);
+        // wake up residency thread (which may already be awake)
+        m_pSFSManager->WakeResidencyThread();
 
-        m_removeResources.Acquire();
-        m_removeResources.swap(tmpSet);
-        m_removeResources.Release();
-
-        // tell residency thread if there's work to do. wait for it.
-        if (m_removeResources.size())
-        {
-            m_removeResources.SetFlag(GroupRemoveResources::Client::Residency);
-            // wake up residency thread (which may already be awake)
-            m_pSFSManager->WakeResidencyThread();
-            m_removeResources.SetFlag(GroupRemoveResources::Client::ProcessFeedback);
-            Wake(); // prevent self from going to sleep right away
-        }
-        else
-        {
-            // no other work required to remove resources
-            m_removeResources.ClearFlag(GroupRemoveResources::Client::ProcessFeedback);
-        }
+        // wait for residency thread to verify flushed
+        m_flushResources.SetFlag(GroupRemoveResources::Client::ProcessFeedback);
+        Wake(); // prevent self from going to sleep right away
     }
 
     // after the residency thread has removed resources,
     // identify any resources that have pending work in DataUploader
-    // then delete them as they become available
-    if (GroupRemoveResources::Client::ProcessFeedback == m_removeResources.GetFlags())
+    // when done, set the event and release the lock
+    if (GroupRemoveResources::Client::ProcessFeedback == m_flushResources.GetFlags())
     {
         std::set<ResourceBase*> remaining;
         auto& updateLists = m_dataUploader.GetUpdateLists();
-        for (auto& u : updateLists)
+
+        for (auto r : m_newResources)
         {
-            if (UpdateList::State::STATE_FREE != u.m_executionState)
+            if (m_flushResources.BypassLockGetValues().contains(r))
             {
-                auto i = m_removeResources.find((ResourceBase*)u.m_pResource);
-                if (i != m_removeResources.end())
-                {
-                    // found a resource with in-flight activity
-                    remaining.insert((ResourceBase*)u.m_pResource);
-                    m_removeResources.erase(i);
-                }
+                remaining.insert(r);
             }
         }
 
-        // m_removeResources contains the resources to delete that don't have in-flight work
-        for (auto p : m_removeResources)
+        for (auto& u : updateLists)
         {
-            delete p;
+            if ((UpdateList::State::STATE_FREE != u.m_executionState) &&
+                (m_flushResources.BypassLockGetValues().contains((ResourceBase*)u.m_pResource)))
+            {
+                remaining.insert((ResourceBase*)u.m_pResource);
+            }
         }
 
         // set removeResources to just the in-flight resources
-        m_removeResources.swap(remaining);
+        m_flushResources.BypassLockGetValues().swap(remaining);
 
         // nothing left to do, so this thread can return to normal
-        if (0 == m_removeResources.size())
+        if (0 == remaining.size())
         {
-            m_removeResources.ClearFlag(GroupRemoveResources::Client::ProcessFeedback);
+            m_flushResources.ClearFlag(GroupRemoveResources::Client::ProcessFeedback);
+            ASSERT(m_flushResourcesEvent);
+            ::SetEvent(m_flushResourcesEvent);
+            m_flushResourcesEvent = nullptr;
+
+            m_flushResources.Release();
         }
         else
         {

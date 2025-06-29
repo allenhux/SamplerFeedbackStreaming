@@ -14,6 +14,7 @@
 #include <thread>
 #include <set>
 #include <atomic>
+#include "Streaming.h"
 #include "SynchronizationUtils.h"
 
 namespace SFS
@@ -32,24 +33,19 @@ namespace SFS
         void Wake() { m_residencyChangedFlag.Set(); }
 
         // blocking lock
-        void ShareNewResourcesRT(const std::vector<ResourceBase*>& in_resources);
+        void SharePendingResourcesRT(const std::set<ResourceBase*>& in_resources);
     private:
         ManagerRT* const m_pSFSManager;
         const int m_threadPriority;
 
         std::thread m_thread;
 
-        // working set of streaming resources
-        std::vector<ResourceBase*> m_streamingResources;
-
         std::atomic<bool> m_threadRunning{ false };
         SFS::SynchronizationFlag m_residencyChangedFlag;
 
-        // staging area for new resources
-        std::vector<ResourceBase*> m_newResourcesStaging;
-        // lock around staging area for new resources
-        Lock m_newResourcesLock;
+        // working set of streaming resources
+        LockedContainer<std::vector<ResourceBase*>> m_resources;
 
-        GroupRemoveResources& m_removeResources;
+        GroupRemoveResources& m_flushResources;
     };
 }
