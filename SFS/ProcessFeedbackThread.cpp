@@ -211,6 +211,10 @@ void SFS::ProcessFeedbackThread::Start()
                         }
                         else
                         {
+                            // NOTE: resource removed from pending, but may have updatelists depending on it or
+                            //       have a change in residency state. Residency thread will hold on to these
+                            //       resources, which were shared with it above, but may not be shared next frame
+
                             i = m_pendingResources.erase(i);
                         }
                     }

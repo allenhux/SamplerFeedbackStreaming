@@ -43,8 +43,10 @@ namespace SFS
         std::atomic<bool> m_threadRunning{ false };
         SFS::SynchronizationFlag m_residencyChangedFlag;
 
+        LockedContainer<std::set<ResourceBase*>> m_resourcesStaging;
+
         // working set of streaming resources
-        LockedContainer<std::vector<ResourceBase*>> m_resources;
+        std::vector<ResourceBase*> m_resources;
 
         GroupRemoveResources& m_flushResources;
     };

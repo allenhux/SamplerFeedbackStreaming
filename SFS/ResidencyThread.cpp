@@ -54,21 +54,37 @@ void SFS::ResidencyThread::Start()
                 if (GroupRemoveResources::Client::Residency & m_flushResources.GetFlags())
                 {
                     // number of resources likely > # to be removed
-                    ContainerRemove(m_resources.Acquire(), m_flushResources.BypassLockGetValues());
-                    m_resources.Release();
+                    ContainerRemove(m_resources, m_flushResources.BypassLockGetValues());
+
+                    if (m_resourcesStaging.size())
+                    {
+                        ContainerRemove(m_resourcesStaging.Acquire(), m_flushResources.BypassLockGetValues());
+                        m_resourcesStaging.Release();
+                    }
                     m_flushResources.ClearFlag(GroupRemoveResources::Client::Residency);
+                }
+
+                if (m_resourcesStaging.size())
+                {
+                    std::set<ResourceBase*> n;
+                    m_resourcesStaging.swap(n);
+
+                    std::erase_if(m_resources, [&](auto r)
+                        {
+                            return ((n.contains(r)) || (!r->HasInFlightUpdates()));
+                        });
+                    m_resources.insert(m_resources.begin(), n.begin(), n.end());
                 }
 
                 std::vector<ResourceBase*> updated;
                 updated.reserve(m_resources.size());
-                for (auto p : m_resources.Acquire())
+                for (auto p : m_resources)
                 {
                     if (p->UpdateMinMipMap())
                     {
                         updated.push_back(p);
                     }
                 }
-                m_resources.Release();
 
                 if (updated.size())
                 {
@@ -77,6 +93,7 @@ void SFS::ResidencyThread::Start()
                     for (auto p : updated) { p->WriteMinMipMap(pDest); }
                     m_pSFSManager->ResidencyMapRelease();
                 }
+                OutputDebugString(AutoString(m_resources.size(), " ", updated.size(), "\n").str().c_str());
             }
         });
     SFS::SetThreadPriority(m_thread, m_threadPriority);
@@ -98,21 +115,25 @@ void SFS::ResidencyThread::Stop()
 }
 
 //-----------------------------------------------------------------------------
-// SFSManager acquires staging area and adds new resources
+// PFT acquires staging area provides all resources that it is currently working on ("pending")
+// RT may have a slightly larger set including resources that have outstanding updatelists or a change in tile residency
 //-----------------------------------------------------------------------------
 void SFS::ResidencyThread::SharePendingResourcesRT(const std::set<ResourceBase*>& in_resources)
 {
-    std::vector<ResourceBase*> n;
-    n.insert(n.begin(), in_resources.begin(), in_resources.end());
+    // copy the incoming set of resources
+    std::set<ResourceBase*> n = in_resources;
 
-    auto& v = m_resources.Acquire();
+    // add the resources that still have work to do
+    auto& v = m_resourcesStaging.Acquire();
     for (auto r : v)
     {
         if ((!in_resources.contains(r)) && (r->HasInFlightUpdates()))
         {
-            n.push_back(r);
+            n.insert(r);
         }
     }
+
+    // replace the old set with the new
     v.swap(n);
-    m_resources.Release();
+    m_resourcesStaging.Release();
 }
