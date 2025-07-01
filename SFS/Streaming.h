@@ -63,16 +63,15 @@ namespace SFS
         constexpr AlignedAllocator() noexcept = default;
         constexpr AlignedAllocator(const AlignedAllocator&) noexcept = default;
         template<typename U>
-        constexpr AlignedAllocator(AlignedAllocator<U, ALIGNMENT> const&) noexcept
-        {}
+        constexpr AlignedAllocator(AlignedAllocator<U, ALIGNMENT> const&) noexcept {}
 
         using value_type = T;
 
         [[nodiscard]] T* allocate(std::size_t n)
         {
-            return reinterpret_cast<T*>(::operator new[](n * sizeof(T), m_alignment));
+            return reinterpret_cast<T*>(::operator new[](n * sizeof(T), (std::align_val_t)ALIGNMENT));
         }
-        void deallocate(T* p, [[maybe_unused]] std::size_t n) { ::operator delete[](p, m_alignment); }
+        void deallocate(T* p, [[maybe_unused]] std::size_t n) { ::operator delete[](p, (std::align_val_t)ALIGNMENT); }
 
         template<class OtherT>
         struct rebind
@@ -81,7 +80,6 @@ namespace SFS
         };
     private:
         static_assert(ALIGNMENT >= alignof(T), "alignment less than sizeof(type)");
-        static std::align_val_t constexpr m_alignment{ ALIGNMENT };
     };
 
     //==================================================
