@@ -78,17 +78,20 @@ void SFS::ProcessFeedbackThread::Start()
 
             while (m_threadRunning)
             {
+                bool flushPendingUploadRequests = false;
+
                 bool newFrame = false;
                 UINT64 frameFenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
+
+                // only look for new or to-delete resources once per frame
                 if (previousFrameFenceValue != frameFenceValue)
                 {
                     previousFrameFenceValue = frameFenceValue;
                     newFrame = true;
-                }
 
-                // only look for new or to-delete resources once per frame
-                if (newFrame)
-                {
+                    // flush any pending uploads from previous frame
+                    if (uploadsRequested) { flushPendingUploadRequests = true; }
+
                     // check for new resources, which probably need to load pack mips
                     if (m_newResourcesStaging.size())
                     {
@@ -106,7 +109,7 @@ void SFS::ProcessFeedbackThread::Start()
                         std::set<ResourceBase*> tmpResources;
                         m_pendingResourceStaging.swap(tmpResources);
                         // accumulate because maybe hasn't been emptied from last time
-                        m_activeResources.insert(tmpResources.begin(), tmpResources.end());
+                        m_delayedResources.insert(m_delayedResources.end(), tmpResources.begin(), tmpResources.end());
                     }
 
                     // compare active resources to resources that are to be removed
@@ -141,15 +144,10 @@ void SFS::ProcessFeedbackThread::Start()
                     m_newResources.resize(num);
                 }
 
-                bool flushPendingUploadRequests = false;
-
                 // Once per frame: process feedback buffers
                 if (newFrame)
                 {
-                    // flush any pending uploads from previous frame
-                    if (uploadsRequested) { flushPendingUploadRequests = true; }
-
-                    for (auto i = m_activeResources.begin(); i != m_activeResources.end();)
+                    for (auto i = m_delayedResources.begin(); i != m_delayedResources.end();)
                     {
                         auto pResource = *i;
 
@@ -169,7 +167,7 @@ void SFS::ProcessFeedbackThread::Start()
                         }
                         else
                         {
-                            i = m_activeResources.erase(i);
+                            i = m_delayedResources.erase(i);
                         }
                     } // end loop over active resources
 
@@ -294,7 +292,7 @@ void SFS::ProcessFeedbackThread::SharePendingResources(const std::set<ResourceBa
 void SFS::ProcessFeedbackThread::ShareFlushResources(const std::vector<SFSResource*>& in_resources, HANDLE in_event)
 {
     // should not ever be possible for only the one bit to be set:
-    ASSERT(GroupRemoveResources::Client::Residency != m_flushResources.GetFlags());
+    ASSERT(GroupRemoveResources::Client::ResidencyThread != m_flushResources.GetFlags());
 
     // add resources to flush to staging
     // WARNING: will block if another flush is in progress
@@ -324,12 +322,13 @@ void SFS::ProcessFeedbackThread::ShareFlushResources(const std::vector<SFSResour
 void SFS::ProcessFeedbackThread::CheckFlushResources()
 {
     UINT32 f = m_flushResources.GetFlags();
+
+    // should not see initialize combined with another bit
+    ASSERT(0 == (f & GroupRemoveResources::Client::Initialize));
+
     switch (f)
     {
     default:
-        // should not see initialize combined with another bit
-        ASSERT(0 == (f & GroupRemoveResources::Client::Initialize));
-        [[fallthrough]];
     case 0:
         // race: possible size changes after reading flags! ASSERT(0 == m_flushResources.size());
         return;
@@ -340,21 +339,21 @@ void SFS::ProcessFeedbackThread::CheckFlushResources()
         m_flushResources.ClearFlag(GroupRemoveResources::Client::Initialize);
 
         // remove from my vectors
-        ContainerRemove(m_activeResources, m_flushResources.BypassLockGetValues());
+        ContainerRemove(m_delayedResources, m_flushResources.BypassLockGetValues());
         ContainerRemove(m_pendingResources, m_flushResources.BypassLockGetValues());
 
         // tell residency thread there's work to do
-        m_flushResources.SetFlag(GroupRemoveResources::Client::Residency);
+        m_flushResources.SetFlag(GroupRemoveResources::Client::ResidencyThread);
         // wake up residency thread (which may already be awake)
         m_pSFSManager->WakeResidencyThread();
 
         // wait for residency thread to verify flushed
-        m_flushResources.SetFlag(GroupRemoveResources::Client::ProcessFeedback);
+        m_flushResources.SetFlag(GroupRemoveResources::Client::ProcessFeedbackThread);
         Wake(); // prevent self from going to sleep right away
 
         break;
 
-    case GroupRemoveResources::Client::ProcessFeedback:
+    case GroupRemoveResources::Client::ProcessFeedbackThread:
     {
         // after the residency thread has flushed resources,
         // identify any resources that have pending work in DataUploader
@@ -387,7 +386,7 @@ void SFS::ProcessFeedbackThread::CheckFlushResources()
         // resources have been flushed. clear flags and signal event.
         if (0 == remaining.size())
         {
-            m_flushResources.ClearFlag(GroupRemoveResources::Client::ProcessFeedback);
+            m_flushResources.ClearFlag(GroupRemoveResources::Client::ProcessFeedbackThread);
             ASSERT(m_flushResourcesEvent);
             ::SetEvent(m_flushResourcesEvent);
             m_flushResourcesEvent = nullptr;

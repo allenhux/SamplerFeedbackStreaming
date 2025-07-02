@@ -90,6 +90,7 @@ struct SFSResource
     //--------------------------------------------
     // number of tiles reserved (not necessarily committed) for this resource
     virtual UINT GetNumTilesVirtual() const = 0;
+    virtual UINT GetNumStandardMips() const = 0;
 };
 
 //=============================================================================

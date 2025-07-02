@@ -51,7 +51,7 @@ void SFS::ResidencyThread::Start()
                 m_residencyChangedFlag.Wait();
 
                 // flush resources?
-                if (GroupRemoveResources::Client::Residency & m_flushResources.GetFlags())
+                if (GroupRemoveResources::Client::ResidencyThread & m_flushResources.GetFlags())
                 {
                     // number of resources likely > # to be removed
                     ContainerRemove(m_resources, m_flushResources.BypassLockGetValues());
@@ -61,7 +61,7 @@ void SFS::ResidencyThread::Start()
                         ContainerRemove(m_resourcesStaging.Acquire(), m_flushResources.BypassLockGetValues());
                         m_resourcesStaging.Release();
                     }
-                    m_flushResources.ClearFlag(GroupRemoveResources::Client::Residency);
+                    m_flushResources.ClearFlag(GroupRemoveResources::Client::ResidencyThread);
                 }
 
                 if (m_resourcesStaging.size())

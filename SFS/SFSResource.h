@@ -44,6 +44,7 @@ namespace SFS
         //virtual ID3D12Resource* GetTiledResource() const override;
         virtual ID3D12Resource* GetMinMipMap() const override;
         virtual UINT GetNumTilesVirtual() const override;
+        virtual UINT GetNumStandardMips() const override;
     public:
         Resource(
             // method that will fill a tile-worth of bits, for streaming

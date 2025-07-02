@@ -1281,8 +1281,11 @@ void Scene::DrawObjects()
             m_numObjectsLoaded++;
 
             bool isVisible = o->IsVisible();
-            // FIXME: magic number. idea is, no need to stream texture data to tiny objects
-            bool isTiny = o->GetScreenAreaPixels() < 50;
+
+            // heuristic for when object screen area is so small as to not need streamed texture data
+            // NOTE: for non-square textures and non-squarish objects, might have to be smarter
+            // This provides a big fps boost. packed mips start at around 128x128, which is 16K screen pixels!
+            bool isTiny = o->GetScreenAreaPixels() < o->GetScreenAreaThreshold();
 
             // get sampler feedback for this object?
             bool queueFeedback = isVisible && (!isTiny)

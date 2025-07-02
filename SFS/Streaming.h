@@ -138,6 +138,6 @@ namespace SFS
     protected:
         Lock m_lock;
         T m_values;
-        size_t m_size{ 0 }; // maintained so lock not required
+        std::atomic<size_t> m_size{ 0 }; // maintained so lock not required
     };
 }

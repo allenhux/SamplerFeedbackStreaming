@@ -113,7 +113,7 @@ namespace SceneObjects
         void Spin(float in_radians); // spin this object around its desired axis
 
         SFSResource* GetStreamingResource() const { return m_pStreamingResource; }
-        void SetResource(SFSResource* in_pResource) { m_pStreamingResource = in_pResource; }
+        void SetResource(SFSResource* in_pResource);
 
         void SetFeedbackEnabled(bool in_value) { m_feedbackEnabled = in_value; }
 
@@ -122,6 +122,9 @@ namespace SceneObjects
         virtual float GetBoundingSphereRadius() { return m_radius; }
 
         float GetScreenAreaPixels() const { return m_screenAreaPixels; }
+
+        UINT GetScreenAreaThreshold() const { return m_screenAreaThreshold; }
+
         UINT GetLoD() const { return m_lod; }
         bool IsVisible() const { return m_visible; }
     protected:
@@ -159,6 +162,11 @@ namespace SceneObjects
 
         // cache bounding sphere radius
         float m_radius{ 0.0f };
+
+        // based on dimensions of the highest-resolution packed mip
+        // if the screen area is less than this, then the object won't need streamed textures
+        UINT m_screenAreaThreshold{ 100 };
+
         virtual bool ComputeVisible(
             [[maybe_unused]] float in_cotWdiv2, [[maybe_unused]] float in_cotHdiv2,
             [[maybe_unused]] const float in_zFar) { return true; }

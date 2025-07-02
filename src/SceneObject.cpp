@@ -337,6 +337,25 @@ float SceneObjects::BaseObject::ComputeScreenAreaPixels(UINT in_windowHeight, fl
     return areaPixels;
 }
 
+void SceneObjects::BaseObject::SetResource(SFSResource* in_pResource)
+{
+    m_pStreamingResource = in_pResource;
+
+    UINT firstPackedMip = m_pStreamingResource->GetNumStandardMips();
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT srcLayout;
+    ComPtr<ID3D12Device> device;
+    m_pStreamingResource->GetTiledResource()->GetDevice(IID_PPV_ARGS(&device));
+    auto desc = m_pStreamingResource->GetTiledResource()->GetDesc();
+
+    device->GetCopyableFootprints(&desc, firstPackedMip, 1, 0, &srcLayout, nullptr, nullptr, nullptr);
+
+    // heuristic for when object screen area is so small as to not need streamed texture
+    // NOTE: for non-square textures and non-squarish objects, might have to be smarter
+    // NOTE: only half the texture is visible if whole object is wrapped and uv not mirrored (like earth)
+    // Divide by ~4 appears to provide a nice fall-off over distance with spheres
+    m_screenAreaThreshold = (srcLayout.Footprint.Width * srcLayout.Footprint.Height) / 4;
+}
+
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 void SceneObjects::CreateSphereResources(

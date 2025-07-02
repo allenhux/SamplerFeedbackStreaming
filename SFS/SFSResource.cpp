@@ -95,3 +95,10 @@ UINT SFS::Resource::GetNumTilesVirtual() const
 {
     return m_resourceDesc.m_mipInfo.m_numTilesForStandardMips + m_resources.GetNumTilesForPackedMips();
 }
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+UINT SFS::Resource::GetNumStandardMips() const
+{
+    return m_maxMip;
+}

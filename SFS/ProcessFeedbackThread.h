@@ -35,8 +35,8 @@ namespace SFS
         enum Client : UINT32
         {
             Initialize = 1 << 0,
-            ProcessFeedback = 1 << 1,
-            Residency = 1 << 2
+            ProcessFeedbackThread = 1 << 1,
+            ResidencyThread = 1 << 2
         };
         UINT32 GetFlags() const { return m_flags; }
         void ClearFlag(Client c) { m_flags &= ~c; }
@@ -87,7 +87,7 @@ namespace SFS
         std::vector<ResourceBase*> m_newResources;
 
         // resources with any pending work, including evictions scheduled multiple frames later
-        std::set<ResourceBase*> m_activeResources;
+        std::list<ResourceBase*> m_delayedResources;
 
         // resources that need tiles loaded/evicted asap
         std::set<ResourceBase*> m_pendingResources;
