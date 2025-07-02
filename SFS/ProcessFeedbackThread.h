@@ -86,9 +86,6 @@ namespace SFS
         // new resources are prioritized until packed mips are in-flight
         std::vector<ResourceBase*> m_newResources;
 
-        // resources to be shared with residency thread (only after sufficient init, in case they are quickly deleted)
-        std::vector<ResourceBase*> m_residencyShareNewResources;
-
         // resources with any pending work, including evictions scheduled multiple frames later
         std::set<ResourceBase*> m_activeResources;
 
@@ -118,7 +115,7 @@ namespace SFS
 
         const UINT m_minNumUploadRequests{ 2000 }; // heuristic to reduce Submit()s
         void SignalFileStreamer();
-        void CheckRemoveResources();
+        void CheckFlushResources();
         void ProcessFeedback(UINT64 in_frameFenceValue);
     };
 }

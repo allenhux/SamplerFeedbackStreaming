@@ -1539,20 +1539,18 @@ void Scene::Animate()
         {
             if (nullptr != o)
             {
-                if (m_pSky != o)
-                {
-                    o->Spin(rotation);
-                    o->SetCombinedMatrix(worldProj, m_windowHeight, cotWdiv2, cotHdiv2, m_zFar);
-                }
-                else
-                {
-                    // remove translation from worldproj
-                    auto tmp = worldProj;
-                    tmp.r[3] = m_projection.r[3];
-                    o->SetCombinedMatrix(tmp, m_windowHeight, cotWdiv2, cotHdiv2, m_zFar);
-                }
+                o->Spin(rotation);
+                o->SetCombinedMatrix(worldProj, m_windowHeight, cotWdiv2, cotHdiv2, m_zFar);
             }
         });
+    // sky doesn't move
+    if (m_pSky)
+    {
+        // remove translation from worldproj
+        auto tmp = worldProj;
+        tmp.r[3] = m_projection.r[3];
+        m_pSky->SetCombinedMatrix(tmp, m_windowHeight, cotWdiv2, cotHdiv2, m_zFar);
+    }
 }
 
 //-------------------------------------------------------------------------

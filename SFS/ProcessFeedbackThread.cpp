@@ -73,13 +73,11 @@ void SFS::ProcessFeedbackThread::Start()
             UINT uploadsRequested = 0; // remember if any work was queued so we can signal afterwards
             UINT64 previousFrameFenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
 
-
             // start timer for this frame
             INT64 prevFrameTime = m_cpuTimer.GetTime();
 
             while (m_threadRunning)
             {
-
                 bool newFrame = false;
                 UINT64 frameFenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
                 if (previousFrameFenceValue != frameFenceValue)
@@ -115,7 +113,7 @@ void SFS::ProcessFeedbackThread::Start()
                     // NOTE: doing this before InitPackedMips and sharing with ResidencyThread
                     //       as m_newResources may contain resources that have not been
                     //       propagated to residency thread
-                    CheckRemoveResources();
+                    CheckFlushResources();
                 }
 
                 // prioritize loading packed mips, as objects shouldn't be displayed until packed mips load                
@@ -130,7 +128,6 @@ void SFS::ProcessFeedbackThread::Start()
                         auto pResource = m_newResources[i];
                         if (pResource->InitPackedMips())
                         {
-                            m_residencyShareNewResources.push_back(pResource);
                             // O(1) remove element from vector
                             num--;
                             m_newResources[i] = m_newResources[num];
@@ -319,26 +316,25 @@ void SFS::ProcessFeedbackThread::ShareFlushResources(const std::vector<SFSResour
 }
 
 //-----------------------------------------------------------------------------
-// handle deleting resources asynchronously
-// can be deleted if no UpdateLists reference them and the residency thread isn't tracking them
-// to avoid race when resources are quickly created then deleted,
-//     withhold new resources from the residency thread until packed mips are scheduled
-// ultimately, two expensive phases:
-//     1) received a new list of resources to remove
-//     2) after other threads have removed resources, delete them
+// CheckFlushResources stops further processing on a set of resources and waits
+// for DataUploader and Residency thread to finish before signaling an event
+//
+// this is part of the system to handle deleting resources asynchronously
 //-----------------------------------------------------------------------------
-void SFS::ProcessFeedbackThread::CheckRemoveResources()
+void SFS::ProcessFeedbackThread::CheckFlushResources()
 {
-    UINT flags = m_flushResources.GetFlags();
-    if (0 == flags)
+    UINT32 f = m_flushResources.GetFlags();
+    switch (f)
     {
+    default:
+        // should not see initialize combined with another bit
+        ASSERT(0 == (f & GroupRemoveResources::Client::Initialize));
+        [[fallthrough]];
+    case 0:
         // race: possible size changes after reading flags! ASSERT(0 == m_flushResources.size());
         return;
-    }
 
-    if (GroupRemoveResources::Client::Initialize & flags)
-    {
-        ASSERT(GroupRemoveResources::Client::Initialize == flags);
+    case GroupRemoveResources::Client::Initialize:
         ASSERT(m_flushResources.size());
 
         m_flushResources.ClearFlag(GroupRemoveResources::Client::Initialize);
@@ -355,16 +351,18 @@ void SFS::ProcessFeedbackThread::CheckRemoveResources()
         // wait for residency thread to verify flushed
         m_flushResources.SetFlag(GroupRemoveResources::Client::ProcessFeedback);
         Wake(); // prevent self from going to sleep right away
-    }
 
-    // after the residency thread has removed resources,
-    // identify any resources that have pending work in DataUploader
-    // when done, set the event and release the lock
-    if (GroupRemoveResources::Client::ProcessFeedback == m_flushResources.GetFlags())
+        break;
+
+    case GroupRemoveResources::Client::ProcessFeedback:
     {
-        std::set<ResourceBase*> remaining;
-        auto& updateLists = m_dataUploader.GetUpdateLists();
+        // after the residency thread has flushed resources,
+        // identify any resources that have pending work in DataUploader
+        // when done, set the event and release the lock
 
+        std::set<ResourceBase*> remaining;
+
+        // wait for new resources to migrate to pending
         for (auto r : m_newResources)
         {
             if (m_flushResources.BypassLockGetValues().contains(r))
@@ -373,7 +371,8 @@ void SFS::ProcessFeedbackThread::CheckRemoveResources()
             }
         }
 
-        for (auto& u : updateLists)
+        // wait for UpdateLists to complete (notify)
+        for (auto& u : m_dataUploader.GetUpdateLists())
         {
             if ((UpdateList::State::STATE_FREE != u.m_executionState) &&
                 (m_flushResources.BypassLockGetValues().contains((ResourceBase*)u.m_pResource)))
@@ -385,7 +384,7 @@ void SFS::ProcessFeedbackThread::CheckRemoveResources()
         // set removeResources to just the in-flight resources
         m_flushResources.BypassLockGetValues().swap(remaining);
 
-        // nothing left to do, so this thread can return to normal
+        // resources have been flushed. clear flags and signal event.
         if (0 == remaining.size())
         {
             m_flushResources.ClearFlag(GroupRemoveResources::Client::ProcessFeedback);
@@ -401,4 +400,7 @@ void SFS::ProcessFeedbackThread::CheckRemoveResources()
             Wake();
         }
     }
+    break;
+
+    } // end switch
 }
