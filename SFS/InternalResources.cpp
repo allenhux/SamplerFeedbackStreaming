@@ -43,13 +43,15 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, const SFSReso
     // allocate data structure according to tile properties
     D3D12_TILE_SHAPE tileShape{}; // e.g. a 64K tile may contain 128x128 texels @ 4B/pixel
     UINT subresourceCount = 1; // only care about the topmost mip level
-    D3D12_SUBRESOURCE_TILING tiling;
-    in_pDevice->GetResourceTiling(GetTiledResource(), nullptr, nullptr, &tileShape, &subresourceCount, 0, &tiling);
+    D3D12_SUBRESOURCE_TILING tiling{};
+    D3D12_PACKED_MIP_INFO packedMipInfo{};
+    in_pDevice->GetResourceTiling(GetTiledResource(), nullptr, &packedMipInfo, &tileShape, &subresourceCount, 0, &tiling);
 
     UINT numTilesWidth = tiling.WidthInTiles;
     UINT numTilesHeight = tiling.HeightInTiles;
     UINT tileTexelWidth = tileShape.WidthInTexels;
     UINT tileTexelHeight = tileShape.HeightInTexels;
+    m_numTilesForPackedMips = packedMipInfo.NumTilesForPackedMips;
 
     // create the feedback map
     // the dimensions of the feedback map must match the size of the streaming texture

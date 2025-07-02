@@ -36,7 +36,7 @@ namespace SFS
         // resolve directly to a cpu destination
         void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, UINT in_index);
 #endif
-
+        UINT GetNumTilesForPackedMips() const { return m_numTilesForPackedMips; }
     private:
         ComPtr<ID3D12Resource> m_tiledResource;
         ComPtr<ID3D12Resource2> m_feedbackResource;
@@ -50,5 +50,7 @@ namespace SFS
         std::vector<ComPtr<ID3D12Resource>> m_readback;
         std::vector<UINT8*> m_readbackCpuAddress;
 #endif
+
+        UINT m_numTilesForPackedMips{ 0 };
     };
 }

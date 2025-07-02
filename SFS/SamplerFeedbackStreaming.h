@@ -242,7 +242,6 @@ struct SFSResourceDesc
         UINT32 m_numStandardMips;
         UINT32 m_numTilesForStandardMips;
         UINT32 m_numPackedMips;
-        UINT32 m_numTilesForPackedMips;
         UINT32 m_numUncompressedBytesForPackedMips;
     };
     MipInfo m_mipInfo;

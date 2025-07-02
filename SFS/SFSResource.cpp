@@ -93,6 +93,5 @@ ID3D12Resource* SFS::Resource::GetMinMipMap() const
 //-----------------------------------------------------------------------------
 UINT SFS::Resource::GetNumTilesVirtual() const
 {
-    return m_resourceDesc.m_mipInfo.m_numTilesForPackedMips +
-        m_resourceDesc.m_mipInfo.m_numTilesForStandardMips;
+    return m_resourceDesc.m_mipInfo.m_numTilesForStandardMips + m_resources.GetNumTilesForPackedMips();
 }

@@ -29,7 +29,7 @@ void SFS::ResourceDU::MapPackedMips(ID3D12CommandQueue* in_pCommandQueue)
     UINT firstSubresource = m_resourceDesc.m_mipInfo.m_numStandardMips;
 
     // mapping packed mips is different from regular tiles: must be mapped before we can use copytextureregion() instead of copytiles()
-    UINT numTiles = m_resourceDesc.m_mipInfo.m_numTilesForPackedMips;
+    UINT numTiles = m_resources.GetNumTilesForPackedMips();
 
     std::vector<D3D12_TILE_RANGE_FLAGS> rangeFlags(numTiles, D3D12_TILE_RANGE_FLAG_NONE);
 

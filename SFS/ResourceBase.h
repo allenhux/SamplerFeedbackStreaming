@@ -232,10 +232,6 @@ namespace SFS
             // used in both UpdateMinMipMap() and ProcessFeedback()
             bool GetAnyRefCount() const;
 
-            // return true if all bottom layer standard tiles are resident
-            // Can accelerate UpdateMinMipMap()
-            UINT8 GetMinResidentMip();
-
             // remove all mappings from a heap. useful when removing an object from a scene
             void FreeHeapAllocations(SFS::Heap* in_pHeap);
 
@@ -323,7 +319,8 @@ namespace SFS
         using TileReference = UINT8;
         std::vector<TileReference> m_tileReferences;
 
-        std::vector<BYTE, SFS::AlignedAllocator<BYTE>> m_minMipMap; // local version of min mip map, rectified in UpdateMinMipMap()
+        static constexpr UINT RESIDENCY_MAP_ALIGNMENT = 64;
+        std::vector<BYTE, SFS::AlignedAllocator<BYTE, RESIDENCY_MAP_ALIGNMENT>> m_minMipMap; // local version of min mip map, rectified in UpdateMinMipMap()
 
         // drop pending loads that are no longer relevant
         void AbandonPendingLoads();

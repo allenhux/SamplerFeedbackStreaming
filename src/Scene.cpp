@@ -858,7 +858,6 @@ void Scene::LoadResourceDesc(SFSResourceDesc& out_desc, const std::wstring& in_f
         .m_numStandardMips = fileHeader.m_mipInfo.m_numStandardMips,
         .m_numTilesForStandardMips = fileHeader.m_mipInfo.m_numTilesForStandardMips,
         .m_numPackedMips = fileHeader.m_mipInfo.m_numPackedMips,
-        .m_numTilesForPackedMips = fileHeader.m_mipInfo.m_numTilesForPackedMips,
         .m_numUncompressedBytesForPackedMips = fileHeader.m_mipInfo.m_numUncompressedBytesForPackedMips
     };
 
@@ -1495,11 +1494,11 @@ void Scene::Animate()
 
         static float theta = -XM_PIDIV2;
         const float delta = 0.01f * m_args.m_cameraAnimationRate;
-        float radius = m_universeSize;
+        float radius = m_universeSize * .8f;
 
         if (m_args.m_cameraRollerCoaster)
         {
-            radius /= 2.f;
+            radius = m_universeSize * .333f;
         }
 
         theta += delta;

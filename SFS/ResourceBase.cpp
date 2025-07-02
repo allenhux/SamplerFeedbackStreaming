@@ -49,7 +49,9 @@ SFS::ResourceBase::ResourceBase(
     ASSERT(m_maxMip);
 
     // with m_maxMip and m_minMipMap, SFSManager will be able allocate/init the shared residency map
-    m_minMipMap.assign(GetMinMipMapSize(), m_maxMip);
+    UINT alignedMask = RESIDENCY_MAP_ALIGNMENT - 1;
+    UINT alignedSize = (GetMinMipMapSize() + alignedMask) & ~alignedMask;
+    m_minMipMap.assign(alignedSize, m_maxMip);
 
     m_resources.Initialize(m_pSFSManager->GetDevice(), m_resourceDesc, QUEUED_FEEDBACK_FRAMES);
 
@@ -224,27 +226,6 @@ bool SFS::ResourceBase::TileMappingState::GetAnyRefCount() const
     }
 
     return false;
-}
-
-//-----------------------------------------------------------------------------
-// optimization for UpdateMinMipMap:
-// return true if all bottom layer standard tiles are resident
-// FIXME? currently just checks the lowest tracked mip.
-//-----------------------------------------------------------------------------
-UINT8 SFS::ResourceBase::TileMappingState::GetMinResidentMip()
-{
-    UINT8 minResidentMip = (UINT8)m_resident.size();
-
-    auto& lastMip = m_resident.back();
-    for (auto i : lastMip.m_tiles)
-    {
-        if (TileMappingState::Residency::Resident != i)
-        {
-            return minResidentMip;
-        }
-    }
-
-    return minResidentMip - 1;
 }
 
 //-----------------------------------------------------------------------------
@@ -647,15 +628,6 @@ bool SFS::ResourceBase::UpdateMinMipMap()
         const UINT width = GetMinMipMapWidth();
         const UINT height = GetMinMipMapHeight();
 
-#if 0
-        // FIXME? if the optimization below introduces artifacts, this might work:
-        const UINT8 minResidentMip = m_maxMip;
-#else
-        // a simple optimization that's especially effective for large textures
-        // and harmless for smaller ones:
-        // find the minimum fully-resident mip
-        const UINT8 minResidentMip = m_tileMappingState.GetMinResidentMip();
-#endif
         // Search bottom up for best mip
         // tiles that have refcounts may still have pending copies, so we have to check residency (can't just memcpy m_tileReferences)
         // note that tiles can load out of order, but the min mip map cannot have holes, so exit if any lower-res tile is absent
@@ -669,7 +641,7 @@ bool SFS::ResourceBase::UpdateMinMipMap()
             {
                 // mips >= maxmip are pre-loaded packed mips and not tracked
                 // leverage results from previous frame. in the static case, this should # iterations down to exactly # regions
-                UINT8 s = std::max(minResidentMip, m_minMipMap[tileIndex]);
+                UINT8 s = std::max(m_maxMip, m_minMipMap[tileIndex]);
                 UINT8 minMip = s;
 
                 // note: it's ok for a region of the min mip map to include a higher-resolution region than feedback required
@@ -697,7 +669,7 @@ bool SFS::ResourceBase::UpdateMinMipMap()
     // if refcount is 0, then tile state is either not resident or eviction pending
     else
     {
-        memset(m_minMipMap.data(), m_maxMip, m_minMipMap.size());
+        m_minMipMap.assign(m_minMipMap.size(), m_maxMip);
     }
     return true;
 }
@@ -799,10 +771,10 @@ bool SFS::ResourceBase::InitPackedMips()
         return true;
     }
 
-    UINT numTilesForPackedMips = m_resourceDesc.m_mipInfo.m_numTilesForPackedMips;
+    UINT numTilesForPackedMips = m_resources.GetNumTilesForPackedMips();
 
     // no packed mips? odd, but possible. no need to check/update this variable again.
-    if (0 == numTilesForPackedMips)
+    if (0 == m_resourceDesc.m_mipInfo.m_numPackedMips)
     {
         // make sure my heap has an atlas corresponding to my format
         m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), (DXGI_FORMAT)m_resourceDesc.m_textureFormat);
