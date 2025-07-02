@@ -93,7 +93,6 @@ void SFS::ResidencyThread::Start()
                     for (auto p : updated) { p->WriteMinMipMap(pDest); }
                     m_pSFSManager->ResidencyMapRelease();
                 }
-                OutputDebugString(AutoString(m_resources.size(), " ", updated.size(), "\n").str().c_str());
             }
         });
     SFS::SetThreadPriority(m_thread, m_threadPriority);
