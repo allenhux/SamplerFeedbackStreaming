@@ -7,6 +7,7 @@
 /*=============================================================================
 External API interface for Sampler Feedback Streaming
 This is the library equivalent of d3d12.h
+NOTE: most APIs are NOT thread-safe (exceptions are SFSResource::Destroy and SFSManager::CreateResource)
 
 Usage:
 
@@ -71,7 +72,9 @@ struct SFSResource
     virtual UINT GetMinMipMapOffset() const = 0;
 
     // application should not use this texture before it is ready
-    virtual bool Drawable() const = 0;
+    // if this resource was previously flushed (SFSManagerFlushResource), this will
+    //    put the resource back in a non-flushed state (not safe to delete)
+    virtual bool Drawable() = 0;
 
     // application must explicitly request feedback for each resource each frame
     // this allows the application to limit how much time is spent on feedback, or stop processing e.g. for off-screen objects

@@ -194,8 +194,7 @@ void SFS::ResourceBase::TileMappingState::Init(const std::vector<SFSResourceDesc
 void SFS::ResourceBase::TileMappingState::FreeHeapAllocations(SFS::Heap* in_pHeap)
 {
     std::vector<UINT> indices;
-    // traverse bottom up.
-    for (auto layer = m_heapIndices.rbegin(); layer != m_heapIndices.rend(); layer++)
+    for (auto layer = m_heapIndices.begin(); layer != m_heapIndices.end(); layer++)
     {
         for (auto& i : layer->m_tiles)
         {
@@ -867,4 +866,18 @@ void SFS::ResourceBase::ClearAllocations()
 
     m_delayedEvictions.Clear();
     m_pendingTileLoads.clear();
+}
+
+//-----------------------------------------------------------------------------
+// Return to "like new" state
+// used by FlushResources()
+//-----------------------------------------------------------------------------
+void SFS::ResourceBase::Reset()
+{
+    ClearAllocations();
+    if (m_packedMipHeapIndices.size())
+    {
+        m_pHeap->GetAllocator().Free(m_packedMipHeapIndices);
+        m_packedMipStatus = PackedMipStatus::RESET;
+    }
 }

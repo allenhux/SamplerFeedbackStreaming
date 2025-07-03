@@ -147,7 +147,7 @@ namespace SFS
 
         // Residency Thread needs to update or may need to update soon
         bool HasInFlightUpdates() const { return m_tileResidencyChanged || (0 != m_numUpdateLists); }
-
+        void Reset(); // free all heap allocations, including packed mips. treat as "new"
     protected:
         const SFSResourceDesc m_resourceDesc;
         std::wstring m_filename; // only used so we can dynamically change file streamer type :/
@@ -155,6 +155,7 @@ namespace SFS
         enum class PackedMipStatus : UINT32
         {
             UNINITIALIZED = 0, // have we requested packed mips yet?
+            RESET,             // resource was flushed and needs re-loaded
             HEAP_RESERVED,     // heap spaced reserved
             REQUESTED,         // copy requested
             NEEDS_TRANSITION,  // copy complete, transition to readable

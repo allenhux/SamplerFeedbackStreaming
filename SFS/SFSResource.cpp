@@ -53,11 +53,24 @@ void SFS::ResourceBase::CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE in_
 // application should not use this texture before packed mips are loaded AND
 // an offset into the shared residency map buffer has been assigned
 //-----------------------------------------------------------------------------
-bool SFS::Resource::Drawable() const
+bool SFS::Resource::Drawable()
 {
-    bool drawable = (UINT(-1) != GetMinMipMapOffset()) && (PackedMipStatus::RESIDENT == m_packedMipStatus);
+    if (PackedMipStatus::RESIDENT == m_packedMipStatus)
+    {
+        // SFSManager::AllocateSharedResidencyMap() allocates for all new resources, drawable or not
+        ASSERT(UINT(-1) != GetMinMipMapOffset());
+        return true;        
+    }
 
-    return drawable;
+    if (PackedMipStatus::RESET == m_packedMipStatus)
+    {
+        // prevent adding this resource more than once
+        m_packedMipStatus = PackedMipStatus::UNINITIALIZED;
+
+        m_pSFSManager->Renew((ResourceBase*)this);
+    }
+
+    return false;
 }
 
 //-----------------------------------------------------------------------------

@@ -69,5 +69,13 @@ namespace SFS
         FileHandle* OpenFile(const std::wstring& in_filename) { return m_dataUploader.OpenFile(in_filename); }
 
         void SetPending(ResourceBase* in_pResource) { m_pendingResources.insert(in_pResource); }
+
+        // called by Resource::Drawable() if the resource has been Reset() and now needs packed mips
+        void Renew(ResourceBase* in_pResource)
+        {
+            std::vector<ResourceBase*> v = { (ResourceBase*)in_pResource };
+            m_processFeedbackThread.ShareNewResources(v);
+            m_packedMipTransitionResources.push_back(in_pResource);
+        }
     };
 }

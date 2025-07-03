@@ -38,7 +38,7 @@ namespace SFS
         //virtual UINT GetMinMipMapWidth() const override;
         //virtual UINT GetMinMipMapHeight() const override;
         //virtual UINT GetMinMipMapOffset() const override;
-        virtual bool Drawable() const override;
+        virtual bool Drawable() override;
         virtual void QueueFeedback() override;
         virtual void QueueEviction() override;
         //virtual ID3D12Resource* GetTiledResource() const override;

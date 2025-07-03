@@ -323,12 +323,11 @@ void SFS::ProcessFeedbackThread::CheckFlushResources()
 {
     UINT32 f = m_flushResources.GetFlags();
 
-    // should not see initialize combined with another bit
-    ASSERT(0 == (f & GroupRemoveResources::Client::Initialize));
-
     switch (f)
     {
     default:
+        // should not see initialize combined with another bit
+        ASSERT(0 == (f & GroupRemoveResources::Client::Initialize));
     case 0:
         // race: possible size changes after reading flags! ASSERT(0 == m_flushResources.size());
         return;
@@ -377,6 +376,15 @@ void SFS::ProcessFeedbackThread::CheckFlushResources()
                 (m_flushResources.BypassLockGetValues().contains((ResourceBase*)u.m_pResource)))
             {
                 remaining.insert((ResourceBase*)u.m_pResource);
+            }
+        }
+
+        // eject all heap indices
+        for (auto r : m_flushResources.BypassLockGetValues())
+        {
+            if (!remaining.contains(r))
+            {
+                r->Reset();
             }
         }
 
