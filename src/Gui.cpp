@@ -357,6 +357,11 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
         in_args.m_numSpheres = m_numObjects;
     }
 
+    if (m_message.size())
+    {
+        ImGui::Text(m_message.c_str());
+    }
+
     //---------------------------------------------------------------------
     // terrain feedback viewer
     //---------------------------------------------------------------------

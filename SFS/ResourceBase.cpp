@@ -608,9 +608,12 @@ UINT SFS::ResourceBase::QueuePendingTileLoads()
 }
 
 //-----------------------------------------------------------------------------
-// SFSManager calls this for every object sharing its resources
-// if something has changed: traverses residency status, generates min mip map, writes to upload buffer
-// returns true if update performed, indicating SFSM should upload the results
+// Update the residency map (which acts as a texture clamp)
+// ProcessFeedback() produced loads and evictions that are a delta from
+//    what we had (m_minMipMap) to the desired state (m_tileReferences)
+// Set the residency based on what is actually resident (m_tileMappingState)
+// NOTE many of these values are likely being changed by other threads:
+//     m_tileReferences by ProcessFeedbackThread and m_tileMappingState by DataUploader
 //-----------------------------------------------------------------------------
 bool SFS::ResourceBase::UpdateMinMipMap()
 {
@@ -638,28 +641,24 @@ bool SFS::ResourceBase::UpdateMinMipMap()
         {
             for (UINT x = 0; x < width; x++)
             {
-                // mips >= maxmip are pre-loaded packed mips and not tracked
-                // leverage results from previous frame. in the static case, this should # iterations down to exactly # regions
-                UINT8 s = std::max(m_maxMip, m_minMipMap[tileIndex]);
-                UINT8 minMip = s;
-
-                // note: it's ok for a region of the min mip map to include a higher-resolution region than feedback required
-                // the min mip map will be updated on evictions, which will affect "this" region and the referencing region for the tile
-                while (s > 0)
+                // look at what we had last time (m_minMipMap). do we have the tiles resident to be able to clamp to what feedback says we need?
+                if (m_tileReferences[tileIndex] != m_minMipMap[tileIndex])
                 {
-                    s--;
-                    if ((TileMappingState::Residency::Resident == m_tileMappingState.GetResidency(x >> s, y >> s, s)) &&
-                        // do not include a tile that may be evicted (resident with 0 refcount is candidate for eviction)
-                        (0 != m_tileMappingState.GetRefCount(x >> s, y >> s, s)))
+                    UINT8 minMip = std::max(m_tileReferences[tileIndex], m_minMipMap[tileIndex]);
+                    while (minMip > m_tileReferences[tileIndex])
                     {
-                        minMip = s;
+                        UINT8 s = minMip - 1;
+                        if (TileMappingState::Residency::Resident == m_tileMappingState.GetResidency(x >> s, y >> s, s))
+                        {
+                            minMip = s;
+                        }
+                        else
+                        {
+                            break;
+                        }
                     }
-                    else
-                    {
-                        break;
-                    }
+                    m_minMipMap[tileIndex] = minMip;
                 }
-                m_minMipMap[tileIndex] = minMip;
                 tileIndex++;
             } // end y
         } // end x

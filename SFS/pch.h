@@ -30,5 +30,6 @@
 #include <thread>
 #include <filesystem>
 #include <synchapi.h>
+#include <numeric> // for iota
 
 #include "d3dx12.h"

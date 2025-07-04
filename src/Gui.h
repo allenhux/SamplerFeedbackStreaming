@@ -54,6 +54,11 @@ public:
 
     float GetHeight() const { return m_height; }
     float GetWidth() const { return m_width; }
+
+    // change the slider limit
+    void SetMaxObjects(UINT in_v) { m_numObjects = in_v; }
+    // add an informational message (grows UI to fit)
+    void SetMessage(std::string in_v) { m_message = in_v; }
 private:
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_srvHeap;
 
@@ -72,6 +77,7 @@ private:
     RawCpuTimer m_cpuTimer;
 
     int m_numObjects{ 1 };
+    std::string m_message;
 
     static constexpr int m_historySize = 128;
     std::vector<float> m_bandwidthHistory;

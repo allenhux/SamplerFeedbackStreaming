@@ -95,6 +95,10 @@ private:
     ComPtr<ID3D12Device8> m_device;
     ComPtr<ID3D12CommandQueue> m_commandQueue;
 
+    // limit the amount allocated to the number of bits for virtual memory minus a healthy amount extra
+    UINT32 m_maxVirtualTiles{ 0 };
+    std::atomic<UINT> m_maxNumObjects{ 0 }; // set if load hit memory limit
+
     static const UINT m_swapBufferCount{ SharedConstants::SWAP_CHAIN_BUFFER_COUNT };
     static const FLOAT m_clearColor[4];
     ComPtr<IDXGISwapChain3> m_swapChain;
@@ -244,7 +248,7 @@ private:
         Done = 2
     };
     std::atomic<LoadingThread> m_loadingThreadState{ Idle };
-    void LoadObjectThread(UINT in_numObjects, UINT in_index); // async object creation
+    void LoadObjectThread(UINT in_numObjects, UINT in_index, UINT in_numTilesVirtual); // async object creation
     void DeleteObjectThread(std::vector<class SceneObjects::BaseObject*> in_objects, UINT64 in_waitFenceValue);
 
     // each frame, update objects until timeout reached

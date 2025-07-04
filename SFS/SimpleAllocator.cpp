@@ -6,19 +6,16 @@
 
 #include "pch.h"
 
+#include <numeric>
 #include "SimpleAllocator.h"
 
 //-----------------------------------------------------------------------------
 // allocates simply by increasing/decreasing an index into an array of available indices
 //-----------------------------------------------------------------------------
 SFS::SimpleAllocator::SimpleAllocator(UINT in_maxNumElements) :
-    m_index(0), m_heap(in_maxNumElements)
+    m_index(in_maxNumElements), m_heap(in_maxNumElements)
 {
-    for (auto& i : m_heap)
-    {
-        i = m_index;
-        m_index++;
-    }
+    std::iota(m_heap.begin(), m_heap.end(), 0);
 }
 
 SFS::SimpleAllocator::~SimpleAllocator()

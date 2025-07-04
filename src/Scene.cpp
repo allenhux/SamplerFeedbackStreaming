@@ -159,9 +159,11 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
 
     std::wstring adapterDescription = m_args.m_adapterDescription;
     CreateDeviceWithName(adapterDescription);
+
 #ifdef _DEBUG
     DisableDebugLayerMessages();
 #endif
+
     // does this device support sampler feedback?
     D3D12_FEATURE_DATA_D3D12_OPTIONS7 feedbackOptions{};
     m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &feedbackOptions, sizeof(feedbackOptions));
@@ -178,6 +180,15 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
     {
         ErrorMessage(L"Tiled Resources not supported by ", adapterDescription);
     }
+
+    // remember virtual address limit. Can only create so many resources!
+    D3D12_FEATURE_DATA_GPU_VIRTUAL_ADDRESS_SUPPORT gpuVirtualAddressLimits{};
+    m_device->CheckFeatureSupport(D3D12_FEATURE_GPU_VIRTUAL_ADDRESS_SUPPORT, &gpuVirtualAddressLimits, sizeof(gpuVirtualAddressLimits));
+
+    // limit the amount we can allocate to the number of bits for virtual memory minus a healthy amount extra
+    // divide addressable space by 64k for # of tiles, then divide that by 2 (16 + 1 bits)
+    m_maxVirtualTiles = 1 << (gpuVirtualAddressLimits.MaxGPUVirtualAddressBitsPerProcess - (16 + 1));
+    m_maxVirtualTiles += m_maxVirtualTiles >> 1; // add 50% of the whole addressable space back
 
     m_pGpuTimer = new D3D12GpuTimer(m_device.Get(), 8, D3D12GpuTimer::TimerType::Direct);
 
@@ -1049,7 +1060,7 @@ void Scene::CreateSampler()
 //-----------------------------------------------------------------------------
 // async object creation with thread-safe SFSManager::CreateResource()
 //-----------------------------------------------------------------------------
-void Scene::LoadObjectThread(UINT in_numObjects, UINT in_index)
+void Scene::LoadObjectThread(UINT in_numObjects, UINT in_index, UINT in_numTilesVirtual)
 {
     ASSERT(m_objects.size() == in_numObjects + in_index);
     for (UINT i = 0; i < in_numObjects; i++)
@@ -1063,6 +1074,15 @@ void Scene::LoadObjectThread(UINT in_numObjects, UINT in_index)
         // grab the next texture
         UINT fileIndex = objectIndex % m_args.m_textures.size();
         const auto& textureFilename = m_args.m_textures[fileIndex];
+
+        // limit amount we can allocate
+        UINT numTilesNeeded = m_sfsResourceDescs[fileIndex].m_mipInfo.m_numTilesForStandardMips + 1; // assuming 1 for packed mips
+        if (m_maxVirtualTiles < (in_numTilesVirtual + numTilesNeeded))
+        {
+            m_maxNumObjects = in_index + i;
+            break;
+        }
+        in_numTilesVirtual += numTilesNeeded;
 
         SceneObjects::BaseObject* o = nullptr;
 
@@ -1096,7 +1116,10 @@ void Scene::DeleteObjectThread(std::vector<class SceneObjects::BaseObject*> in_o
     v.reserve(in_objects.size());
     for (auto o : in_objects)
     {
-        v.push_back(o->GetStreamingResource());
+        if (o)
+        {
+            v.push_back(o->GetStreamingResource());
+        }
     }
 
     // wait for frame to reach future value
@@ -1125,7 +1148,10 @@ void Scene::DeleteObjectThread(std::vector<class SceneObjects::BaseObject*> in_o
         }
 
         // safe to delete object BECAUSE object destructors do NOT destroy SFS resources
-        delete o;
+        if (o)
+        {
+            delete o;
+        }
     }
 
     WaitForSingleObject(event, INFINITE);
@@ -1152,6 +1178,16 @@ void Scene::LoadSpheres()
         ASSERT(m_loadObjectThread.joinable());
         m_loadObjectThread.join();
         m_loadingThreadState = LoadingThread::Idle;
+
+        if (m_maxNumObjects)
+        {
+            m_objects.resize(m_maxNumObjects);
+            m_args.m_maxNumObjects = m_maxNumObjects;
+            m_args.m_numSpheres = m_maxNumObjects;
+            m_pGui->SetMaxObjects(m_maxNumObjects);
+            m_pGui->SetMessage("Reached Max Addressable Memory");
+            m_maxNumObjects = 0;
+        }
         break;
     case LoadingThread::Running:
     {
@@ -1178,7 +1214,7 @@ void Scene::LoadSpheres()
         UINT index = (UINT)m_objects.size();
         m_objects.resize(m_objects.size() + numToLoad, nullptr);
         m_loadingThreadState = LoadingThread::Running;
-        m_loadObjectThread = std::thread(&Scene::LoadObjectThread, this, numToLoad, index);
+        m_loadObjectThread = std::thread(&Scene::LoadObjectThread, this, numToLoad, index, m_numTilesVirtual);
     } // end if adding objects
     else if (m_objects.size() > (UINT)m_args.m_numSpheres) // else evict objects
     {

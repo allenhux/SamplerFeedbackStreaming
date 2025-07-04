@@ -110,7 +110,7 @@ namespace SceneObjects
         void SetCombinedMatrix(const DirectX::XMMATRIX& in_worldProjection,
             UINT in_windowHeight, float in_cotWdiv2, float in_cotHdiv2, float in_zFar);
 
-        void Spin(float in_radians); // spin this object around its desired axis
+        virtual void Spin(float in_radians); // spin this object around its desired axis
 
         SFSResource* GetStreamingResource() const { return m_pStreamingResource; }
         void SetResource(SFSResource* in_pResource);
@@ -244,6 +244,7 @@ namespace SceneObjects
     {
     public:
         Sky(Scene* in_pScene);
+        virtual void Spin(float) {}
     private:
         virtual const Geometry* GetGeometry() const override;
         static Geometry* m_pGeometry;

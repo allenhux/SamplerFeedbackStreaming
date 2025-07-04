@@ -37,7 +37,7 @@ namespace SFS
         UINT GetAllocated() const { return GetCapacity() - GetAvailable(); }
     private:
         std::vector<UINT> m_heap;
-        UINT m_index;
+        UINT m_index{ 0 };
     };
 
     //==================================================
