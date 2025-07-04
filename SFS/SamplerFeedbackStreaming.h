@@ -105,13 +105,13 @@ struct SFSManagerDesc
     ID3D12CommandQueue* m_pDirectCommandQueue{ nullptr };
 
     // maximum number of in-flight batches
-    UINT m_maxNumCopyBatches{ 128 };
+    UINT m_maxNumCopyBatches{ 512 };
 
     // size of the staging buffer for DirectStorage or reference streaming code
-    UINT m_stagingBufferSizeMB{ 64 };
+    UINT m_stagingBufferSizeMB{ 128 };
 
     // the following is product dependent (some HW/drivers seem to have a limit)
-    UINT m_maxTileMappingUpdatesPerApiCall{ 512 };
+    UINT m_maxTileMappingUpdatesPerApiCall{ 4096 };
 
     // need the swap chain count so we can create per-frame upload buffers
     UINT m_swapChainBufferCount{ 2 };

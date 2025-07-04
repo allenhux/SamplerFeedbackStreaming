@@ -388,7 +388,7 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     if (ImGui::CollapsingHeader("Misc. Options"))
     {
         ImGui::Indent(indent);
-        out_buttonChanges.m_directStorageToggle = ImGui::Checkbox("DirectStorage", &in_args.m_useDirectStorage);
+        out_buttonChanges.m_directStorageToggle = ImGui::Checkbox("DirectStorage", &in_args.m_sfsParams.m_useDirectStorage);
         ImGui::Checkbox("VSync", &in_args.m_vsyncEnabled);
 
         out_buttonChanges.m_frustumToggle = ImGui::Checkbox("Lock Frustum", &in_args.m_visualizeFrustum);

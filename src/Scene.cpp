@@ -114,6 +114,27 @@ void Scene::CreateDeviceWithName(std::wstring& out_adapterDescription)
 }
 
 //-----------------------------------------------------------------------------
+// Filter D3D debug layer messages
+//
+// in particular this per-frame transition error:
+//
+// D3D12 ERROR: ID3D12CommandList::ResolveSubresourceRegion: Using ResolveSubresourceRegion on Command List (0x0000025E24B270D0:'SFS::ManagerBase::m_commandListEndFrame.m_commandList (debug layer indirect)'): Resource state (0x400: D3D12_RESOURCE_STATE_COPY_DEST) of resource (0x0000025E673A80F0:'ResolveDest_0') (subresource: 0) is invalid for use as a destination subresource.  Expected State Bits (all): 0x1000: D3D12_RESOURCE_STATE_RESOLVE_DEST, Actual State: 0x400: D3D12_RESOURCE_STATE_COPY_DEST, Missing State: 0x1000: D3D12_RESOURCE_STATE_RESOLVE_DEST. [ EXECUTION ERROR #538: INVALID_SUBRESOURCE_STATE]
+//
+// resources in the readback heap /must/ have state COPY_DEST (even if we create them with a different state)
+// it is legal, however, to resolve feedback to a buffer in the readback heap - for which it must have state RESOLVE_DEST
+//-----------------------------------------------------------------------------
+void Scene::DisableDebugLayerMessages()
+{
+    Microsoft::WRL::ComPtr<ID3D12InfoQueue> infoQueue;
+    ThrowIfFailed(m_device->QueryInterface(IID_PPV_ARGS(&infoQueue)));
+    D3D12_INFO_QUEUE_FILTER filter{};
+    D3D12_MESSAGE_ID messages[] = { D3D12_MESSAGE_ID::D3D12_MESSAGE_ID_INVALID_SUBRESOURCE_STATE };
+    filter.DenyList.pIDList = messages;
+    filter.DenyList.NumIDs = _countof(messages);
+    infoQueue->AddStorageFilterEntries(&filter);
+}
+
+//-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
     m_args(in_args), m_hwnd(in_hwnd)
@@ -138,8 +159,9 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
 
     std::wstring adapterDescription = m_args.m_adapterDescription;
     CreateDeviceWithName(adapterDescription);
-
-
+#ifdef _DEBUG
+    DisableDebugLayerMessages();
+#endif
     // does this device support sampler feedback?
     D3D12_FEATURE_DATA_D3D12_OPTIONS7 feedbackOptions{};
     m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &feedbackOptions, sizeof(feedbackOptions));
@@ -652,19 +674,9 @@ void Scene::WaitForGpu()
 //-----------------------------------------------------------------------------
 void Scene::StartStreamingLibrary()
 {
-    SFSManagerDesc desc;
+    SFSManagerDesc desc = m_args.m_sfsParams;
     desc.m_pDirectCommandQueue = m_commandQueue.Get();
-    desc.m_maxNumCopyBatches = m_args.m_numStreamingBatches;
-    desc.m_stagingBufferSizeMB = m_args.m_stagingSizeMB;
-    desc.m_maxTileMappingUpdatesPerApiCall = m_args.m_maxTileUpdatesPerApiCall;
     desc.m_swapChainBufferCount = SharedConstants::SWAP_CHAIN_BUFFER_COUNT;
-    desc.m_minNumUploadRequests = m_args.m_minNumUploadRequests;
-    desc.m_useDirectStorage = m_args.m_useDirectStorage;
-    desc.m_threadPriority = (SFSManagerDesc::ThreadPriority)m_args.m_threadPriority;
-    desc.m_resolveHeapSizeMB = m_args.m_resolveHeapSizeMB;
-    desc.m_evictionDelay = m_args.m_evictionDelay;
-    desc.m_traceCaptureMode = m_args.m_captureTrace;
-
     m_pSFSManager = SFSManager::Create(desc);
 
     // create 1 or more heaps to contain our StreamingResources
@@ -1460,7 +1472,7 @@ void Scene::GatherStatistics()
 
     if (m_frameNumber == m_args.m_timingStartFrame)
     {
-        if (m_args.m_captureTrace)
+        if (m_args.m_sfsParams.m_traceCaptureMode)
         {
             m_pSFSManager->CaptureTraceFile(true); // start recording
         }
@@ -1810,7 +1822,7 @@ void Scene::HandleUIchanges()
     {
         if (m_uiButtonChanges.m_directStorageToggle)
         {
-            m_pSFSManager->UseDirectStorage(m_args.m_useDirectStorage);
+            m_pSFSManager->UseDirectStorage(m_args.m_sfsParams.m_useDirectStorage);
         }
         if (m_uiButtonChanges.m_frustumToggle)
         {

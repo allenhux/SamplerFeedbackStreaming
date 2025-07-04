@@ -103,7 +103,7 @@ inline void FrameEventTracing::WriteEvents(HWND in_hWnd, const CommandLineArgs& 
         << "\n" << GetCommandLineW() << "\n\n"
         << "WindowWidth/Height: " << windowRect.right - windowRect.left << " " << windowRect.bottom - windowRect.top << "\n"
         << "Adapter: " << m_adapterDescription << "\n"
-        << "DS enabled: " << in_args.m_useDirectStorage << "\n"
+        << "DS enabled: " << in_args.m_sfsParams.m_useDirectStorage << "\n"
         << "heap size: " << in_args.m_streamingHeapSize << "\n"
         << "num heaps: " << in_args.m_numHeaps << "\n"
         << "paintmixer: " << in_args.m_cameraPaintMixer << "\n"

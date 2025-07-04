@@ -159,11 +159,15 @@ void ParseCommandLine(CommandLineArgs& out_args)
 
     argParser.AddArg(L"-config", [&]() { auto f = argParser.GetNextArg(); LoadConfigFile(f, out_args); }, L"Config File");
 
-    argParser.AddArg(L"-directStorage", [&]() { out_args.m_useDirectStorage = true; }, L"force enable DirectStorage");
-    argParser.AddArg(L"-stagingSizeMB", out_args.m_stagingSizeMB, L"DirectStorage staging buffer size");
-    argParser.AddArg(L"-heapSizeTiles", out_args.m_streamingHeapSize);
-    argParser.AddArg(L"-numHeaps", out_args.m_numHeaps);
+    {
+        auto& sfsParams = out_args.m_sfsParams;
+        argParser.AddArg(L"-directStorage", [&]() { sfsParams.m_useDirectStorage = true; }, L"force enable DirectStorage");
+        argParser.AddArg(L"-stagingSizeMB", sfsParams.m_stagingBufferSizeMB, L"DirectStorage staging buffer size");
+        argParser.AddArg(L"-captureTrace", [&]() { sfsParams.m_traceCaptureMode = true; }, false, L"capture a trace of tile requests and submits (DS only)");
+    }
 
+    argParser.AddArg(L"-numHeaps", out_args.m_numHeaps);
+    argParser.AddArg(L"-heapSizeTiles", out_args.m_streamingHeapSize);
     argParser.AddArg(L"-maxFeedbackTime", out_args.m_maxGpuFeedbackTimeMs);
     argParser.AddArg(L"-addAliasingBarriers", out_args.m_addAliasingBarriers, L"Add per-draw aliasing barriers to assist PIX analysis");
 
@@ -213,7 +217,6 @@ void ParseCommandLine(CommandLineArgs& out_args)
     argParser.AddArg(L"-timingStop", out_args.m_timingStopFrame);
     argParser.AddArg(L"-timingFileFrames", out_args.m_timingFrameFileName);
     argParser.AddArg(L"-exitImageFile", out_args.m_exitImageFileName);
-    argParser.AddArg(L"-captureTrace", [&]() { out_args.m_captureTrace = true; }, false, L"capture a trace of tile requests and submits (DS only)");
 
     argParser.Parse();
 }
@@ -457,6 +460,28 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
         {
             const auto& root = parser.GetRoot();
 
+            {
+                auto& sfsParams = out_args.m_sfsParams;
+                const auto& sfsRoot = root["SFSManagerDesc"];
+                if (sfsRoot.isMember("directStorage")) sfsParams.m_useDirectStorage = sfsRoot["directStorage"].asBool();
+                if (sfsRoot.isMember("stagingSizeMB")) sfsParams.m_stagingBufferSizeMB = sfsRoot["stagingSizeMB"].asUInt();
+                if (sfsRoot.isMember("threadPriority")) sfsParams.m_threadPriority = (SFSManagerDesc::ThreadPriority)sfsRoot["threadPriority"].asInt();
+                if (sfsRoot.isMember("resolveHeapSizeMB")) sfsParams.m_resolveHeapSizeMB = sfsRoot["resolveHeapSizeMB"].asInt();
+                if (sfsRoot.isMember("maxTileUpdatesPerApiCall")) sfsParams.m_maxTileMappingUpdatesPerApiCall = sfsRoot["maxTileUpdatesPerApiCall"].asUInt();
+                if (sfsRoot.isMember("numStreamingBatches")) sfsParams.m_maxNumCopyBatches = sfsRoot["numStreamingBatches"].asUInt();
+                if (sfsRoot.isMember("minNumUploadRequests")) sfsParams.m_minNumUploadRequests = sfsRoot["minNumUploadRequests"].asUInt();
+                if (sfsRoot.isMember("evictionDelay")) sfsParams.m_evictionDelay = sfsRoot["evictionDelay"].asUInt();
+            }
+
+            {
+                auto& terrainParams = out_args.m_terrainParams;
+                if (root.isMember("terrainSideSize")) terrainParams.m_terrainSideSize = root["terrainSideSize"].asUInt();
+                if (root.isMember("heightScale")) terrainParams.m_heightScale = root["heightScale"].asFloat();
+                if (root.isMember("noiseScale")) terrainParams.m_noiseScale = root["noiseScale"].asFloat();
+                if (root.isMember("octaves")) terrainParams.m_numOctaves = root["octaves"].asUInt();
+                if (root.isMember("mountainSize")) terrainParams.m_mountainSize = root["mountainSize"].asFloat();
+            }
+
             if (root.isMember("fullScreen")) out_args.m_startFullScreen = root["fullScreen"].asBool();
             if (root.isMember("vsync")) out_args.m_vsyncEnabled = root["vsync"].asBool();
             if (root.isMember("windowWidth")) out_args.m_windowWidth = root["windowWidth"].asUInt();
@@ -465,8 +490,6 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
             if (root.isMember("lodBias")) out_args.m_lodBias = root["lodBias"].asFloat();
             if (root.isMember("anisotropy")) out_args.m_anisotropy = root["anisotropy"].asUInt();
 
-            if (root.isMember("directStorage")) out_args.m_useDirectStorage = root["directStorage"].asBool();
-            if (root.isMember("stagingSizeMB")) out_args.m_stagingSizeMB = root["stagingSizeMB"].asUInt();
 
             if (root.isMember("animationRate")) out_args.m_animationRate = root["animationRate"].asFloat();
             if (root.isMember("cameraRate")) out_args.m_cameraAnimationRate = root["cameraRate"].asFloat();
@@ -486,10 +509,6 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
 
             if (root.isMember("heapSizeTiles")) out_args.m_streamingHeapSize = root["heapSizeTiles"].asUInt();
             if (root.isMember("numHeaps")) out_args.m_numHeaps = root["numHeaps"].asUInt();
-            if (root.isMember("maxTileUpdatesPerApiCall")) out_args.m_maxTileUpdatesPerApiCall = root["maxTileUpdatesPerApiCall"].asUInt();
-            if (root.isMember("numStreamingBatches")) out_args.m_numStreamingBatches = root["numStreamingBatches"].asUInt();
-            if (root.isMember("minNumUploadRequests")) out_args.m_minNumUploadRequests = root["minNumUploadRequests"].asUInt();
-            if (root.isMember("evictionDelay")) out_args.m_evictionDelay = root["evictionDelay"].asUInt();
 
             if (root.isMember("maxFeedbackTime")) out_args.m_maxGpuFeedbackTimeMs = root["maxFeedbackTime"].asFloat();
 
@@ -511,14 +530,6 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
             if (root.isMember("waitForAssetLoad")) out_args.m_waitForAssetLoad = root["waitForAssetLoad"].asBool();
             if (root.isMember("adapter")) out_args.m_adapterDescription = StrToWstr(root["adapter"].asString());
 
-            if (root.isMember("terrainSideSize")) out_args.m_terrainParams.m_terrainSideSize = root["terrainSideSize"].asUInt();
-            if (root.isMember("heightScale")) out_args.m_terrainParams.m_heightScale = root["heightScale"].asFloat();
-            if (root.isMember("noiseScale")) out_args.m_terrainParams.m_noiseScale = root["noiseScale"].asFloat();
-            if (root.isMember("octaves")) out_args.m_terrainParams.m_numOctaves = root["octaves"].asUInt();
-            if (root.isMember("mountainSize")) out_args.m_terrainParams.m_mountainSize = root["mountainSize"].asFloat();
-
-            if (root.isMember("threadPriority")) out_args.m_threadPriority = root["threadPriority"].asInt();
-            if (root.isMember("resolveHeapSizeMB")) out_args.m_resolveHeapSizeMB = root["resolveHeapSizeMB"].asInt();
         } // end if successful load
     } // end if file exists
 

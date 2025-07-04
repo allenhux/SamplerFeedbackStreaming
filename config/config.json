@@ -2,29 +2,34 @@
   //---------------------------------------
   // -------- SFS Library settings --------
   //---------------------------------------
-  "directStorage": true, // use directstorage vs. dedicated thread with ReadFile() and CopyTiles()
-  "stagingSizeMB": 128, // size of the staging buffer for DirectStorage or reference streaming code
+  "SFSManagerDesc": {
+    "directStorage": true, // use directstorage vs. dedicated thread with ReadFile() and CopyTiles()
+    "stagingSizeMB": 128, // size of the staging buffer for DirectStorage or reference streaming code
 
-  // maximum number of in-flight batches of uploads, each batch corresponds to 1 texture
-  // starvation is prevented via a stale queue
-  "numStreamingBatches": 512,
-  // sum of #tiles of pending batches. heuristic to reduce frequency of DS Submit() calls
-  "minNumUploadRequests": 1024,
-  // number of frames to delay evicting a tile
-  "evictionDelay": 8,
+    // maximum number of in-flight batches of uploads, each batch corresponds to 1 texture
+    // starvation is prevented via a stale queue
+    "numStreamingBatches": 512,
+    // sum of #tiles of pending batches. heuristic to reduce frequency of DS Submit() calls
+    "minNumUploadRequests": 1024,
+    // number of frames to delay evicting a tile
+    "evictionDelay": 8,
 
+    "maxTileUpdatesPerApiCall": 4096, // limit to # tiles passed to D3D12 UpdateTileMappings()
+
+    // applied to all internal threads: submit, fenceMonitor, processFeedback, updateResidency
+    // 1 prefers P cores, -1 prefers E cores. 0 is normal.
+    "threadPriority": 0,
+
+    // NOTE: this parameter applies only when the library is compiled with RESOLVE_TO_TEXTURE 1
+    // sets size for an internal gpu heap to use for feedback resolve resources
+    // The textures in this heap are 64x64, requiring 4KB each on some HW (nvidia 4060) but 64k each on others (amd 780M)
+    // hence limits the maximum # of resolves per frame to 8192 or 512 depending on the HW (unless we multipass, TBD)
+    "resolveHeapSizeMB": 32
+  }, // number of heaps. objects will be distributed among heaps
+
+  // application creates a number of equal-sized SFSHeaps:
+  "numHeaps": 1,
   "heapSizeTiles": 24576, // size for each heap. 64KB per tile * 16384 tiles -> 1GB heap
-  "numHeaps": 1, // number of heaps. objects will be distributed among heaps
-  "maxTileUpdatesPerApiCall": 4096, // limit to # tiles passed to D3D12 UpdateTileMappings()
-
-  // applied to all internal threads: submit, fenceMonitor, processFeedback, updateResidency
-  // 1 prefers P cores, -1 prefers E cores. 0 is normal.
-  "threadPriority": 0,
-
-  // sets size for an internal gpu heap to use for feedback resolve resources
-  // The textures in this heap are 64x64, requiring 4KB each on some HW (nvidia 4060) but 64k each on others (amd 780M)
-  // hence limits the maximum # of resolves per frame to 8192 or 512 depending on the HW (unless we multipass, TBD)
-  "resolveHeapSizeMB": 32,
 
   //---------------------------------------
   // ---- application general settings ----

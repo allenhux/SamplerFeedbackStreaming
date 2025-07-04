@@ -10,9 +10,13 @@
 #include <cstdint>
 
 #include "TerrainGenerator.h"
+#include "SamplerFeedbackStreaming.h"
 
 struct CommandLineArgs
 {
+    SFSManagerDesc m_sfsParams;
+    TerrainGenerator::Params m_terrainParams;
+
     enum class PreferredArchitecture
     {
         NONE = 0,
@@ -21,9 +25,6 @@ struct CommandLineArgs
     };
     PreferredArchitecture m_preferredArchitecture{ PreferredArchitecture::NONE };
     std::wstring m_adapterDescription;  // e.g. "intel", will pick the GPU with this substring in the adapter description (not case sensitive)
-
-    bool m_useDirectStorage{ true };
-    UINT m_stagingSizeMB{ 128 };         // size of the staging buffer for DirectStorage or reference streaming code
 
     std::wstring m_terrainTexture;
     std::wstring m_skyTexture;
@@ -73,7 +74,6 @@ struct CommandLineArgs
     //-------------------------------------------------------
     std::vector<std::wstring> m_textures; // textures for things other than the terrain
 
-    UINT m_maxTileUpdatesPerApiCall{ 512 }; // max #tiles (regions) in call to UpdateTileMappings()
     bool m_enableTileUpdates{ true }; // toggle enabling tile uploads/evictions
     int  m_visualizationBaseMip{ 0 };
     bool m_showFeedbackMapVertical{ false };
@@ -90,17 +90,8 @@ struct CommandLineArgs
     bool m_showFeedbackViewer{ true }; // toggle just the raw feedback view in the feedback viewer
     UINT m_statisticsNumFrames{ 30 };
     bool m_cameraUpLock{ true };       // navigation locks "up" to be y=1
-    UINT m_numStreamingBatches{ 128 }; // number of in-flight batches of updates (UpdateLists)
-    UINT m_minNumUploadRequests{ 2000 }; // milliseconds. heuristic to reduce frequency of Submit() calls
-    UINT m_evictionDelay{ 1 }; // frames before tile eviction. internally, at least swap chain size to avoid artifacts
 
     // planet parameters
     UINT m_sphereLong{ 128 }; // # steps vertically. must be even
     UINT m_sphereLat{ 111 };  // # steps around. must be odd
-
-    TerrainGenerator::Params m_terrainParams;
-
-    bool m_captureTrace{ false }; // capture a trace file of tile uploads
-    int m_threadPriority{ 0 }; // applies to internal 
-    UINT m_resolveHeapSizeMB{ 32 }; // size of shared resolve resource heap (if resolve to texture)
 };

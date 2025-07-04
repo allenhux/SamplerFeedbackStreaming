@@ -187,6 +187,7 @@ private:
     //-------------------------------
     void InitDebugLayer();
     void CreateDeviceWithName(std::wstring& out_adapterDescription);
+    void DisableDebugLayerMessages();
     void CreateDescriptorHeaps();
     void CreateCommandQueue();
     void CreateSwapChain();
