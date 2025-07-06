@@ -93,21 +93,21 @@ void SFS::ProcessFeedbackThread::Start()
                     if (uploadsRequested) { flushPendingUploadRequests = true; }
 
                     // check for new resources, which probably need to load pack mips
-                    if (m_newResourcesStaging.size())
+                    if (m_newResourcesStaging.Size())
                     {
                         // grab them and release the lock quickly
                         std::vector<ResourceBase*> tmpResources;
-                        m_newResourcesStaging.swap(tmpResources);
+                        m_newResourcesStaging.Swap(tmpResources);
                         // accumulate because maybe hasn't been emptied from last time
                         m_newResources.insert(m_newResources.end(), tmpResources.begin(), tmpResources.end());
                     }
 
                     // check for resources where the application has called QueueFeedback() or QueueEviction()
-                    if (m_pendingResourceStaging.size())
+                    if (m_pendingResourceStaging.Size())
                     {
                         // grab them and release the lock quickly
                         std::set<ResourceBase*> tmpResources;
-                        m_pendingResourceStaging.swap(tmpResources);
+                        m_pendingResourceStaging.Swap(tmpResources);
                         // accumulate because maybe hasn't been emptied from last time
                         m_delayedResources.insert(m_delayedResources.end(), tmpResources.begin(), tmpResources.end());
                     }
@@ -278,19 +278,33 @@ void SFS::ProcessFeedbackThread::ShareNewResources(const std::vector<ResourceBas
 //-----------------------------------------------------------------------------
 // SFSManager acquires staging area and adds resources that have QueueFeedback() called
 //-----------------------------------------------------------------------------
-void SFS::ProcessFeedbackThread::SharePendingResources(const std::set<ResourceBase*>& in_resources)
+void SFS::ProcessFeedbackThread::SharePendingResources(std::set<ResourceBase*> in_resources)
 {
+    // ideally, pending resources from SFSManager gets passed by value directly to ProcessFeedbackThread
+    // otherwise, accumulate with prior resources
     auto& v = m_pendingResourceStaging.Acquire();
-    v.insert(in_resources.begin(), in_resources.end());
+    if (0 == v.size())
+    {
+        v.swap(in_resources);
+    }
+    else
+    {
+        v.insert(in_resources.begin(), in_resources.end());
+    }
     m_pendingResourceStaging.Release();
 }
 
 //-----------------------------------------------------------------------------
 // called by SFSManager on the main thread
 // shares the list of resources to flush with processfeedback thread
+// WARNING: blocks if prior call to FlushResources() hasn't signaled
 //-----------------------------------------------------------------------------
 void SFS::ProcessFeedbackThread::ShareFlushResources(const std::vector<SFSResource*>& in_resources, HANDLE in_event)
 {
+    // do not release until flush is complete
+    auto& resources = m_flushResources.Acquire();
+    ASSERT(0 == resources.size());
+
     // should not ever be possible for only the one bit to be set:
     ASSERT(GroupRemoveResources::Client::ResidencyThread != m_flushResources.GetFlags());
 
@@ -301,11 +315,8 @@ void SFS::ProcessFeedbackThread::ShareFlushResources(const std::vector<SFSResour
     {
         v.insert((ResourceBase*)r);
     }
-    m_flushResources.swap(v); // updates size attribute
-    ASSERT(0 == v.size());
 
-    // do not release until flush is complete
-    m_flushResources.Acquire();
+    resources.swap(v); // note size attribute is not updated
 
     ASSERT(nullptr == m_flushResourcesEvent);
 
@@ -333,13 +344,16 @@ void SFS::ProcessFeedbackThread::CheckFlushResources()
         return;
 
     case GroupRemoveResources::Client::Initialize:
-        ASSERT(m_flushResources.size());
+    {
+        auto& flushResources = m_flushResources.BypassLockGetValues();
+
+        ASSERT(flushResources.size());
 
         m_flushResources.ClearFlag(GroupRemoveResources::Client::Initialize);
 
         // remove from my vectors
-        ContainerRemove(m_delayedResources, m_flushResources.BypassLockGetValues());
-        ContainerRemove(m_pendingResources, m_flushResources.BypassLockGetValues());
+        ContainerRemove(m_delayedResources, flushResources);
+        ContainerRemove(m_pendingResources, flushResources);
 
         // tell residency thread there's work to do
         m_flushResources.SetFlag(GroupRemoveResources::Client::ResidencyThread);
@@ -349,8 +363,8 @@ void SFS::ProcessFeedbackThread::CheckFlushResources()
         // wait for residency thread to verify flushed
         m_flushResources.SetFlag(GroupRemoveResources::Client::ProcessFeedbackThread);
         Wake(); // prevent self from going to sleep right away
-
-        break;
+    }
+    break;
 
     case GroupRemoveResources::Client::ProcessFeedbackThread:
     {
@@ -358,12 +372,13 @@ void SFS::ProcessFeedbackThread::CheckFlushResources()
         // identify any resources that have pending work in DataUploader
         // when done, set the event and release the lock
 
+        auto& flushResources = m_flushResources.BypassLockGetValues();
         std::set<ResourceBase*> remaining;
 
         // wait for new resources to migrate to pending
         for (auto r : m_newResources)
         {
-            if (m_flushResources.BypassLockGetValues().contains(r))
+            if (flushResources.contains(r))
             {
                 remaining.insert(r);
             }
@@ -373,14 +388,14 @@ void SFS::ProcessFeedbackThread::CheckFlushResources()
         for (auto& u : m_dataUploader.GetUpdateLists())
         {
             if ((UpdateList::State::STATE_FREE != u.m_executionState) &&
-                (m_flushResources.BypassLockGetValues().contains((ResourceBase*)u.m_pResource)))
+                (flushResources.contains((ResourceBase*)u.m_pResource)))
             {
                 remaining.insert((ResourceBase*)u.m_pResource);
             }
         }
 
         // eject all heap indices
-        for (auto r : m_flushResources.BypassLockGetValues())
+        for (auto r : flushResources)
         {
             if (!remaining.contains(r))
             {
@@ -389,10 +404,10 @@ void SFS::ProcessFeedbackThread::CheckFlushResources()
         }
 
         // set removeResources to just the in-flight resources
-        m_flushResources.BypassLockGetValues().swap(remaining);
+        flushResources.swap(remaining);
 
         // resources have been flushed. clear flags and signal event.
-        if (0 == remaining.size())
+        if (0 == flushResources.size())
         {
             m_flushResources.ClearFlag(GroupRemoveResources::Client::ProcessFeedbackThread);
             ASSERT(m_flushResourcesEvent);

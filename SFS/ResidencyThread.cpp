@@ -56,7 +56,7 @@ void SFS::ResidencyThread::Start()
                     // number of resources likely > # to be removed
                     ContainerRemove(m_resources, m_flushResources.BypassLockGetValues());
 
-                    if (m_resourcesStaging.size())
+                    if (m_resourcesStaging.Size())
                     {
                         ContainerRemove(m_resourcesStaging.Acquire(), m_flushResources.BypassLockGetValues());
                         m_resourcesStaging.Release();
@@ -64,10 +64,10 @@ void SFS::ResidencyThread::Start()
                     m_flushResources.ClearFlag(GroupRemoveResources::Client::ResidencyThread);
                 }
 
-                if (m_resourcesStaging.size())
+                if (m_resourcesStaging.Size())
                 {
                     std::set<ResourceBase*> n;
-                    m_resourcesStaging.swap(n);
+                    m_resourcesStaging.Swap(n);
 
                     std::erase_if(m_resources, [&](auto r)
                         {

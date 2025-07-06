@@ -235,8 +235,7 @@ void SFS::Manager::BeginFrame()
     // if feedback requested last frame, post affected resources
     if (m_pendingResources.size())
     {
-        m_processFeedbackThread.SharePendingResources(m_pendingResources);
-        m_pendingResources.clear();
+        m_processFeedbackThread.SharePendingResources(std::move(m_pendingResources));
     }
 
     // every frame, process feedback (also steps eviction history from prior frames)
@@ -309,11 +308,10 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
     RemoveHeaps();
 
     // if new StreamingResources have been created...
-    if (m_newResources.size())
+    if (m_newResources.Size())
     {
         std::vector<ResourceBase*> newResources;
-        m_newResources.Acquire().swap(newResources);
-        m_newResources.Release();
+        m_newResources.Swap(newResources);
 
         m_streamingResources.insert(m_streamingResources.end(), newResources.begin(), newResources.end());
         AllocateSharedResidencyMap();

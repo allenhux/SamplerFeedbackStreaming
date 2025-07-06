@@ -133,8 +133,8 @@ namespace SFS
     public:
         auto& Acquire() { m_lock.Acquire(); return m_values; }
         void Release() { m_size = m_values.size(); m_lock.Release(); }
-        size_t size() { return  m_size; }
-        void swap(T& v) { Acquire().swap(v); Release(); }
+        size_t Size() { return  m_size; }
+        void Swap(T& v) { Acquire().swap(v); Release(); }
     protected:
         Lock m_lock;
         T m_values;

@@ -66,7 +66,7 @@ SFS::ManagerBase::~ManagerBase()
 
     // if a resource is in removeResources, it has already been deleted.
     std::set<ResourceBase*> removeResources;
-    m_removeResources.swap(removeResources);
+    m_removeResources.Swap(removeResources);
 
     // possible for a resource to be in both m_removeResources and m_streamingResources if
     //    an application destructor calls Resource::Destroy() but then doesn't call Begin/EndFrame()
@@ -80,7 +80,7 @@ SFS::ManagerBase::~ManagerBase()
 
     // possible for a resource to be in newResources if app shut down before resource finished initializing
     std::vector<ResourceBase*> newResources;
-    m_newResources.swap(newResources);
+    m_newResources.Swap(newResources);
     for (auto p : newResources)
     {
         if (!removeResources.contains(p))
@@ -242,10 +242,10 @@ void SFS::ManagerBase::CreateMinMipMapView(D3D12_CPU_DESCRIPTOR_HANDLE in_descri
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::RemoveResources()
 {
-    if (m_removeResources.size())
+    if (m_removeResources.Size())
     {
         std::set<ResourceBase*> tmp;
-        m_removeResources.swap(tmp);
+        m_removeResources.Swap(tmp);
         ContainerRemove(m_streamingResources, tmp);
     }
 }
@@ -256,10 +256,10 @@ void SFS::ManagerBase::RemoveResources()
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::FlushResourcesInternal()
 {
-    if (m_flushResources.size())
+    if (m_flushResources.Size())
     {
         std::set<ResourceBase*> removeResources;
-        m_flushResources.swap(removeResources);
+        m_flushResources.Swap(removeResources);
 
         ContainerRemove(m_pendingResources, removeResources);
         ContainerRemove(m_packedMipTransitionResources, removeResources);

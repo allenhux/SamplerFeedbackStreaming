@@ -63,8 +63,8 @@ namespace SFS
 
         void ShareNewResources(const std::vector<ResourceBase*>& in_resources);
 
-        // IF successfully transferred, clears the vector
-        void SharePendingResources(const std::set<ResourceBase*>& in_resources);
+        // transfers and clears the vector (call with std::move())
+        void SharePendingResources(std::set<ResourceBase*> in_resources);
 
         // indicate resources should be flushed
         // in_resources will be cleared
