@@ -268,10 +268,17 @@ void SFS::ProcessFeedbackThread::Stop()
 //-----------------------------------------------------------------------------
 // SFSManager acquires staging area and adds new resources
 //-----------------------------------------------------------------------------
-void SFS::ProcessFeedbackThread::ShareNewResources(const std::vector<ResourceBase*>& in_resources)
+void SFS::ProcessFeedbackThread::ShareNewResources(std::vector<ResourceBase*> in_resources)
 {
     auto& v = m_newResourcesStaging.Acquire();
-    v.insert(v.end(), in_resources.begin(), in_resources.end());
+    if (0 == v.size())
+    {
+        v.swap(in_resources);
+    }
+    else
+    {
+        v.insert(v.end(), in_resources.begin(), in_resources.end());
+    }
     m_newResourcesStaging.Release();
 }
 
@@ -295,8 +302,9 @@ void SFS::ProcessFeedbackThread::SharePendingResources(std::set<ResourceBase*> i
 }
 
 //-----------------------------------------------------------------------------
-// called by SFSManager on the main thread
 // shares the list of resources to flush with processfeedback thread
+// called by SFSManager on the main thread
+// in_resources is owned by the application
 // WARNING: blocks if prior call to FlushResources() hasn't signaled
 //-----------------------------------------------------------------------------
 void SFS::ProcessFeedbackThread::ShareFlushResources(const std::vector<SFSResource*>& in_resources, HANDLE in_event)
@@ -304,21 +312,17 @@ void SFS::ProcessFeedbackThread::ShareFlushResources(const std::vector<SFSResour
     // do not release until flush is complete
     auto& resources = m_flushResources.Acquire();
     ASSERT(0 == resources.size());
+    ASSERT(nullptr == m_flushResourcesEvent);
 
     // should not ever be possible for only the one bit to be set:
     ASSERT(GroupRemoveResources::Client::ResidencyThread != m_flushResources.GetFlags());
 
     // add resources to flush to staging
-    // WARNING: will block if another flush is in progress
-    std::set<ResourceBase*> v;
+    // note size attribute is not updated
     for (auto r : in_resources)
     {
-        v.insert((ResourceBase*)r);
+        resources.insert((ResourceBase*)r);
     }
-
-    resources.swap(v); // note size attribute is not updated
-
-    ASSERT(nullptr == m_flushResourcesEvent);
 
     m_flushResourcesEvent = in_event;
     m_flushResources.SetFlag(GroupRemoveResources::Client::Initialize);

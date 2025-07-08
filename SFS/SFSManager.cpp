@@ -131,7 +131,8 @@ SFSResource* SFS::Manager::CreateResource(const struct SFSResourceDesc& in_desc,
 }
 
 //-----------------------------------------------------------------------------
-// resources begin to be flushed in BeginFrame()
+// resources begin to be flushed in BeginFrame
+// WARNING: blocks application thread if prior call to FlushResources() hasn't signaled
 //-----------------------------------------------------------------------------
 void SFS::Manager::FlushResources(const std::vector<SFSResource*>& in_resources, HANDLE in_event)
 {
@@ -319,8 +320,8 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
         // monitor new resources for when they need packed mip transition barriers
         m_packedMipTransitionResources.insert(m_packedMipTransitionResources.end(), newResources.begin(), newResources.end());
 
-        // share new resources with PFT. PFT will share with residency thread
-        m_processFeedbackThread.ShareNewResources(newResources);
+        // share new resources with PFT
+        m_processFeedbackThread.ShareNewResources(std::move(newResources));
     }
 
     // handle FlushResources(). note occurs after PFT::ShareNewResources

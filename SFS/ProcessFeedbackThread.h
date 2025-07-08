@@ -61,7 +61,7 @@ namespace SFS
 
         void Wake() { m_processFeedbackFlag.Set(); }
 
-        void ShareNewResources(const std::vector<ResourceBase*>& in_resources);
+        void ShareNewResources(std::vector<ResourceBase*> in_resources);
 
         // transfers and clears the vector (call with std::move())
         void SharePendingResources(std::set<ResourceBase*> in_resources);
