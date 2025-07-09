@@ -181,8 +181,8 @@ void SFS::ManagerBase::UseDirectStorage(bool in_useDS)
 //-----------------------------------------------------------------------------
 float SFS::Manager::GetGpuTexelsPerMs() const { return m_texelsPerMs; }
 UINT SFS::Manager::GetMaxNumFeedbacksPerFrame() const { return m_maxNumResolvesPerFrame; }
-float SFS::Manager::GetGpuTime() const { return m_gpuTimerResolve.GetTimes()[m_renderFrameIndex].first; }
-float SFS::Manager::GetCpuProcessFeedbackTime() { return m_processFeedbackFrameTime; }
+float SFS::Manager::GetGpuTime() const { return m_gpuFrameTime; }
+float SFS::Manager::GetCpuProcessFeedbackTime() { return m_cpuProcessFeedbackFrameTime; }
 UINT SFS::Manager::GetTotalNumUploads() const { return m_dataUploader.GetTotalNumUploads(); }
 UINT SFS::Manager::GetTotalNumEvictions() const { return m_dataUploader.GetTotalNumEvictions(); }
 UINT SFS::Manager::GetTotalNumSubmits() const { return m_processFeedbackThread.GetTotalNumSubmits(); }
@@ -228,7 +228,7 @@ void SFS::Manager::BeginFrame()
     m_frameFenceValue++;
 
     // accumulate gpu time from last frame
-    m_gpuFeedbackTime += GetGpuTime();
+    m_gpuFeedbackTime += m_gpuTimerResolve.GetTimes()[m_renderFrameIndex].first;
 
     // index used to track command list allocators, timers, etc.
     m_renderFrameIndex = m_frameFenceValue % m_numSwapBuffers;
@@ -241,13 +241,14 @@ void SFS::Manager::BeginFrame()
 
     // every frame, process feedback (also steps eviction history from prior frames)
     m_processFeedbackThread.Wake();
-
+#if 0
     // capture cpu time spent processing feedback
     {
         INT64 processFeedbackTime = m_processFeedbackThread.GetTotalProcessTime(); // snapshot of live counter
         m_processFeedbackFrameTime = m_processFeedbackThread.GetSecondsFromDelta(processFeedbackTime - m_previousFeedbackTime);
         m_previousFeedbackTime = processFeedbackTime; // remember current time for next call
     }
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -451,10 +452,16 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
 
     if (m_numFeedbackTimingFrames >= m_feedbackTimingFrequency)
     {
+        m_gpuFrameTime = m_gpuFeedbackTime / m_feedbackTimingFrequency;
+
         m_numFeedbackTimingFrames = 0;
         m_texelsPerMs = m_numTexelsQueued / (m_gpuFeedbackTime * 1000.f);
         m_numTexelsQueued = 0;
         m_gpuFeedbackTime = 0;
+    
+        UINT64 processFeedbackTime = m_processFeedbackThread.GetTotalProcessTime(); // snapshot of live counter
+        m_cpuProcessFeedbackFrameTime = m_processFeedbackThread.GetSecondsFromDelta(processFeedbackTime - m_previousFeedbackTime) / m_feedbackTimingFrequency;
+        m_previousFeedbackTime = processFeedbackTime; // remember current time for next call
     }
 
     return pCommandList;

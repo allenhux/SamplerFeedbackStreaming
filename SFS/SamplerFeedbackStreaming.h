@@ -220,8 +220,8 @@ struct SFSManager
     //--------------------------------------------
     // statistics
     //--------------------------------------------
-    virtual float GetGpuTime() const = 0; // GPU time for resolving feedback buffers last frame
-    virtual float GetCpuProcessFeedbackTime() = 0; // approx. cpu time spent processing feedback last frame. expected usage is to average over many frames
+    virtual float GetGpuTime() const = 0; // GPU render queue time (seconds) for resolving feedback buffers (averaged)
+    virtual float GetCpuProcessFeedbackTime() = 0; // approx. cpu time (seconds) spent processing feedback last frame (averaged)
     virtual UINT GetTotalNumUploads() const = 0;   // number of tiles uploaded so far
     virtual UINT GetTotalNumEvictions() const = 0; // number of tiles evicted so far
     virtual UINT GetTotalNumSubmits() const = 0;   // number of fence signals for uploads. when using DS, equals number of calls to IDStorageQueue::Submit()

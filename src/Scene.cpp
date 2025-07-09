@@ -186,9 +186,11 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
     m_device->CheckFeatureSupport(D3D12_FEATURE_GPU_VIRTUAL_ADDRESS_SUPPORT, &gpuVirtualAddressLimits, sizeof(gpuVirtualAddressLimits));
 
     // limit the amount we can allocate to the number of bits for virtual memory minus a healthy amount extra
-    // divide addressable space by 64k for # of tiles, then divide that by 2 (16 + 1 bits)
-    m_maxVirtualTiles = 1 << (gpuVirtualAddressLimits.MaxGPUVirtualAddressBitsPerProcess - (16 + 1));
-    m_maxVirtualTiles += m_maxVirtualTiles >> 1; // add 50% of the whole addressable space back
+    // divide addressable space by 64k for # of tiles (16 bits), then subtract off a healthy chunk
+    // 128GB / 64k = 2 * 1024 * 1024 tiles
+    constexpr UINT reserved = 2 * 1024 * 1024;
+    m_maxVirtualTiles = 1 << (gpuVirtualAddressLimits.MaxGPUVirtualAddressBitsPerProcess - 16);
+    m_maxVirtualTiles -= reserved; // add 50% of the whole addressable space back
 
     m_pGpuTimer = new D3D12GpuTimer(m_device.Get(), 8, D3D12GpuTimer::TimerType::Direct);
 
@@ -1188,7 +1190,7 @@ void Scene::LoadSpheres()
             m_pGui->SetMessage("Reached Max Addressable Memory");
             m_maxNumObjects = 0;
         }
-        break;
+        [[fallthrough]]; // get a final count of # tiles
     case LoadingThread::Running:
     {
         // update # allocated tiles

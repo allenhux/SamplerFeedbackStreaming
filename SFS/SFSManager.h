@@ -57,11 +57,12 @@ namespace SFS
         D3D12GpuTimer m_gpuTimerResolve; // time for feedback resolve
         BarrierList m_packedMipTransitionBarriers; // transition packed-mips from common (copy dest)
 
-        INT64 m_previousFeedbackTime{ 0 }; // m_processFeedbackTime at time of last query
-        float m_processFeedbackFrameTime{ 0 }; // cpu time spent processing feedback for the most recent frame
+        UINT64 m_previousFeedbackTime{ 0 }; // m_processFeedbackTime at time of last query
+        float m_cpuProcessFeedbackFrameTime{ 0 }; // cpu time spent processing feedback (averaged over m_feedbackTimingFrequency)
+        float m_gpuFrameTime{ 0 };  // gpu render queue time (averaged over m_feedbackTimingFrequency)
 
         // every n frames swap
-        UINT m_feedbackTimingFrequency{ 100 };
+        UINT m_feedbackTimingFrequency{ 50 };
         UINT m_numFeedbackTimingFrames{ 0 };
         float m_texelsPerMs{ 50 };
         float m_gpuFeedbackTime{ 0 };

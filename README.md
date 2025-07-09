@@ -1,26 +1,39 @@
 # Sampler Feedback Streaming With DirectStorage
 
 *Latest Updates*:
-- Added frustum occlusion culling; now will only do sampler feedback on the visible objects.
+- Many performance improvements reduce main-thread overhead and improve internal thread performance with large numbers of resources
+- Resolve directly from GPU feedback buffers to CPU readback buffers, avoiding temporary memory and per-frame copies
+- Enabled multi-threaded resource creation and destruction 
 - Uses GPU Upload Heaps (new D3D12 Agility SDK feature), requiring developer mode.
-- Updated to DirectStorage 1.2.3.
+- Added application frustum culling and screen-area heuristic to not QueueFeedback to off-screen or small objects that wouldn't benefit from higher-resolution textures.
 
 ## Introduction
 
-This repository contains an [MIT licensed](LICENSE) demo of _DirectX12 Sampler Feedback Streaming_, a technique using [DirectX12 Sampler Feedback](https://microsoft.github.io/DirectX-Specs/d3d/SamplerFeedback.html) to guide continuous loading and eviction of small regions (tiles) of textures - in other words, virtual texture streaming. Sampler Feedback Streaming can dramatically improve visual quality by enabling scenes consisting of 100s of gigabytes of resources to be drawn on GPUs containing much less physical memory. The scene below uses just ~200MB of a 1GB heap, despite over 350GB of total texture resources. It also uses DirectStorage for Windows for maximum file upload performance.
+This repository contains an [MIT licensed](LICENSE) __implementation library__ and demo of _DirectX12 Sampler Feedback Streaming_, a technique that dramatically improves visual quality by enabling incredible scene detail: on-screen textures that, if fully loaded, may require _100 to 1000 times_ the GPU physical memory. That is, 1TB of imagery using just 1GB of a GPU's 8GB of physical memory.
 
-File access is via DirectStorage for Windows with GPU decompression. Be sure to update your GPU drivers to access your vendor's optimized GPU decompression capabilities. See also:
+Here's an example with 939 _gigabytes_ of textures (4,122 16k x 16k) using 387 _megabytes_ of memory (within a 1.5GB heap) on a GPU with 8GB of physical memory (the hardware is limited to 40 bits of address space == 1TB). GPU time spent on feedback is limited to 2ms (settable via a slider under the UI "More Options").
+
+![Sample screenshot](./readme-images/sampler-feedback-streaming-1TB.jpg "Sample screenshot")
+Textures derived from [Hubble Images](https://www.nasa.gov/mission_pages/hubble/multimedia/index.html), see the [Hubble Copyright](https://hubblesite.org/copyright)
+
+Note: textures appear to repeat because the files are re-used. They are all treated as separete D3D resources in the sample, though Sampler Feedback resources _can_ be used by multiple objects.
+
+## How? (light version)
+The library brings together 3 systems:
+1. [DirectStorage](https://devblogs.microsoft.com/directx/directstorage-api-downloads/) "a feature intended to allow games to make full use of high-speed storage (such as NVMe SSDs) that can can deliver multiple gigabytes a second of small (eg 64kb) data reads with minimal CPU overhead."
+2. [DirectX12 Sampler Feedback](https://microsoft.github.io/DirectX-Specs/d3d/SamplerFeedback.html) "a Direct3D feature for capturing and recording texture sampling information and locations. Without sampler feedback, these details would be opaque to the developer".
+3. [Reserved Resources](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-createreservedresource) "a resource with virtual memory only, no backing store" also known as _tiled_ or _sparse_ textures.
+
+The scene is rendered, with "feedback" resources capturing which texels were sampled. The per-texel feedback is "resolved" to texture regions that match the tiled resource size, e.g. 512x256 for BC1 format textures. The required tiles are then loaded from disk - yes, the image is drawn before the required data has been loaded! While the (compressed) tiles are loaded via DirectStorage, they are simultaneously mapped into the address space of the target texture. When tiles arrive or are evicted, a texture sampler clamp is altered (via CPU write to upload heap) so sampling only accesses resident portions of the texture.
+
+The image settles quickly with a fast SSD, and the delay is usually imperceptable because lower-resolution mips are being averaged with higher-resolution mips as a natural part of texture filtering (anisotropic or trilinear). The weight of the higher resolution data is low when an object is further away, giving time for the data to arrive before the weight increases until blurring would be apparent.
+
+See also:
 - [Intel's 1.1 announcement blog](https://www.intel.com/content/www/us/en/developer/articles/news/directstorage-on-intel-gpus.html)
 - [Microsoft's 1.1 announcement blog](https://devblogs.microsoft.com/directx/directstorage-1-1-now-available/)
 
-See also:
-
 - [GDC 2021 video](https://software.intel.com/content/www/us/en/develop/events/gdc.html?videoid=6264595860001) [(alternate link)](https://www.youtube.com/watch?v=VDDbrfZucpQ) which provides an overview of Sampler Feedback and discusses this sample [starting at about 15:30.](https://www.youtube.com/watch?v=VDDbrfZucpQ&t=936s)
 - [GDC 2021 presentation](https://software.intel.com/content/dam/develop/external/us/en/documents/pdf/july-gdc-2021-sampler-feedback-texture-space-shading-direct-storage.pdf) in PDF form
-- [Microsoft DirectStorage Landing Page](https://devblogs.microsoft.com/directx/directstorage-api-downloads/)
-
-![Sample screenshot](./readme-images/sampler-feedback-streaming.jpg "Sample screenshot")
-Textures derived from [Hubble Images](https://www.nasa.gov/mission_pages/hubble/multimedia/index.html), see the [Hubble Copyright](https://hubblesite.org/copyright)
 
 Notes:
 - while multiple objects can share the same DX texture and source file, this sample aims to demonstrate the possibility of every object having a unique resource. Hence, every texture is treated as though unique, though the same source file may be used multiple times.
@@ -32,36 +45,43 @@ Notes:
 ## Requirements:
 - minimum:
     - Windows 11
-    - GPU with D3D12 Sampler Feedback Support such as Intel Iris Xe Graphics as found in 11th Generation Intel&reg; Core&trade; processors and discrete GPUs (driver version **[30.0.100.9667](https://downloadcenter.intel.com/product/80939/Graphics) or later**)
+    - GPU with D3D12 Sampler Feedback Support
+    - nvme SSD with PCIe gen3 or later
 - recommended:
-    - nvme SSD with PCIe gen4 or later
+    - GPU supporting [Upload Heaps](https://microsoft.github.io/DirectX-Specs/d3d/D3D12GPUUploadHeaps.html)
 
-
-Tested on Win11 23H2, nvidia 4xxx
+Tested on Win11 24H2, nvidia 4xxx, amd 780m
 
 ## Build Instructions
 
-Download the source. Build the appropriate solution file
-- Visual Studio 2022: [SamplerFeedbackStreaming.sln](SamplerFeedbackStreaming.sln)
+Download the source. Build (release mode recommended) [SamplerFeedbackStreaming.sln](SamplerFeedbackStreaming.sln). Run the __Expanse__ project.
 
 All executables, scripts, configurations, and media files will be found in the x64/Release or x64/Debug directories. You can run from within the Visual Studio IDE or from the command line, e.g.:
 
     c:\SamplerFeedbackStreaming\x64\Release> expanse.exe
 
-By default (no command line options) there will be a single object, "terrain", which allows for exploring sampler feedback streaming. To explore sampler feedback streaming, expand "Terrain Object Feedback Viewer." In the top right find 2 windows: the raw GPU sampler feedback (min mip map of desired tiles) and to its right the "residency map" generated by the application (min mip map of tiles that have been loaded). Across the bottom are the mips of the texture, with mip 0 in the bottom left. Left-click drag the terrain to see sampler feedback streaming in action. Note that navigation in this mode has the up direction locked, which can be disabled in the UI.
+By default (no command line options) the view will focus on a "terrain" object which allows for exploring sampler feedback streaming. Note the UI region labeled "Terrain Object Feedback Viewer."
+
+In the top right find 2 views:
+- the solid color texture represents the texture clamp on the terrain texture, with colors representing mip levels: white is mip 0, red is mip 1, and green is mip 2.
+- the next column is the first 3 mip levels of the texture. Note how the white region of the left image corresponds to the non-black region of the top-right image; those are the tiles that have been loaded into the sparse texure. The "scrambled" tiles were previously evicted and recycled for a different texture with a different format (BC7 vs. BC1).
+
+If you click-drag the screen or navigate (arrow keys and WASD) you can watch the tiles dynamically load.
+
+Note that navigation in this mode has the up direction locked, which can be disabled in the UI.
+
 ![default startup](./readme-images/default-startup.jpg "default startup")
 
-Press the DEMO MODE button or run the batch file _demo.bat_ to see streaming in action. Press "page up" or to click _Tile Min Mip Overlay_ to toggle a visualization of the tiles loading. Toggle _Roller Coaster_ mode (page up) to fly through the scene. Note keyboard controls are inactive while the _Camera_ slider is non-zero.
+Try:
+- Press the DEMO MODE button or run the batch file _demo.bat_ to see streaming in action.
+- While in demo mode, toggle _Roller Coaster_ mode (page down) to fly through the scene.
+- Toggle _Tile Min Mip Overlay_ (page up) to toggle a visualization of the tiles loading
+- Press "home" to toggle the UI
+- Press "end" to toggle the feedback viewer
 
-    c:\SamplerFeedbackStreaming\x64\Release> demo.bat
-
-![demo batch file](./readme-images/demo-bat.jpg "demo.bat")
+Note: keyboard controls are inactive while the _Camera_ slider is non-zero.
 
 Benchmark mode generates massive disk traffic by cranking up the animation rate, dialing up the sampler bias, and rapidly switching between two camera paths to force eviction of all the current texture tiles. This mode is designed to stress the whole platform, from storage to PCIe interface to CPU and GPU.
-
-Two sets of high resolution textures are available for use with "demo-hubble.bat": [hubble-16k.zip](https://github.com/GameTechDev/SamplerFeedbackStreaming/releases/tag/1) and [hubble-16k-bc1.zip](https://github.com/GameTechDev/SamplerFeedbackStreaming/releases/tag/2)). BUT they are in an older file format. Simply drop them into the "dds" directory and rebuild DdsToXet, or convert them to the new file format with `convert.bat` (see below). Make sure the mediadir in the batch file is set properly, or override it on the command line as follows:
-
-    c:\SamplerFeedbackStreaming\x64\Release> demo-hubble.bat -mediadir c:\hubble-16k
 
 ## Keyboard controls
 
@@ -109,6 +129,12 @@ The batch file [convert.bat](scripts/convert.bat) will read all the DDS files in
 
     c:> convert c:\myDdsFiles c:\myXetFiles
 
+## Sample Textures
+Two sets of high resolution textures are available for use with "demo-hubble.bat": [hubble-16k.zip](https://github.com/GameTechDev/SamplerFeedbackStreaming/releases/tag/1) and [hubble-16k-bc1.zip](https://github.com/GameTechDev/SamplerFeedbackStreaming/releases/tag/2)). BUT they are in an older file format. Simply drop them into the "dds" directory and rebuild DdsToXet, or convert them to the new file format with `convert.bat` (see below). Make sure the mediadir in the batch file is set properly, or override it on the command line as follows:
+
+    c:\SamplerFeedbackStreaming\x64\Release> demo-hubble.bat -mediadir c:\hubble-16k
+
+## Performance Profiling
 A new DirectStorage trace capture and playback utility has been added so DirectStorage performance can be analyzed without the overhead of rendering. For example, to capture and play back the DirectStorage requests and submits for 500 "stressful" frames with a staging buffer size of 128MB, cd to the build directory and:
 ```
 stress.bat -timingstart 200 -timingstop 700 -capturetrace
@@ -138,16 +164,20 @@ m_pStreamingResource = std::unique_ptr<StreamingResource>(in_pTileUpdateManager-
 ```
 
 # Known issues
+* GPU feedback time on AMD 780M (and others?) is (very) not correct. Suspect ResolveSubresourceRegion() is not measured.
+* full-screen with multi-gpu or remote desktop is not borderless
+* entering full screen in a multi-gpu system moves the window to a monitor attached to the GPU by design. However, if the window starts on a different monitor, it "disappears" on the first maximization. Hit *escape* then maximize again, and it should work fine.
 
-## AMD 780M (and others?)
+# Old Issues (no longer encountered)
 
-GPU timer returns 0ms for sampler feedback resolve, thus invalidating the frame-time limiter for processing feedback. As a result, every visible object participates in SFS every frame, resulting in very low framerates and very low bandwidth.
+## GPU timer not functional
+The GPU timer on some architectures returns 0ms for sampler feedback resolve, thus invalidating the frame-time limiter for processing feedback. As a result, every visible object participates in SFS every frame, resulting in very low framerates and very low bandwidth.
 
 ## Performance Degradation
 
 (2025: Mostly fixed via Microsoft improvements to Tiled Resource mapping operations?)
 
-Performance degrades over time with some non-Intel devices/drivers as exposed by the bandwidth graph in benchmark mode after a few minutes. Compare the following healthy graph to the graph containing stalls below:
+On some architectures, performance degrades over time. This can be seen in the bandwidth graph in benchmark mode after a few minutes. Compare the following healthy graph to the graph containing stalls below:
 
 - healthy: ![Healthy Streaming](./readme-images/streamingHealthy.png "Healthy Streaming")
 - stalling: ![Streaming Stalls](./readme-images/streamingStalls.png "Streaming Stalls")
@@ -171,10 +201,6 @@ The following image shows an exaggerated version of the problem, created by disa
 ![Streaming Cracks](./readme-images/streaming-cracks.jpg "Streaming Cracks")
 
 In this case, the hardware sampler is reaching across tile boundaries to perform anisotropic sampling, but encounters tiles that are not physically mapped. D3D12 Reserved Resource tiles that are not physically mapped return black to the sampler. This could be mitigated by dilating or eroding the min mip map such that there is no more than 1 mip level difference between neighboring tiles. That visual optimization is TBD.
-
-There are also a few known bugs:
-* entering full screen in a multi-gpu system moves the window to a monitor attached to the GPU by design. However, if the window starts on a different monitor, it "disappears" on the first maximization. Hit *escape* then maximize again, and it should work fine.
-* full-screen while remote desktop is not borderless.
 
 # How It Works
 
