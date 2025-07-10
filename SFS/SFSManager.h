@@ -29,7 +29,7 @@ namespace SFS
         // external APIs
         //-----------------------------------------------------------------
         virtual void Destroy() override;
-        virtual SFSHeap* CreateHeap(UINT in_maxNumTilesHeap) override;
+        virtual SFSHeap* CreateHeap(UINT in_sizeInMB) override;
         virtual SFSResource* CreateResource(const struct SFSResourceDesc& in_desc,
             SFSHeap* in_pHeap, const std::wstring& in_filename) override;
         virtual void FlushResources(const std::vector<SFSResource*>& in_resources, HANDLE in_event) override;

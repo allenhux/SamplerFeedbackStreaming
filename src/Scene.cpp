@@ -188,7 +188,7 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
     // limit the amount we can allocate to the number of bits for virtual memory minus a healthy amount extra
     // divide addressable space by 64k for # of tiles (16 bits), then subtract off a healthy chunk
     // 128GB / 64k = 2 * 1024 * 1024 tiles
-    constexpr UINT reserved = 2 * 1024 * 1024;
+    const UINT reserved = m_args.m_reservedMemoryGB * 1024 * 16; // GB -> # tiles
     m_maxVirtualTiles = 1 << (gpuVirtualAddressLimits.MaxGPUVirtualAddressBitsPerProcess - 16);
     m_maxVirtualTiles -= reserved; // add 50% of the whole addressable space back
 
@@ -695,7 +695,7 @@ void Scene::StartStreamingLibrary()
     // create 1 or more heaps to contain our StreamingResources
     for (UINT i = 0; i < m_args.m_numHeaps; i++)
     {
-        m_sharedHeaps.push_back(m_pSFSManager->CreateHeap(m_args.m_streamingHeapSize));
+        m_sharedHeaps.push_back(m_pSFSManager->CreateHeap(m_args.m_sfsHeapSizeMB));
     }
 }
 
@@ -1190,20 +1190,9 @@ void Scene::LoadSpheres()
             m_pGui->SetMessage("Reached Max Addressable Memory");
             m_maxNumObjects = 0;
         }
-        [[fallthrough]]; // get a final count of # tiles
     case LoadingThread::Running:
-    {
-        // update # allocated tiles
-        m_numTilesVirtual = 0;
-        for (auto& o : m_objects)
-        {
-            if (nullptr != o)
-            {
-                m_numTilesVirtual += o->GetStreamingResource()->GetNumTilesVirtual();
-            }
-        }
         return;
-    }
+        break;
     default:
         break;
     }
@@ -1319,6 +1308,7 @@ void Scene::DrawObjects()
         // round-robin which objects get feedback
         m_queueFeedbackIndex = m_queueFeedbackIndex % m_objects.size();
         m_numObjectsLoaded = 0;
+        m_numTilesVirtual = 0;
 
         // loop over n objects starting with the range that we want to get sampler feedback from, then wrap around.
         UINT numObjects = m_queueFeedbackIndex + (UINT)m_objects.size();
@@ -1329,6 +1319,8 @@ void Scene::DrawObjects()
             auto o = m_objects[objectIndex];
             if ((nullptr == o) || (!o->Drawable())) { continue; }
             m_numObjectsLoaded++;
+            // update # virtual tiles. redundant if not creating/deleting objects, but also cheap to do.
+            m_numTilesVirtual += o->GetStreamingResource()->GetNumTilesVirtual();
 
             bool isVisible = o->IsVisible();
 
@@ -1788,7 +1780,7 @@ void Scene::DrawUI()
         guiDrawParams.m_numTilesEvicted = m_numEvictionsPreviousFrame;
         guiDrawParams.m_numTilesCommitted = numTilesCommitted;
         guiDrawParams.m_numTilesVirtual = m_numTilesVirtual;
-        guiDrawParams.m_totalHeapSize = m_args.m_streamingHeapSize * (UINT)m_sharedHeaps.size();
+        guiDrawParams.m_totalHeapSizeTiles = 16 * m_args.m_sfsHeapSizeMB * (UINT)m_sharedHeaps.size();
         guiDrawParams.m_windowHeight = m_args.m_windowHeight;
         guiDrawParams.m_numObjectsLoaded = m_numObjectsLoaded;
 

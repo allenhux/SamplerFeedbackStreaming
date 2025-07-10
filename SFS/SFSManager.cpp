@@ -22,11 +22,11 @@ SFS::Manager::Manager(const struct SFSManagerDesc& in_desc, ID3D12Device8* in_pD
     : ManagerBase(in_desc, in_pDevice)
     , m_gpuTimerResolve(in_pDevice, in_desc.m_swapChainBufferCount, D3D12GpuTimer::TimerType::Direct)
 {
-    ASSERT(in_desc.m_resolveHeapSizeMB);
-
     m_commandListEndFrame.Allocate(m_device.Get(), m_numSwapBuffers, L"SFS::ManagerBase::m_commandListEndFrame");
 
 #if RESOLVE_TO_TEXTURE
+    ASSERT(in_desc.m_resolveHeapSizeMB);
+
     // allocate shared space for per-frame feedback resolves
     {
         // the following limits the implementation to a maximum minmipmap dimension of 64x64,
@@ -108,9 +108,9 @@ void SFS::Manager::Destroy()
 // Create a heap used by 1 or more StreamingResources
 // parameter is number of 64KB tiles to manage
 //--------------------------------------------
-SFSHeap* SFS::Manager::CreateHeap(UINT in_maxNumTilesHeap)
+SFSHeap* SFS::Manager::CreateHeap(UINT in_sizeInMB)
 {
-    auto pStreamingHeap = new SFS::Heap(this, m_dataUploader.GetMappingQueue(), in_maxNumTilesHeap);
+    auto pStreamingHeap = new SFS::Heap(this, m_dataUploader.GetMappingQueue(), in_sizeInMB);
     m_streamingHeaps.push_back(pStreamingHeap);
     return (SFSHeap*)pStreamingHeap;
 }
@@ -413,8 +413,8 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
         }
 #endif
 
-        // paranoia?
-        m_barrierResolveSrcToUav.push_back(CD3DX12_RESOURCE_BARRIER::UAV(nullptr));
+        // paranoia? "a UAV barrier is not necessary [sic] the resource transitions to another state"
+        // m_barrierResolveSrcToUav.push_back(CD3DX12_RESOURCE_BARRIER::UAV(nullptr));
 
         // transition all feedback resources RESOLVE_SOURCE->UAV
         // also transition the (non-opaque) resolved resources RESOLVE_DEST->COPY_SOURCE

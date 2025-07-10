@@ -55,7 +55,7 @@ namespace SFS
         // end external APIs
         //-----------------------------------------------------------------
 
-        Heap(class ManagerBase* in_pSFS, ID3D12CommandQueue* in_pQueue, UINT in_maxNumTilesHeap);
+        Heap(class ManagerBase* in_pSFS, ID3D12CommandQueue* in_pQueue, UINT in_sizeInMB);
         virtual ~Heap();
 
         // allocate atlases for a format. does nothing if format already has an atlas

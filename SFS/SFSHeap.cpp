@@ -152,14 +152,14 @@ ID3D12Resource* SFS::Atlas::ComputeCoordFromTileIndex(D3D12_TILED_RESOURCE_COORD
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 SFS::Heap::Heap(SFS::ManagerBase* in_pSfsManager,
-    ID3D12CommandQueue* in_pQueue, UINT in_maxNumTilesHeap)
-    : m_heapAllocator(in_maxNumTilesHeap), m_pSfsManager(in_pSfsManager)
+    ID3D12CommandQueue* in_pQueue, UINT in_sizeInMB)
+    : m_heapAllocator(in_sizeInMB * 16), m_pSfsManager(in_pSfsManager)
 {
     ComPtr<ID3D12Device> device;
     in_pQueue->GetDevice(IID_PPV_ARGS(&device));
 
     // create a heap to store streaming tiles
-    const UINT64 heapSize = UINT64(in_maxNumTilesHeap) * D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES;
+    const UINT64 heapSize = UINT64(in_sizeInMB) * 1024 * 1024;
     CD3DX12_HEAP_DESC heapDesc(heapSize, D3D12_HEAP_TYPE_DEFAULT, 0, D3D12_HEAP_FLAG_DENY_BUFFERS | D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES);
     ThrowIfFailed(device->CreateHeap(&heapDesc, IID_PPV_ARGS(&m_tileHeap)));
 }

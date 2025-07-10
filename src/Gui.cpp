@@ -191,8 +191,8 @@ void Gui::DrawMini(ID3D12GraphicsCommandList* in_pCommandList, const DrawParams&
 
     DrawLineGraph(m_bandwidthHistory, m_bandwidthHistoryIndex, ImVec2(windowSize.x, 100.0f));
 
-    float percentOccupied = float(in_drawParams.m_numTilesCommitted) / float(in_drawParams.m_totalHeapSize);
-    float heapSize = (in_drawParams.m_totalHeapSize * 64) / 1024.f;
+    float percentOccupied = float(in_drawParams.m_numTilesCommitted) / float(in_drawParams.m_totalHeapSizeTiles);
+    float heapSize = (in_drawParams.m_totalHeapSizeTiles * 64) / 1024.f;
     float heapOccupied = heapSize * percentOccupied;
 
     ImGui::Text("Heap MB: %7.2f of %7.2f (%.2f%%)",
@@ -200,7 +200,7 @@ void Gui::DrawMini(ID3D12GraphicsCommandList* in_pCommandList, const DrawParams&
         heapSize,
         100.f * percentOccupied);
 
-    DrawHeapOccupancyBar(in_drawParams.m_numTilesCommitted, in_drawParams.m_totalHeapSize, scale * 10.0f);
+    DrawHeapOccupancyBar(in_drawParams.m_numTilesCommitted, in_drawParams.m_totalHeapSizeTiles, scale * 10.0f);
 
     m_height = ImGui::GetCursorPosY() - top;
 
@@ -337,9 +337,10 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     ImGui::Text("Reserved GB: %.3f", (in_drawParams.m_numTilesVirtual * 64.f) / 1000000.f);
     ImGui::Text("Committed MB: %.3f (%.2f %%)", (in_drawParams.m_numTilesCommitted * 64.f) / 1000.f, 100.f * float(in_drawParams.m_numTilesCommitted) / float(in_drawParams.m_numTilesVirtual));
 
-    ImGui::Text("Heap Occupancy: %.2f%% of %.2f MB",
-        100.f * float(in_drawParams.m_numTilesCommitted) / float(in_drawParams.m_totalHeapSize), (in_drawParams.m_totalHeapSize * 64.f) / 1000.f);
-    DrawHeapOccupancyBar(in_drawParams.m_numTilesCommitted, in_drawParams.m_totalHeapSize, 10.0f);
+    ImGui::Text("Heap Occupancy: %.2f%% of %d MB",
+        100.f * float(in_drawParams.m_numTilesCommitted) / float(in_drawParams.m_totalHeapSizeTiles),
+        in_drawParams.m_totalHeapSizeTiles / 16);
+    DrawHeapOccupancyBar(in_drawParams.m_numTilesCommitted, in_drawParams.m_totalHeapSizeTiles, 10.0f);
 
     //---------------------------------------------------------------------
     // number of objects. affects heap occupancy

@@ -167,7 +167,7 @@ void ParseCommandLine(CommandLineArgs& out_args)
     }
 
     argParser.AddArg(L"-numHeaps", out_args.m_numHeaps);
-    argParser.AddArg(L"-heapSizeTiles", out_args.m_streamingHeapSize);
+    argParser.AddArg(L"-heapSizeMB", out_args.m_sfsHeapSizeMB);
     argParser.AddArg(L"-maxFeedbackTime", out_args.m_maxGpuFeedbackTimeMs);
     argParser.AddArg(L"-addAliasingBarriers", out_args.m_addAliasingBarriers, L"Add per-draw aliasing barriers to assist PIX analysis");
 
@@ -507,7 +507,9 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
             if (root.isMember("sphereLong")) out_args.m_sphereLong = root["sphereLong"].asUInt();
             if (root.isMember("sphereLat")) out_args.m_sphereLat = root["sphereLat"].asUInt();
 
-            if (root.isMember("heapSizeTiles")) out_args.m_streamingHeapSize = root["heapSizeTiles"].asUInt();
+            if (root.isMember("reservedMemoryGB")) out_args.m_reservedMemoryGB = root["reservedMemoryGB"].asUInt();
+
+            if (root.isMember("heapSizeMB")) out_args.m_sfsHeapSizeMB = root["heapSizeMB"].asUInt();
             if (root.isMember("numHeaps")) out_args.m_numHeaps = root["numHeaps"].asUInt();
 
             if (root.isMember("maxFeedbackTime")) out_args.m_maxGpuFeedbackTimeMs = root["maxFeedbackTime"].asFloat();

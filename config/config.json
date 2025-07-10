@@ -27,9 +27,12 @@
     "resolveHeapSizeMB": 32
   }, // number of heaps. objects will be distributed among heaps
 
+  // Gigabytes of GPU virtual memory to reserve for resources (including geometry) that are NOT streaming
+  "reservedMemoryGB": 128,
+
   // application creates a number of equal-sized SFSHeaps:
   "numHeaps": 1,
-  "heapSizeTiles": 24576, // size for each heap. 64KB per tile * 16384 tiles -> 1GB heap
+  "heapSizeMB": 1536, // size for each heap. 64KB per tile * 16384 tiles -> 1GB heap
 
   //---------------------------------------
   // ---- application general settings ----
@@ -53,7 +56,7 @@
   "rollerCoaster": false, // fly through, vs. orbiting, planets
 
   "mediaDir": "media", // media directory
-  "skyTexture": "foo",//"heic2020d", // add a sky sphere. path relative to mediadir
+  "skyTexture": "foo", //"heic2020d", // add a sky sphere. path relative to mediadir
   "earthTexture": "earth", // when a texture containing this string is encountered, treat it as a mercator projection (no uv mirror)
   "terrainTexture": "media/terrain/4kTiles.xet", // use this texture only for the terrain, no planets
 

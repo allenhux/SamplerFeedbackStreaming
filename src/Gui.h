@@ -32,7 +32,7 @@ public:
         UINT m_numTilesEvicted;
         UINT m_numTilesCommitted;
         UINT m_numTilesVirtual;
-        UINT m_totalHeapSize;
+        UINT m_totalHeapSizeTiles;
         UINT m_windowHeight;
     };
 

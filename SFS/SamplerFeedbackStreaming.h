@@ -131,6 +131,7 @@ struct SFSManagerDesc
     };
     ThreadPriority m_threadPriority{ ThreadPriority::Prefer_Normal };
 
+    // NOTE: this parameter applies only when the library is compiled with RESOLVE_TO_TEXTURE 1
     UINT m_resolveHeapSizeMB{ 32 };
 
     // true: use Microsoft DirectStorage. false: use internal file streaming system
@@ -153,9 +154,8 @@ struct SFSManager
 
     //--------------------------------------------
     // Create a heap used by 1 or more StreamingResources
-    // parameter is number of 64KB tiles to manage
     //--------------------------------------------
-    virtual SFSHeap* CreateHeap(UINT in_maxNumTilesHeap) = 0;
+    virtual SFSHeap* CreateHeap(UINT in_sizeInMB) = 0;
 
     //--------------------------------------------
     // <thread safe>
