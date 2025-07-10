@@ -11,12 +11,12 @@
 
 This repository contains an [MIT licensed](LICENSE) __implementation library__ and demo of _DirectX12 Sampler Feedback Streaming_, a technique that dramatically improves visual quality by enabling incredible scene detail: on-screen textures that, if fully loaded, may require _100 to 1000 times_ the GPU physical memory. That is, 1TB of imagery using just 1GB of a GPU's 8GB of physical memory.
 
-Here's an example with 939 _gigabytes_ of textures (4,122 16k x 16k) using 387 _megabytes_ of memory (within a 1.5GB heap) on a GPU with 8GB of physical memory (the hardware is limited to 40 bits of address space == 1TB). GPU time spent on feedback is limited to 2ms (settable via a slider under the UI "More Options").
+Here's an example with 939 _gigabytes_ of textures (4,122 16k x 16k) using 412 _megabytes_ of memory (within a 1.5GB heap) on a GPU with 8GB of physical memory (the hardware is limited to 40 bits of address space == 1TB). GPU time spent on feedback is limited to 2ms (settable via a slider under the UI "More Options").
 
 ![Sample screenshot](./readme-images/sampler-feedback-streaming-1TB.jpg "Sample screenshot")
 Textures derived from [Hubble Images](https://www.nasa.gov/mission_pages/hubble/multimedia/index.html), see the [Hubble Copyright](https://hubblesite.org/copyright)
 
-Note: textures appear to repeat because the files are re-used. They are all treated as separete D3D resources in the sample, though Sampler Feedback resources _can_ be used by multiple objects.
+Note: textures appear to repeat because the files are re-used. They are all treated as separate D3D resources in the sample, though Sampler Feedback resources _can_ be used by multiple objects.
 
 ## How? (light version)
 The library brings together 3 systems:
