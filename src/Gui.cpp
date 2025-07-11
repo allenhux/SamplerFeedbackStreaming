@@ -230,7 +230,7 @@ void Gui::ToggleDemoMode(CommandLineArgs& in_args)
         bias = 0;
         cameraRate = 0.4f;
         animationRate = 0.4f;
-        numSpheres = (int)m_initialArgs.m_maxNumObjects;
+        numSpheres = (int)m_initialArgs.m_maxNumObjects / 2;
     }
 
     std::swap(bias, in_args.m_lodBias);

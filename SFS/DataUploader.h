@@ -118,11 +118,11 @@ namespace SFS
         // object that knows how to take data from disk and upload to gpu
         std::unique_ptr<SFS::FileStreamer> m_pFileStreamer;
 
-        // thread to handle UpdateList submissions
-        void SubmitThread();
-        std::thread m_submitThread;
-        SFS::SynchronizationFlag m_submitFlag; // sleeps until flag set
-        AllocatorMT<UpdateList*> m_submitTasks;
+        // thread to handle UpdateTileMappings calls (at one time a major performance bottleneck)
+        void MappingThread();
+        std::thread m_mappingThread;
+        SFS::SynchronizationFlag m_mappingFlag; // sleeps until flag set
+        AllocatorMT<UpdateList*> m_mappingTasks;
 
         // thread to poll copy and mapping fences
         // this thread could have been designed using WaitForMultipleObjects, but it was found that SetEventOnCompletion() was expensive in a tight thread loop

@@ -163,45 +163,6 @@ Each SceneObject creates its own StreamingResource. Note **a StreamingResource c
 m_pStreamingResource = std::unique_ptr<StreamingResource>(in_pTileUpdateManager->CreateStreamingResource(in_filename, in_pStreamingHeap));
 ```
 
-# Known issues
-* GPU feedback time on AMD 780M (and others?) is (very) not correct. Suspect ResolveSubresourceRegion() is not measured.
-* full-screen with multi-gpu or remote desktop is not borderless
-* entering full screen in a multi-gpu system moves the window to a monitor attached to the GPU by design. However, if the window starts on a different monitor, it "disappears" on the first maximization. Hit *escape* then maximize again, and it should work fine.
-
-# Old Issues (no longer encountered)
-
-## GPU timer not functional
-The GPU timer on some architectures returns 0ms for sampler feedback resolve, thus invalidating the frame-time limiter for processing feedback. As a result, every visible object participates in SFS every frame, resulting in very low framerates and very low bandwidth.
-
-## Performance Degradation
-
-(2025: Mostly fixed via Microsoft improvements to Tiled Resource mapping operations?)
-
-On some architectures, performance degrades over time. This can be seen in the bandwidth graph in benchmark mode after a few minutes. Compare the following healthy graph to the graph containing stalls below:
-
-- healthy: ![Healthy Streaming](./readme-images/streamingHealthy.png "Healthy Streaming")
-- stalling: ![Streaming Stalls](./readme-images/streamingStalls.png "Streaming Stalls")
-
-As a workaround, try the command line `-config fragmentationWA.json` , e.g.:
-
-    c:\SamplerFeedbackStreaming\x64\Release> demo.bat -config fragmentationWA.json
-    c:\SamplerFeedbackStreaming\x64\Release> stress.bat -mediadir c:\hubble-16k -config fragmentationWA.json
-
-The issue (which does not affect Intel GPUs) is the tile allocations in the heap becoming fragmented relative to resources. Specifically, the CPU time for [UpdateTileMappings](https://docs.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12commandqueue-updatetilemappings) gradually increases causing the streaming system to stall waiting for pending operations to complete. The workaround reduces fragmentation by distributing streaming resources across multiple small heaps (vs. a single large heap), which can result in visual artifacts if the small heaps fill. To mitigate the small heaps filling, more total heap memory is allocated. There may be other (unexplored) solutions, e.g. perhaps by implementing a hash in the tiled heap allocator. This workaround adjusts two properties:
-
-    "heapSizeTiles": 512, // size for each heap. 64KB per tile * 512 tiles -> 32MB heap
-    "numHeaps": 127, // number of heaps. streaming resources will be distributed among heaps
-
-## Cracks between tiles
-
-The demo exhibits texture cracks due to the way feedback is used. Feedback is always read *after* drawing, resulting in loads and evictions corresponding to that frame only becoming available for a future frame. That means we never have exactly the texture data we need when we draw (unless no new data is needed). Most of the time this isn't perceptible, but sometimes a fast-moving object enters the view resulting in visible artifacts.
-
-The following image shows an exaggerated version of the problem, created by disabling streaming completely then moving the camera:
-
-![Streaming Cracks](./readme-images/streaming-cracks.jpg "Streaming Cracks")
-
-In this case, the hardware sampler is reaching across tile boundaries to perform anisotropic sampling, but encounters tiles that are not physically mapped. D3D12 Reserved Resource tiles that are not physically mapped return black to the sampler. This could be mitigated by dilating or eroding the min mip map such that there is no more than 1 mip level difference between neighboring tiles. That visual optimization is TBD.
-
 # How It Works
 
 This implementation of Sampler Feedback Streaming uses DX12 Sampler Feedback in combination with DX12 Reserved Resources, aka Tiled Resources. A multi-threaded CPU library processes feedback from the GPU, makes decisions about which tiles to load and evict, loads data from disk storage, and submits mapping and uploading requests via GPU copy queues. There is no explicit GPU-side synchronization between the queues, so rendering frame rate is not dependent on completion of copy commands (on GPUs that support concurrent multi-queue operation) - in this sample, GPU time is mostly a function of the Sampler Feedback Resolve() operations described below. The CPU threads run continuously and asynchronously from the GPU (pausing when there's no work to do), polling fence completion states to determine when feedback is ready to process or copies and memory mapping has completed.
@@ -334,8 +295,45 @@ ID3D12CommandList* pCommandLists[] = { commandLists.m_beforeDrawCommands, m_comm
         m_commandQueue->ExecuteCommandLists(_countof(pCommandLists), pCommandLists);
 ```
 
+# Known issues
+* GPU feedback time does not appear correct on AMD 780M (and others?) - compare to disabling updates in the UI.
+* On some architectures (AMD 780M) GPU feedback is not stable frame-to-frame when there is no motion.
+* full-screen with multi-gpu or remote desktop is not borderless
+* entering full screen in a multi-gpu system moves the window to a monitor attached to the GPU by design. However, if the window starts on a different monitor, it "disappears" on the first maximization. Hit *escape* then maximize again, and it should work fine.
+
+# Old Issues (no longer encountered)
+
+## Performance Degradation
+
+(2025: Mostly fixed via Microsoft improvements to Tiled Resource mapping operations?)
+
+On some architectures, performance degrades over time. This can be seen in the bandwidth graph in benchmark mode after a few minutes. Compare the following healthy graph to the graph containing stalls below:
+
+- healthy: ![Healthy Streaming](./readme-images/streamingHealthy.png "Healthy Streaming")
+- stalling: ![Streaming Stalls](./readme-images/streamingStalls.png "Streaming Stalls")
+
+As a workaround, try the command line `-config fragmentationWA.json` , e.g.:
+
+    c:\SamplerFeedbackStreaming\x64\Release> demo.bat -config fragmentationWA.json
+    c:\SamplerFeedbackStreaming\x64\Release> stress.bat -mediadir c:\hubble-16k -config fragmentationWA.json
+
+The issue (which does not affect Intel GPUs) is the tile allocations in the heap becoming fragmented relative to resources. Specifically, the CPU time for [UpdateTileMappings](https://docs.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12commandqueue-updatetilemappings) gradually increases causing the streaming system to stall waiting for pending operations to complete. The workaround reduces fragmentation by distributing streaming resources across multiple small heaps (vs. a single large heap), which can result in visual artifacts if the small heaps fill. To mitigate the small heaps filling, more total heap memory is allocated. There may be other (unexplored) solutions, e.g. perhaps by implementing a hash in the tiled heap allocator. This workaround adjusts two properties:
+
+    "heapSizeTiles": 512, // size for each heap. 64KB per tile * 512 tiles -> 32MB heap
+    "numHeaps": 127, // number of heaps. streaming resources will be distributed among heaps
+
+## Cracks between tiles
+
+The demo exhibits texture cracks due to the way feedback is used. Feedback is always read *after* drawing, resulting in loads and evictions corresponding to that frame only becoming available for a future frame. That means we never have exactly the texture data we need when we draw (unless no new data is needed). Most of the time this isn't perceptible, but sometimes a fast-moving object enters the view resulting in visible artifacts.
+
+In this case, the hardware sampler is reaching across tile boundaries to perform anisotropic sampling, but encounters tiles that are not physically mapped. D3D12 Reserved Resource tiles that are not physically mapped return black to the sampler. This could be mitigated by dilating or eroding the min mip map such that there is no more than 1 mip level difference between neighboring tiles. That visual optimization is TBD.
+
+The following image shows an exaggerated version of the problem, created by disabling streaming completely then moving the camera:
+
+![Streaming Cracks](./readme-images/streaming-cracks.jpg "Streaming Cracks")
 ## Log
 
+- 2025-07-10: Many improvements have been added over the last few months, with a 10x increase in the number of resources supported at lower FPS! Improvements include reduced GPU time by resolving directly to CPU memory, reduced CPU overhead on the render thread, reduced CPU feedback processing time, and reduced CPU and GPU memory usage. SFS APIs for resource creation & destruction are thread-safe, allowing the application to create the scene faster. Better application heuristics including frustum culling and screen-space area demonstrate how to effectively use SFS, focusing work on the objects that benefit most. And many, many smaller improvements.
 - 2025-01-04: GPU Heaps, OS improvements for tile mapping, and Frustum culling provide nice performance benefits. The library has been renamed to look more production-ready.
 - 2024-05-23: Hemi-spherical texture coordinate projection in pixel shader provides super crisp, low distortion text and images across geometry LoDs. Sort of novel technique?
 - 2022-10-24: Added DirectStorage trace playback utility to measure performance of file upload independent of rendering. For example, to capture and playback the DirectStorage requests and submits for 500 "stressful" frames with a staging buffer size of 128MB, cd to the build directory and:

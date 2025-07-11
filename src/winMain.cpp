@@ -462,24 +462,25 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
 
             {
                 auto& sfsParams = out_args.m_sfsParams;
-                const auto& sfsRoot = root["SFSManagerDesc"];
-                if (sfsRoot.isMember("directStorage")) sfsParams.m_useDirectStorage = sfsRoot["directStorage"].asBool();
-                if (sfsRoot.isMember("stagingSizeMB")) sfsParams.m_stagingBufferSizeMB = sfsRoot["stagingSizeMB"].asUInt();
-                if (sfsRoot.isMember("threadPriority")) sfsParams.m_threadPriority = (SFSManagerDesc::ThreadPriority)sfsRoot["threadPriority"].asInt();
-                if (sfsRoot.isMember("resolveHeapSizeMB")) sfsParams.m_resolveHeapSizeMB = sfsRoot["resolveHeapSizeMB"].asInt();
-                if (sfsRoot.isMember("maxTileUpdatesPerApiCall")) sfsParams.m_maxTileMappingUpdatesPerApiCall = sfsRoot["maxTileUpdatesPerApiCall"].asUInt();
-                if (sfsRoot.isMember("numStreamingBatches")) sfsParams.m_maxNumCopyBatches = sfsRoot["numStreamingBatches"].asUInt();
-                if (sfsRoot.isMember("minNumUploadRequests")) sfsParams.m_minNumUploadRequests = sfsRoot["minNumUploadRequests"].asUInt();
-                if (sfsRoot.isMember("evictionDelay")) sfsParams.m_evictionDelay = sfsRoot["evictionDelay"].asUInt();
+                const auto& sfsDesc = root["SFSManagerDesc"];
+                if (sfsDesc.isMember("directStorage")) sfsParams.m_useDirectStorage = sfsDesc["directStorage"].asBool();
+                if (sfsDesc.isMember("stagingSizeMB")) sfsParams.m_stagingBufferSizeMB = sfsDesc["stagingSizeMB"].asUInt();
+                if (sfsDesc.isMember("threadPriority")) sfsParams.m_threadPriority = (SFSManagerDesc::ThreadPriority)sfsDesc["threadPriority"].asInt();
+                if (sfsDesc.isMember("resolveHeapSizeMB")) sfsParams.m_resolveHeapSizeMB = sfsDesc["resolveHeapSizeMB"].asInt();
+                if (sfsDesc.isMember("maxTileUpdatesPerApiCall")) sfsParams.m_maxTileMappingUpdatesPerApiCall = sfsDesc["maxTileUpdatesPerApiCall"].asUInt();
+                if (sfsDesc.isMember("numStreamingBatches")) sfsParams.m_maxNumCopyBatches = sfsDesc["numStreamingBatches"].asUInt();
+                if (sfsDesc.isMember("minNumUploadRequests")) sfsParams.m_minNumUploadRequests = sfsDesc["minNumUploadRequests"].asUInt();
+                if (sfsDesc.isMember("evictionDelay")) sfsParams.m_evictionDelay = sfsDesc["evictionDelay"].asUInt();
             }
 
             {
                 auto& terrainParams = out_args.m_terrainParams;
-                if (root.isMember("terrainSideSize")) terrainParams.m_terrainSideSize = root["terrainSideSize"].asUInt();
-                if (root.isMember("heightScale")) terrainParams.m_heightScale = root["heightScale"].asFloat();
-                if (root.isMember("noiseScale")) terrainParams.m_noiseScale = root["noiseScale"].asFloat();
-                if (root.isMember("octaves")) terrainParams.m_numOctaves = root["octaves"].asUInt();
-                if (root.isMember("mountainSize")) terrainParams.m_mountainSize = root["mountainSize"].asFloat();
+                const auto& terrain = root["terrainParams"];
+                if (terrain.isMember("terrainSideSize")) terrainParams.m_terrainSideSize = terrain["terrainSideSize"].asUInt();
+                if (terrain.isMember("heightScale")) terrainParams.m_heightScale = terrain["heightScale"].asFloat();
+                if (terrain.isMember("noiseScale")) terrainParams.m_noiseScale = terrain["noiseScale"].asFloat();
+                if (terrain.isMember("octaves")) terrainParams.m_numOctaves = terrain["octaves"].asUInt();
+                if (terrain.isMember("mountainSize")) terrainParams.m_mountainSize = terrain["mountainSize"].asFloat();
             }
 
             if (root.isMember("fullScreen")) out_args.m_startFullScreen = root["fullScreen"].asBool();

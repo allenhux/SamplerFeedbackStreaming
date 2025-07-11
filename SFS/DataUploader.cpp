@@ -27,7 +27,7 @@ SFS::DataUploader::DataUploader(
     , m_stagingBufferSizeMB(in_stagingBufferSizeMB)
     , m_mappingUpdater(in_maxTileMappingUpdatesPerApiCall)
     , m_threadPriority(in_threadPriority)
-    , m_submitTasks(in_maxCopyBatches)
+    , m_mappingTasks(in_maxCopyBatches)
     , m_monitorTasks(in_maxCopyBatches)
 {
     // copy queue just for UpdateTileMappings() on reserved resources
@@ -172,12 +172,12 @@ void SFS::DataUploader::StartThreads()
     ASSERT(false == m_threadsRunning);
     m_threadsRunning = true;
 
-    m_submitThread = std::thread([&]
+    m_mappingThread = std::thread([&]
         {
             while (m_threadsRunning)
             {
-                m_submitFlag.Wait();
-                SubmitThread();
+                m_mappingFlag.Wait();
+                MappingThread();
             }
         });
 
@@ -194,7 +194,7 @@ void SFS::DataUploader::StartThreads()
             }
         });
 
-    SFS::SetThreadPriority(m_submitThread, m_threadPriority);
+    SFS::SetThreadPriority(m_mappingThread, m_threadPriority);
     SFS::SetThreadPriority(m_fenceMonitorThread, m_threadPriority);
 }
 
@@ -207,13 +207,13 @@ void SFS::DataUploader::StopThreads()
         m_threadsRunning = false;
 
         // wake up threads so they can exit
-        m_submitFlag.Set();
+        m_mappingFlag.Set();
         m_fenceMonitorFlag.Set();
 
         // stop submitting new work
-        if (m_submitThread.joinable())
+        if (m_mappingThread.joinable())
         {
-            m_submitThread.join();
+            m_mappingThread.join();
         }
 
         // finish up any remaining work
@@ -234,7 +234,7 @@ void SFS::DataUploader::FlushCommands()
         DebugPrint("DataUploader waiting on ", m_updateListAllocator.GetReadableCount(), " tasks to complete\n");
         while (m_updateListAllocator.GetReadableCount()) // wait so long as there is outstanding work
         {
-            m_submitFlag.Set(); // (paranoia)
+            m_mappingFlag.Set(); // (paranoia)
             m_fenceMonitorFlag.Set(); // (paranoia)
             _mm_pause();
         }
@@ -294,7 +294,7 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
 {
     ASSERT(UpdateList::State::STATE_ALLOCATED == in_updateList.m_executionState);
 
-    // set to submitted, allowing mapping within submitThread
+    // set to submitted, allowing mapping within MappingThread
     // fenceMonitorThread will wait for the copy fence to become valid before progressing state
     in_updateList.m_executionState = UpdateList::State::STATE_SUBMITTED;
 
@@ -305,9 +305,9 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
 
     // add to submit task queue
     {
-        m_submitTasks.GetWriteableValue() = &in_updateList;
-        m_submitTasks.Commit();
-        m_submitFlag.Set();
+        m_mappingTasks.GetWriteableValue() = &in_updateList;
+        m_mappingTasks.Commit();
+        m_mappingFlag.Set();
     }
 
     // add to fence polling thread
@@ -472,17 +472,21 @@ void SFS::DataUploader::FenceMonitorThread()
 //       but this thread starts work while a different thread handles completion
 // NOTE: if UpdateTileMappings is slow, throughput will be impacted
 //-----------------------------------------------------------------------------
-void SFS::DataUploader::SubmitThread()
+void SFS::DataUploader::MappingThread()
 {
-    bool signalMap = false;
+    // under heavy load, can enter a state where all ULs are allocated - at which point
+    //     they all get a single fence. In the meantime, no new loads are started.
+    // preferably, under heavy load, this loop never exits: new ULs arrive as old ULs complete
+    constexpr UINT mapLimit = 32; // FIXME: what is an ideal # before we signal the fence?
+    UINT numMaps = 0;
 
     // look through tasks
-    while (m_submitTasks.GetReadableCount())
+    while (m_mappingTasks.GetReadableCount())
     {
-        signalMap = true;
+        numMaps++;
 
-        auto& updateList = *m_submitTasks.GetReadableValue(); // get the next task
-        m_submitTasks.Free(); // consume this task. not FREE yet, just no longer tracking in this thread
+        auto& updateList = *m_mappingTasks.GetReadableValue(); // get the next task
+        m_mappingTasks.Free(); // consume this task. not FREE yet, just no longer tracking in this thread
 
         ASSERT(UpdateList::State::STATE_SUBMITTED == updateList.m_executionState);
 
@@ -521,9 +525,17 @@ void SFS::DataUploader::SubmitThread()
 
             updateList.m_executionState = UpdateList::State::STATE_PACKED_MAPPING;
         }
+
+        if (mapLimit <= numMaps)
+        {
+            OutputDebugString(AutoString(numMaps,"\n").str().c_str());
+            numMaps = 0;
+            m_mappingCommandQueue->Signal(m_mappingFence.Get(), m_mappingFenceValue);
+            m_mappingFenceValue++;
+        }
     }
 
-    if (signalMap)
+    if (numMaps)
     {
         m_mappingCommandQueue->Signal(m_mappingFence.Get(), m_mappingFenceValue);
         m_mappingFenceValue++;
