@@ -80,35 +80,42 @@ namespace SFS
     public:
         void Acquire()
         {
-            const std::uint32_t desired = 1;
-            bool waiting = true;
-
-            while (waiting)
+            constexpr std::uint32_t desired = 1;
+            do
             {
                 std::uint32_t expected = 0;
-                waiting = !m_lock.compare_exchange_weak(expected, desired);
-                if (waiting)
+                if (!m_lock.compare_exchange_weak(expected, desired))
                 {
-                    m_flag.Wait();
+                    Wait();
                 }
-            }
+            } while (0 == m_lock); // must re-test for case with multiple waiters
         }
 
         void Release()
         {
             ASSERT(0 != m_lock);
             m_lock = 0;
-            m_flag.Set();
+            Set();
         }
 
         bool TryAcquire()
         {
             std::uint32_t expected = 0;
-            const std::uint32_t desired = 2; //  different value if just trying
+            const std::uint32_t desired = 1; //  different value if just trying
             return m_lock.compare_exchange_weak(expected, desired);
         }
     private:
-        std::atomic<uint32_t> m_lock{ 0 };
-        SynchronizationFlag m_flag;
+        void Set()
+        {
+            WakeByAddressAll(&m_lock);
+        }
+
+        void Wait()
+        {
+            // note: msdn recommends verifying that the value really changed, which we do for Acquire() but not TryAcquire()
+            UINT32 undesiredValue = 1;
+            WaitOnAddress(&m_lock, &undesiredValue, sizeof(bool), INFINITE);
+        };
+        std::atomic<UINT32> m_lock{ 0 };
     };
 }

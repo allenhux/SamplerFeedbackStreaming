@@ -142,11 +142,12 @@ void SFS::ProcessFeedbackThread::Start()
                     }
                     uploadsRequested += (UINT)m_newResources.size() - num;
                     m_newResources.resize(num);
-                }
+                } // end loop over new resources
 
                 // Once per frame: process feedback buffers
                 if (newFrame)
                 {
+                    prevFrameTime = m_cpuTimer.GetTime();
                     for (auto i = m_delayedResources.begin(); i != m_delayedResources.end();)
                     {
                         auto pResource = *i;
@@ -173,6 +174,8 @@ void SFS::ProcessFeedbackThread::Start()
 
                     // share updated pending resource set with ResidencyThread
                     m_pSFSManager->SharePendingResourcesRT(m_pendingResources);
+
+                    m_processFeedbackTime += (m_cpuTimer.GetTime() - prevFrameTime);
                 } // end if new frame
 
                 // push uploads and evictions for stale resources
@@ -214,7 +217,7 @@ void SFS::ProcessFeedbackThread::Start()
                         }
                     }
                     if (numEvictions) { m_dataUploader.AddEvictions(numEvictions); }
-                }
+                } // end loop over pending resources
 
                 // if there are uploads, maybe signal depending on heuristic to minimize # signals
                 if (uploadsRequested)
@@ -235,12 +238,8 @@ void SFS::ProcessFeedbackThread::Start()
                 // development note: do not Wait() if uploadsRequested != 0. safe because uploadsRequested was cleared above.
                 if (0 == m_pendingResources.size())
                 {
-                    m_processFeedbackTime += m_cpuTimer.GetTime() - prevFrameTime;
-
                     ASSERT(0 == uploadsRequested);
                     m_processFeedbackFlag.Wait();
-
-                    prevFrameTime = m_cpuTimer.GetTime();
                 }
             }
 
@@ -344,7 +343,6 @@ void SFS::ProcessFeedbackThread::CheckFlushResources()
         // should not see initialize combined with another bit
         ASSERT(0 == (f & GroupRemoveResources::Client::Initialize));
     case 0:
-        // race: possible size changes after reading flags! ASSERT(0 == m_flushResources.size());
         return;
 
     case GroupRemoveResources::Client::Initialize:

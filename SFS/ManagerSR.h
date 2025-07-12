@@ -74,7 +74,7 @@ namespace SFS
         void Renew(ResourceBase* in_pResource)
         {
             std::vector<ResourceBase*> v = { (ResourceBase*)in_pResource };
-            m_processFeedbackThread.ShareNewResources(v);
+            m_processFeedbackThread.ShareNewResources(std::move(v));
             m_packedMipTransitionResources.push_back(in_pResource);
         }
     };

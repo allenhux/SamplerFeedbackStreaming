@@ -229,7 +229,8 @@ ID3D12Resource* TracePlayer::CreateDestinationResource(UINT& out_numTiles, DXGI_
     // this will only ever be a copy dest
     ID3D12Resource* pResource{ nullptr };
     ThrowIfFailed(m_device->CreateReservedResource(&rd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&pResource)));
-    m_device->GetResourceTiling(pResource, &out_numTiles, nullptr, nullptr, nullptr, 0, nullptr);
+    D3D12_SUBRESOURCE_TILING tiling{}; // unused but required arg
+    m_device->GetResourceTiling(pResource, &out_numTiles, nullptr, nullptr, nullptr, 0, &tiling);
 
     return pResource;
 }

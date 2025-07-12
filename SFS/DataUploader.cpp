@@ -528,7 +528,6 @@ void SFS::DataUploader::MappingThread()
 
         if (mapLimit <= numMaps)
         {
-            OutputDebugString(AutoString(numMaps,"\n").str().c_str());
             numMaps = 0;
             m_mappingCommandQueue->Signal(m_mappingFence.Get(), m_mappingFenceValue);
             m_mappingFenceValue++;

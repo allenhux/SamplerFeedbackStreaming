@@ -245,7 +245,7 @@ void SFS::Manager::BeginFrame()
     // capture cpu time spent processing feedback
     {
         INT64 processFeedbackTime = m_processFeedbackThread.GetTotalProcessTime(); // snapshot of live counter
-        m_processFeedbackFrameTime = m_processFeedbackThread.GetSecondsFromDelta(processFeedbackTime - m_previousFeedbackTime);
+        m_cpuProcessFeedbackFrameTime = m_processFeedbackThread.GetSecondsFromDelta(processFeedbackTime - m_previousFeedbackTime);
         m_previousFeedbackTime = processFeedbackTime; // remember current time for next call
     }
 #endif
@@ -458,10 +458,11 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
         m_texelsPerMs = m_numTexelsQueued / (m_gpuFeedbackTime * 1000.f);
         m_numTexelsQueued = 0;
         m_gpuFeedbackTime = 0;
-    
+#if 1
         UINT64 processFeedbackTime = m_processFeedbackThread.GetTotalProcessTime(); // snapshot of live counter
         m_cpuProcessFeedbackFrameTime = m_processFeedbackThread.GetSecondsFromDelta(processFeedbackTime - m_previousFeedbackTime) / m_feedbackTimingFrequency;
         m_previousFeedbackTime = processFeedbackTime; // remember current time for next call
+#endif
     }
 
     return pCommandList;

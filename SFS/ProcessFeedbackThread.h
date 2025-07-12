@@ -107,7 +107,7 @@ namespace SFS
         SFS::SynchronizationFlag m_processFeedbackFlag;
 
         RawCpuTimer m_cpuTimer;
-        std::atomic<INT64> m_processFeedbackTime{ 0 }; // sum of cpu timer times since start
+        std::atomic<UINT64> m_processFeedbackTime{ 0 }; // sum of cpu timer times since start
 
         std::atomic<bool> m_threadRunning{ false };
 

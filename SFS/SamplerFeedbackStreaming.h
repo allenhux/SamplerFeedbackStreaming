@@ -248,7 +248,7 @@ struct SFSResourceDesc
         UINT32 m_numPackedMips;
         UINT32 m_numUncompressedBytesForPackedMips;
     };
-    MipInfo m_mipInfo;
+    MipInfo m_mipInfo{};
 
     // use subresource tile dimensions to generate linear tile index
     struct StandardMipInfo
@@ -268,7 +268,7 @@ struct SFSResourceDesc
         UINT32 m_numBytes;        // # bytes for the tile
     };
 
-    TileData m_packedMipData; // may be unused. offset and # bytes for packed mips
+    TileData m_packedMipData{}; // may be unused. offset and # bytes for packed mips
     std::vector<TileData> m_tileData; // size = MipInfo::m_numTilesForStandardMips
 
     // defines the order of the data in m_tileData

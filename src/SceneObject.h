@@ -56,8 +56,8 @@ namespace SceneObjects
         struct Mesh
         {
             UINT m_numIndices{ 0 };
-            D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
-            D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
+            D3D12_INDEX_BUFFER_VIEW m_indexBufferView{};
+            D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView{};
             ComPtr<ID3D12Resource> m_indexBuffer;
             ComPtr<ID3D12Resource> m_vertexBuffer;
         };

@@ -1190,6 +1190,7 @@ void Scene::LoadSpheres()
             m_pGui->SetMessage("Reached Max Addressable Memory");
             m_maxNumObjects = 0;
         }
+        break;
     case LoadingThread::Running:
         return;
         break;
@@ -1615,11 +1616,7 @@ void Scene::CreateTerrainViewers()
             SharedConstants::SWAP_CHAIN_FORMAT, m_srvHeap.Get(),
             heapOffset);
 
-        D3D12_PACKED_MIP_INFO info;
-        m_device->GetResourceTiling(m_pTerrain->GetStreamingResource()->GetTiledResource(), nullptr, &info,
-            nullptr, nullptr, 0, nullptr);
-        m_maxNumTextureViewerWindows = info.NumStandardMips;
-
+        m_maxNumTextureViewerWindows = m_pTerrain->GetStreamingResource()->GetNumStandardMips();
     }
 
     // NOTE: shared minmipmap will be invalid until after SFSM::BeginFrame()
