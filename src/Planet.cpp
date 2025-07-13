@@ -19,6 +19,7 @@ struct PlanetVertex
 {
     DirectX::XMFLOAT3 pos;
     DirectX::XMFLOAT3 normal;
+    DirectX::XMFLOAT2 uv;
 };
 
 //-----------------------------------------------------------------------------
@@ -46,6 +47,8 @@ static ID3D12Resource* CreatePlanetIndexBuffer(
     return pResource;
 }
 
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 static ID3D12Resource* CreatePlanetVertexBuffer(
     ID3D12Device* in_pDevice, AssetUploader& in_assetUploader,
     const std::vector<PlanetVertex>& in_verts)
@@ -67,6 +70,47 @@ static ID3D12Resource* CreatePlanetVertexBuffer(
         D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 
     return pResource;
+}
+
+//-----------------------------------------------------------------------------
+// create planet UV
+//-----------------------------------------------------------------------------
+static DirectX::XMFLOAT2 PlanetUV(DirectX::XMFLOAT3 pos)
+{
+    DirectX::XMFLOAT2 uv = { pos.x, pos.y };
+
+    // radius of this latitude in x/y plane
+    // for a sphere, 1 = sqrt(x^2 + y^2 + z^2)
+    // since r^2 = x^2 + y^2, 1 = sqrt(r^2 + z^2) and 1^2 - z^2 = r^2, so...
+    float rSquared = 1.f - (pos.z * pos.z);
+
+    // radial scale: squeeze texture coords into circle
+    if (rSquared > std::numeric_limits<float>::min())
+    {
+        float rcostheta = std::fabsf(pos.x);
+        float rsintheta = std::fabsf(pos.y);
+
+        // conceptually, cast a ray from the origin through the current position to the edge of a unit square
+        // the length of that ray is the scale factor to project "here" to the edge of the square
+        // use simple trig to get length: sin = opposite/hypotenuse or cos = adjacent/hypotenuse
+        //      e.g. s * cos(theta) = 1, hence s = 1/cos. cos = pos.x / r, hence s = r/pos.x
+        //      for theta 45..90 degrees, s = r/pos.y
+        // note numerator (r) has been included in the lerp
+        float rs = 1.f / std::max(rcostheta, rsintheta);
+
+        // counteract scale so center appears undistorted:
+        const float distortion = std::sqrtf(2.0f) / 2.f;
+        // quadratic interpolation of scale factor:
+        float s = std::lerp(distortion, rs, rSquared * (1 - std::fabsf(pos.z)) * (1 - std::fabsf(pos.z)));
+        uv.x *= s;
+        uv.y *= s;
+    }
+
+    // [-1 .. 1] -> [0 .. 1]
+    uv.x = (1 + uv.x) * .5f;
+    uv.y = (1 + uv.y) * .5f;
+
+    return uv;
 }
 
 //=========================================================================
@@ -98,6 +142,7 @@ SceneObjects::Planet::Planet(Scene* in_pScene)
     std::vector< D3D12_INPUT_ELEMENT_DESC> inputElementDescs = {
         { "POS",    0, DXGI_FORMAT_R32G32B32_FLOAT, 0,  0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        { "TEXCOORD",    0, DXGI_FORMAT_R32G32_FLOAT,    0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
     };
 
     CreatePipelineState(m_pGeometry,
@@ -140,6 +185,7 @@ SceneObjects::Planet::Planet(Scene* in_pScene)
     {
         DirectX::XMStoreFloat3(&v.pos, DirectX::XMVector3Normalize(DirectX::XMVectorSet(v.pos.x, v.pos.y, v.pos.z, 0)));
         v.normal = v.pos;
+        v.uv = PlanetUV(v.pos);
     }
 
     Subdivision sub(
@@ -152,7 +198,7 @@ SceneObjects::Planet::Planet(Scene* in_pScene)
 
             DirectX::XMFLOAT3 pos;
             DirectX::XMStoreFloat3(&pos, DirectX::XMVector3Normalize(DirectX::XMVectorSet(x, y, z, 0)));
-            verts.push_back({ pos, pos });
+            verts.push_back({ pos, pos, PlanetUV(pos)});
 
             return i;
         },
