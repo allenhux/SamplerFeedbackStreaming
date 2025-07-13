@@ -17,6 +17,7 @@ namespace SFS
 {
     //==================================================
     // multiple threads may wait on this flag, which may be set by any number of threads
+    // use this in the case where it is acceptable to be woken spuriously
     //==================================================
     class SynchronizationFlag
     {
@@ -81,41 +82,30 @@ namespace SFS
         void Acquire()
         {
             constexpr std::uint32_t desired = 1;
-            do
+
+            std::uint32_t expected = 0;
+            while (!m_lock.compare_exchange_weak(expected, desired))
             {
-                std::uint32_t expected = 0;
-                if (!m_lock.compare_exchange_weak(expected, desired))
-                {
-                    Wait();
-                }
-            } while (0 == m_lock); // must re-test for case with multiple waiters
+                UINT32 undesiredValue = 1;
+                WaitOnAddress(&m_lock, &undesiredValue, sizeof(UINT32), INFINITE);
+                expected = 0;
+            }
         }
 
         void Release()
         {
             ASSERT(0 != m_lock);
             m_lock = 0;
-            Set();
+            WakeByAddressAll(&m_lock);
         }
 
         bool TryAcquire()
         {
             std::uint32_t expected = 0;
-            const std::uint32_t desired = 1; //  different value if just trying
+            const std::uint32_t desired = 1;
             return m_lock.compare_exchange_weak(expected, desired);
         }
     private:
-        void Set()
-        {
-            WakeByAddressAll(&m_lock);
-        }
-
-        void Wait()
-        {
-            // note: msdn recommends verifying that the value really changed, which we do for Acquire() but not TryAcquire()
-            UINT32 undesiredValue = 1;
-            WaitOnAddress(&m_lock, &undesiredValue, sizeof(bool), INFINITE);
-        };
         std::atomic<UINT32> m_lock{ 0 };
     };
 }
