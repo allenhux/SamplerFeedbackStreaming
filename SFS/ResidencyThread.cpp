@@ -117,22 +117,19 @@ void SFS::ResidencyThread::Stop()
 // PFT acquires staging area provides all resources that it is currently working on ("pending")
 // RT may have a slightly larger set including resources that have outstanding updatelists or a change in tile residency
 //-----------------------------------------------------------------------------
-void SFS::ResidencyThread::SharePendingResourcesRT(const std::set<ResourceBase*>& in_resources)
+void SFS::ResidencyThread::SharePendingResourcesRT(std::set<ResourceBase*> in_resources)
 {
-    // copy the incoming set of resources
-    std::set<ResourceBase*> n = in_resources;
-
     // add the resources that still have work to do
     auto& v = m_resourcesStaging.Acquire();
     for (auto r : v)
     {
         if ((!in_resources.contains(r)) && (r->HasInFlightUpdates()))
         {
-            n.insert(r);
+            in_resources.insert(r);
         }
     }
 
     // replace the old set with the new
-    v.swap(n);
+    v.swap(in_resources);
     m_resourcesStaging.Release();
 }

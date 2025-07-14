@@ -33,7 +33,7 @@ namespace SFS
         void Wake() { m_residencyChangedFlag.Set(); }
 
         // blocking lock
-        void SharePendingResourcesRT(const std::set<ResourceBase*>& in_resources);
+        void SharePendingResourcesRT(std::set<ResourceBase*> in_resources);
     private:
         ManagerRT* const m_pSFSManager;
         const int m_threadPriority;

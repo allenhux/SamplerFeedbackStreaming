@@ -22,9 +22,10 @@ namespace SFS
 
         void WakeResidencyThread() { m_residencyThread.Wake(); }
 
-        void SharePendingResourcesRT(const std::set<ResourceBase*>& in_resources)
+        // call with std::move
+        void SharePendingResourcesRT(std::set<ResourceBase*> in_resources)
         {
-            m_residencyThread.SharePendingResourcesRT(in_resources);
+            m_residencyThread.SharePendingResourcesRT(std::move(in_resources));
         }
     };
 }
@@ -147,6 +148,10 @@ void SFS::ProcessFeedbackThread::Start()
                 // Once per frame: process feedback buffers
                 if (newFrame)
                 {
+                    // build up a set of pending resources to pass to ResidencyThread
+                    // includes resources that still need work plus those that need update due to evictions
+                    std::set<ResourceBase*> sharePending;
+
                     prevFrameTime = m_cpuTimer.GetTime();
                     for (auto i = m_delayedResources.begin(); i != m_delayedResources.end();)
                     {
@@ -161,6 +166,10 @@ void SFS::ProcessFeedbackThread::Start()
                         {
                             m_pendingResources.insert(pResource);
                         }
+                        else if (pResource->HasInFlightUpdates())
+                        {
+                            sharePending.insert(pResource);
+                        }
 
                         if (pResource->HasDelayedWork())
                         {
@@ -173,7 +182,8 @@ void SFS::ProcessFeedbackThread::Start()
                     } // end loop over active resources
 
                     // share updated pending resource set with ResidencyThread
-                    m_pSFSManager->SharePendingResourcesRT(m_pendingResources);
+                    sharePending.insert(m_pendingResources.begin(), m_pendingResources.end());
+                    m_pSFSManager->SharePendingResourcesRT(std::move(sharePending));
 
                     m_processFeedbackTime += (m_cpuTimer.GetTime() - prevFrameTime);
                 } // end if new frame

@@ -472,7 +472,7 @@ Note that the multi-frame delay for evictions prevents allocation of an index th
 
 //-----------------------------------------------------------------------------
 // evict unused tiles
-// additional logic to observe that everything can be evicted
+// this is after a multi-frame delay and avoiding potential race conditions to avoid visual  artifacts
 //
 // note there are only tiles to evict after processing feedback, but it's possible
 // there was no UpdateList available at the time, so they haven't been evicted yet.
@@ -523,13 +523,13 @@ UINT SFS::ResourceBase::QueuePendingTileEvictions()
         // else: refcount positive or eviction already in progress? rescue this eviction (by not adding to pending evictions)
     }
 
-    // UpdateTileMappings() calls SetResidencyChanged() as soon as refcount reaches 0, so
-    // the minmipmap will already reflect eviction of affected tiles.
-    // This function is called multiple frames later, leaving time for tiles to be Rescue()d.
-    // Do not call SetResidencyChanged() here, as it will cause the minmipmap to be updated again.
+    // tiles evicted here were identified multiple frames earlier, leaving time for tiles to be Rescue()d.
+    // Do not call SetResidencyChanged() here; tiles on their way out were identified in ProcessFeedback() (once per frame)
     // i.e. do not: if (numEvictions) { SetResidencyChanged(); }
-    // replace the ready evictions with just the delayed evictions.
+
+    // narrow the ready evictions to just the delayed evictions.
     pendingEvictions.resize(numDelayed);
+
     return numEvictions;
 }
 
