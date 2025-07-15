@@ -48,8 +48,6 @@ void SFS::ResidencyThread::Start()
         {
             while (m_threadRunning)
             {
-                m_residencyChangedFlag.Wait();
-
                 // flush resources?
                 if (GroupRemoveResources::Client::ResidencyThread & m_flushResources.GetFlags())
                 {
@@ -64,16 +62,21 @@ void SFS::ResidencyThread::Start()
                     m_flushResources.ClearFlag(GroupRemoveResources::Client::ResidencyThread);
                 }
 
+                // new pending resource list?
                 if (m_resourcesStaging.Size())
                 {
+                    // grab the new working set
                     std::set<ResourceBase*> n;
                     m_resourcesStaging.Swap(n);
 
-                    std::erase_if(m_resources, [&](auto r)
-                        {
-                            return ((n.contains(r)) || (!r->HasInFlightUpdates()));
-                        });
-                    m_resources.insert(m_resources.begin(), n.begin(), n.end());
+                    // keep previous resources that may yet have residency changes
+                    for (auto r : m_resources)
+                    {
+                        if (r->HasInFlightUpdates()) { n.insert(r); }
+                    }
+
+                    // create new working set
+                    m_resources.swap(n);
                 }
 
                 std::vector<ResourceBase*> updated;
@@ -93,6 +96,8 @@ void SFS::ResidencyThread::Start()
                     for (auto p : updated) { p->WriteMinMipMap(pDest); }
                     m_pSFSManager->ResidencyMapRelease();
                 }
+
+                m_residencyChangedFlag.Wait();
             }
         });
     SFS::SetThreadPriority(m_thread, m_threadPriority);
@@ -123,7 +128,7 @@ void SFS::ResidencyThread::SharePendingResourcesRT(std::set<ResourceBase*> in_re
     auto& v = m_resourcesStaging.Acquire();
     for (auto r : v)
     {
-        if ((!in_resources.contains(r)) && (r->HasInFlightUpdates()))
+        if (r->HasInFlightUpdates())
         {
             in_resources.insert(r);
         }

@@ -43,7 +43,7 @@
   "arch": 0, // create device with specified architecture {0, 1, 2} {default, discrete, integrated} 
 
   "maxNumObjects": 9999, // maximum total number of objects in the scene
-  "numSpheres": 75, // number of objects besides the terrain
+  "numObjects": 75, // number of objects besides the terrain
   "lightFromView": true, // light direction is look direction
 
   "fullScreen": false,

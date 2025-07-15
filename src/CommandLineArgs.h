@@ -50,7 +50,7 @@ struct CommandLineArgs
 	bool m_showFeedbackMaps{ true };
 	bool m_visualizeMinMip{ false };
 	UINT m_maxNumObjects{ 1000 };     // number of descriptors to allocate for scene
-	int m_numSpheres{ 0 };
+	int m_numObjects{ 0 };
 	UINT m_anisotropy{ 16 };          // sampler anisotropy
 	bool m_lightFromView{ false };    // light direction is look direction, useful for demos
 

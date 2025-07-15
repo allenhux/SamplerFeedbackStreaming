@@ -290,31 +290,6 @@ void SFS::ManagerBase::RemoveHeaps()
 }
 
 //-----------------------------------------------------------------------------
-// add a feedback readback to the current set of readbacks
-//-----------------------------------------------------------------------------
-void SFS::ManagerBase::AddReadback(ResourceBase* in_pResource)
-{
-    if (nullptr == m_pCurrentReadbackSet)
-    {
-        for (auto& s : m_readbackSets)
-        {
-            if (s.m_free)
-            {
-                m_pCurrentReadbackSet = &s;
-                m_pCurrentReadbackSet->m_resources.clear();
-                break;
-            }
-        }
-    }
-
-    if (m_pCurrentReadbackSet)
-    {
-        m_pCurrentReadbackSet->m_resources.push_back(in_pResource);
-    }
-    // else ignore attempt to add readback
-}
-
-//-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource)
 {

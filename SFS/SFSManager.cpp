@@ -364,10 +364,6 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
     pCommandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
     // transition packed mips if necessary
-    // FIXME? if any 1 needs a transition, go ahead and check all of them. not worth optimizing.
-    // NOTE: the debug layer may complain about CopyTextureRegion() if the resource state is not state_copy_dest (or common)
-    //       despite the fact the copy queue doesn't really care about resource state
-    //       CopyTiles() won't complain because this library always targets an atlas that is always state_copy_dest
     if (m_packedMipTransitionBarriers.size())
     {
         if (m_feedbackReadbacks.size())

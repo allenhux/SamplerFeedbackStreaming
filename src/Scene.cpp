@@ -760,7 +760,7 @@ void Scene::PrepareScene()
         if (std::filesystem::exists(m_args.m_skyTexture))
         {
             m_args.m_skyTexture = std::filesystem::absolute(m_args.m_skyTexture);
-            m_args.m_numSpheres = std::max(m_args.m_numSpheres, 2);
+            m_args.m_numObjects = std::max(m_args.m_numObjects, 2);
         }
         else
         {
@@ -1185,7 +1185,7 @@ void Scene::LoadSpheres()
         {
             m_objects.resize(m_maxNumObjects);
             m_args.m_maxNumObjects = m_maxNumObjects;
-            m_args.m_numSpheres = m_maxNumObjects;
+            m_args.m_numObjects = m_maxNumObjects;
             m_pGui->SetMaxObjects(m_maxNumObjects);
             m_pGui->SetMessage("Reached Max Addressable Memory");
             m_maxNumObjects = 0;
@@ -1198,19 +1198,19 @@ void Scene::LoadSpheres()
         break;
     }
 
-    if (m_objects.size() < (UINT)m_args.m_numSpheres)
+    if (m_objects.size() < (UINT)m_args.m_numObjects)
     {
         ASSERT(LoadingThread::Idle == m_loadingThreadState);
 
-        UINT numToLoad = (UINT)m_args.m_numSpheres - (UINT)m_objects.size();
+        UINT numToLoad = (UINT)m_args.m_numObjects - (UINT)m_objects.size();
         UINT index = (UINT)m_objects.size();
         m_objects.resize(m_objects.size() + numToLoad, nullptr);
         m_loadingThreadState = LoadingThread::Running;
         m_loadObjectThread = std::thread(&Scene::LoadObjectThread, this, numToLoad, index, m_numTilesVirtual);
     } // end if adding objects
-    else if (m_objects.size() > (UINT)m_args.m_numSpheres) // else evict objects
+    else if (m_objects.size() > (UINT)m_args.m_numObjects) // else evict objects
     {
-        UINT numToDelete = (UINT)m_objects.size() - (UINT)m_args.m_numSpheres;
+        UINT numToDelete = (UINT)m_objects.size() - (UINT)m_args.m_numObjects;
         std::vector<class SceneObjects::BaseObject*> deleteObjects;
         // put objects to be deleted into an array
         deleteObjects.insert(deleteObjects.begin(), m_objects.begin() + m_objects.size() - numToDelete, m_objects.end());
@@ -1919,8 +1919,8 @@ bool Scene::Draw()
     m_args.m_cameraAnimationRate = .1f;
     // TEST: creation/deletion and thread safety
     if (m_frameNumber < 1000)
-    m_args.m_numSpheres = 2 + (rand() * (m_args.m_maxNumObjects-2)) / RAND_MAX;
-    //m_args.m_numSpheres = 1 + (m_frameNumber & 1);
+    m_args.m_numObjects = 2 + (rand() * (m_args.m_maxNumObjects-2)) / RAND_MAX;
+    //m_args.m_numObjects = 1 + (m_frameNumber & 1);
 #endif
 
     // load more spheres?

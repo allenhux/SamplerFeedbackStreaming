@@ -86,8 +86,7 @@ void CorrectPath(std::wstring& inout_path)
 //-----------------------------------------------------------------------------
 void AdjustArguments(CommandLineArgs& out_args)
 {
-    out_args.m_numSpheres = std::min(out_args.m_numSpheres, (int)out_args.m_maxNumObjects);
-    out_args.m_numSpheres = std::max(out_args.m_numSpheres, 1); // always show /something/
+    out_args.m_numObjects = std::clamp(out_args.m_numObjects, 1, (int)out_args.m_maxNumObjects);
     out_args.m_sampleCount = std::min(out_args.m_sampleCount, (UINT)D3D12_MAX_MULTISAMPLE_SAMPLE_COUNT);
     out_args.m_anisotropy = std::min(out_args.m_anisotropy, (UINT)D3D12_REQ_MAXANISOTROPY);
 
@@ -203,7 +202,7 @@ void ParseCommandLine(CommandLineArgs& out_args)
         }, "use only one texture, with this name");
 
     argParser.AddArg(L"-maxNumObjects", out_args.m_maxNumObjects);
-    argParser.AddArg(L"-numSpheres", out_args.m_numSpheres);
+    argParser.AddArg(L"-numObjects", out_args.m_numObjects);
     argParser.AddArg(L"-lightFromView", out_args.m_lightFromView, L"Light direction is look direction");
 
     argParser.AddArg(L"-visualizeMinMip", [&]() { out_args.m_visualizeMinMip = true; }, out_args.m_visualizeMinMip);
@@ -502,7 +501,7 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
             if (root.isMember("skyTexture")) out_args.m_skyTexture = StrToWstr(root["skyTexture"].asString());
             if (root.isMember("earthTexture")) out_args.m_earthTexture = StrToWstr(root["earthTexture"].asString());
             if (root.isMember("maxNumObjects")) out_args.m_maxNumObjects = root["maxNumObjects"].asUInt();
-            if (root.isMember("numSpheres")) out_args.m_numSpheres = root["numSpheres"].asUInt();
+            if (root.isMember("numObjects")) out_args.m_numObjects = root["numObjects"].asUInt();
             if (root.isMember("lightFromView")) out_args.m_lightFromView = root["lightFromView"].asBool();
 
             if (root.isMember("sphereLong")) out_args.m_sphereLong = root["sphereLong"].asUInt();

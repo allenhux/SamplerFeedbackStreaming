@@ -620,7 +620,10 @@ bool SFS::ResourceBase::UpdateMinMipMap()
     // m_tileResidencyChanged is an atomic that forms a happens-before relationship between this thread and DataUploader Notify* routines
     // m_tileResidencyChanged is also set when ClearAll() evicts everything
     bool expected = true;
-    if (!m_tileResidencyChanged.compare_exchange_weak(expected, false)) return false;
+    if (!m_tileResidencyChanged.compare_exchange_weak(expected, false))
+    {
+        return false;
+    }
 
     // NOTE: packed mips status is not atomic, but m_tileResidencyChanged is sufficient
     ASSERT(Drawable());

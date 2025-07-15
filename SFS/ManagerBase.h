@@ -128,17 +128,6 @@ namespace SFS
         BarrierList m_barrierUavToResolveSrc; // transition copy source to resolve dest
         BarrierList m_barrierResolveSrcToUav; // transition resolve dest to copy source
 
-        // track per-frame feedback readback
-        struct ReadbackSet
-        {
-            std::atomic<bool> m_free{ true };
-            std::vector<ResourceBase*> m_resources;
-            UINT64 m_fenceValue{ 0 };
-        };
-        std::vector<ReadbackSet> m_readbackSets;
-        ReadbackSet* m_pCurrentReadbackSet{ nullptr };
-        void AddReadback(ResourceBase* in_pResource);
-
         // the min mip map is shared. it must be created (at least) every time a SFSResource is created/destroyed
         void CreateMinMipMapView(D3D12_CPU_DESCRIPTOR_HANDLE in_descriptor);
 
@@ -159,7 +148,7 @@ namespace SFS
 
         // handle FlushResources()
         void FlushResourcesInternal();
-        // delete resources that have been requested via Remove()
+        // remove resources from m_streamingResources after call to Destroy()
         void RemoveResources();
         // delete heaps that have been requested via Destroy()
         void RemoveHeaps();

@@ -166,6 +166,7 @@ void SFS::ProcessFeedbackThread::Start()
                         {
                             m_pendingResources.insert(pResource);
                         }
+                        // capture resources that only had evictions as a result of feedback
                         else if (pResource->HasInFlightUpdates())
                         {
                             sharePending.insert(pResource);

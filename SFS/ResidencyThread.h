@@ -46,7 +46,7 @@ namespace SFS
         LockedContainer<std::set<ResourceBase*>> m_resourcesStaging;
 
         // working set of streaming resources
-        std::vector<ResourceBase*> m_resources;
+        std::set<ResourceBase*> m_resources;
 
         GroupRemoveResources& m_flushResources;
     };

@@ -28,7 +28,7 @@ Gui::Gui(HWND in_hWnd, ID3D12Device* in_pDevice,
     , m_width(300)
     , m_height(600)
     , m_bandwidthHistory(m_historySize)
-    , m_numObjects(in_args.m_numSpheres)
+    , m_numObjects(in_args.m_numObjects)
     , m_minNumObjects(in_minNumObjects)
 {
     IMGUI_CHECKVERSION();
@@ -223,21 +223,21 @@ void Gui::ToggleDemoMode(CommandLineArgs& in_args)
     static float bias = 0;
     static float cameraRate = 0.4f;
     static float animationRate = 0.4f;
-    static int numSpheres = (int)m_initialArgs.m_maxNumObjects;
+    static int numObjects = (int)m_initialArgs.m_maxNumObjects;
 
     if (m_demoMode)
     {
         bias = 0;
         cameraRate = 0.4f;
         animationRate = 0.4f;
-        numSpheres = (int)m_initialArgs.m_maxNumObjects / 2;
+        numObjects = (int)m_initialArgs.m_maxNumObjects / 2;
     }
 
     std::swap(bias, in_args.m_lodBias);
     std::swap(cameraRate, in_args.m_cameraAnimationRate);
     std::swap(animationRate, in_args.m_animationRate);
-    std::swap(numSpheres, in_args.m_numSpheres);
-    m_numObjects = in_args.m_numSpheres;
+    std::swap(numObjects, in_args.m_numObjects);
+    m_numObjects = in_args.m_numObjects;
 
     in_args.m_showFeedbackMaps = false;
 }
@@ -252,7 +252,7 @@ void Gui::ToggleBenchmarkMode(CommandLineArgs& in_args)
     static float bias = -2;
     static float cameraRate = 2;
     static float animationRate = 2;
-    static int numSpheres = (int)m_initialArgs.m_maxNumObjects;
+    static int numObjects = (int)m_initialArgs.m_maxNumObjects;
 
     if (m_benchmarkMode)
     {
@@ -260,15 +260,15 @@ void Gui::ToggleBenchmarkMode(CommandLineArgs& in_args)
         bias = -2;
         cameraRate = 2;
         animationRate = 2;
-        numSpheres = (int)m_initialArgs.m_maxNumObjects;
+        numObjects = (int)m_initialArgs.m_maxNumObjects;
     }
 
     std::swap(paintmixer, in_args.m_cameraPaintMixer);
     std::swap(bias, in_args.m_lodBias);
     std::swap(cameraRate, in_args.m_cameraAnimationRate);
     std::swap(animationRate, in_args.m_animationRate);
-    std::swap(numSpheres, in_args.m_numSpheres);
-    m_numObjects = in_args.m_numSpheres;
+    std::swap(numObjects, in_args.m_numObjects);
+    m_numObjects = in_args.m_numObjects;
 
     in_args.m_showFeedbackMaps = false;
 }
@@ -355,7 +355,7 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     // only change # objects after slider released.
     if (ImGui::IsItemDeactivatedAfterEdit())
     {
-        in_args.m_numSpheres = m_numObjects;
+        in_args.m_numObjects = m_numObjects;
     }
 
     if (m_message.size())
