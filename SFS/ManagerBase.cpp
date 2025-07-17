@@ -28,7 +28,7 @@ SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_p
     , m_traceCaptureMode{ in_desc.m_traceCaptureMode }
     , m_oldSharedResidencyMaps(in_desc.m_swapChainBufferCount + 1, nullptr)
     , m_oldSharedClearUavHeaps(in_desc.m_swapChainBufferCount + 1, nullptr)
-    , m_processFeedbackThread((ManagerPFT*)this, m_dataUploader, in_desc.m_minNumUploadRequests, (int)in_desc.m_threadPriority)
+    , m_processFeedbackThread((ManagerPFT*)this, m_dataUploader, (int)in_desc.m_threadPriority)
     , m_residencyThread((ManagerRT*)this, m_processFeedbackThread.GetFlushResources(), (int)in_desc.m_threadPriority)
 {
     ASSERT(D3D12_COMMAND_LIST_TYPE_DIRECT == m_directCommandQueue->GetDesc().Type);

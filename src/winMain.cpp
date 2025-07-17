@@ -468,7 +468,6 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
                 if (sfsDesc.isMember("resolveHeapSizeMB")) sfsParams.m_resolveHeapSizeMB = sfsDesc["resolveHeapSizeMB"].asInt();
                 if (sfsDesc.isMember("maxTileUpdatesPerApiCall")) sfsParams.m_maxTileMappingUpdatesPerApiCall = sfsDesc["maxTileUpdatesPerApiCall"].asUInt();
                 if (sfsDesc.isMember("numStreamingBatches")) sfsParams.m_maxNumCopyBatches = sfsDesc["numStreamingBatches"].asUInt();
-                if (sfsDesc.isMember("minNumUploadRequests")) sfsParams.m_minNumUploadRequests = sfsDesc["minNumUploadRequests"].asUInt();
                 if (sfsDesc.isMember("evictionDelay")) sfsParams.m_evictionDelay = sfsDesc["evictionDelay"].asUInt();
             }
 

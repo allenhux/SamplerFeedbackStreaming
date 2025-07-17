@@ -33,11 +33,10 @@ namespace SFS
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 SFS::ProcessFeedbackThread::ProcessFeedbackThread(ManagerPFT* in_pSFSManager,
-    DataUploader& in_dataUploader, UINT in_minNumUploadRequests, int in_threadPriority) :
+    DataUploader& in_dataUploader, int in_threadPriority) :
     m_pSFSManager(in_pSFSManager)
     , m_dataUploader(in_dataUploader)
     , m_threadPriority(in_threadPriority)
-    , m_minNumUploadRequests(in_minNumUploadRequests)
 {
 }
 
@@ -77,10 +76,12 @@ void SFS::ProcessFeedbackThread::Start()
             // start timer for this frame
             INT64 prevFrameTime = m_cpuTimer.GetTime();
 
+            // counter of number of signals. limit the number per frame to prevent "storms"
+            constexpr UINT signalCounterMax = 8;
+            UINT signalCounter = 0;
+
             while (m_threadRunning)
             {
-                bool flushPendingUploadRequests = false;
-
                 bool newFrame = false;
                 UINT64 frameFenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
 
@@ -89,9 +90,6 @@ void SFS::ProcessFeedbackThread::Start()
                 {
                     previousFrameFenceValue = frameFenceValue;
                     newFrame = true;
-
-                    // flush any pending uploads from previous frame
-                    if (uploadsRequested) { flushPendingUploadRequests = true; }
 
                     // check for new resources, which probably need to load pack mips
                     if (m_newResourcesStaging.Size())
@@ -118,6 +116,8 @@ void SFS::ProcessFeedbackThread::Start()
                     //       as m_newResources may contain resources that have not been
                     //       propagated to residency thread
                     CheckFlushResources();
+
+                    signalCounter = 0;
                 }
 
                 // prioritize loading packed mips, as objects shouldn't be displayed until packed mips load                
@@ -236,25 +236,17 @@ void SFS::ProcessFeedbackThread::Start()
                 } // end loop over pending resources
 
                 // if there are uploads, maybe signal depending on heuristic to minimize # signals
-                if (uploadsRequested)
+                if (uploadsRequested && (signalCounter < signalCounterMax))
                 {
-                    // tell the file streamer to signal the corresponding fence
-                    if ((flushPendingUploadRequests) || // flush requests from previous frame
-                        (0 == m_pendingResources.size()) || // flush because there's no more work to be done (no stale resources, all feedback has been processed)
-                        // if we need updatelists and there is a minimum amount of pending work, go ahead and submit
-                        // this minimum heuristic prevents "storms" of submits with too few tiles to sustain good throughput
-                        ((0 == m_dataUploader.GetNumUpdateListsAvailable()) && (uploadsRequested > m_minNumUploadRequests)))
-                    {
-                        SignalFileStreamer();
-                        uploadsRequested = 0;
-                    }
+                    SignalFileStreamer();
+                    uploadsRequested = 0;
+                    signalCounter++; // prevents "storms" of submits
                 }
 
                 // nothing to do? wait for next frame
-                // development note: do not Wait() if uploadsRequested != 0. safe because uploadsRequested was cleared above.
+                // development note: ok to Wait() if uploadsRequested != 0. signalCounter will be reset next frame, and those updates will get a signal
                 if (0 == m_pendingResources.size())
                 {
-                    ASSERT(0 == uploadsRequested);
                     m_processFeedbackFlag.Wait();
                 }
             }

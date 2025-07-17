@@ -52,8 +52,7 @@ namespace SFS
     class ProcessFeedbackThread
     {
     public:
-        ProcessFeedbackThread(ManagerPFT* in_pSFSManager, DataUploader& in_dataUploader,
-            UINT in_minNumUploadRequests, int in_threadPriority);
+        ProcessFeedbackThread(ManagerPFT* in_pSFSManager, DataUploader& in_dataUploader, int in_threadPriority);
         ~ProcessFeedbackThread();
 
         void Start();
@@ -116,7 +115,6 @@ namespace SFS
         std::atomic<UINT> m_numTotalSubmits{ 0 }; // number of DS::Submit() calls
         std::atomic<UINT> m_numTotalSignals{ 0 }; // number of DS::Signal() calls
 
-        const UINT m_minNumUploadRequests{ 2000 }; // heuristic to reduce Submit()s
         void SignalFileStreamer();
         void CheckFlushResources();
         void ProcessFeedback(UINT64 in_frameFenceValue);

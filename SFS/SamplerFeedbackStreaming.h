@@ -119,8 +119,6 @@ struct SFSManagerDesc
     // number of frames to delay before evicting a tile
     UINT m_evictionDelay{ 10 };
 
-    UINT m_minNumUploadRequests{ 2000 }; // heuristic to reduce frequency of Submit() calls
-
     // applied to all internal threads: submit, fenceMonitor, processFeedback, updateResidency
     // on hybrid systems: performance prefers P cores, efficiency prefers E cores, normal is OS default
     enum class ThreadPriority : int
