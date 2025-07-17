@@ -58,7 +58,7 @@ SFS::ProcessFeedbackThread::~ProcessFeedbackThread()
 void SFS::ProcessFeedbackThread::SignalFileStreamer()
 {
     m_dataUploader.SignalFileStreamer();
-    m_numTotalSubmits.fetch_add(1, std::memory_order_relaxed);
+    m_numTotalSignals.fetch_add(1, std::memory_order_relaxed);
 }
 
 //-----------------------------------------------------------------------------
@@ -211,7 +211,12 @@ void SFS::ProcessFeedbackThread::Start()
                             && (m_pSFSManager->GetFrameFenceCompletedValue() == previousFrameFenceValue)
                             && m_threadRunning) // don't add work while exiting
                         {
-                            uploadsRequested += pResource->QueuePendingTileLoads();
+                            UINT numUploads = pResource->QueuePendingTileLoads();
+                            if (numUploads)
+                            {
+                                uploadsRequested += numUploads;
+                                m_numTotalSubmits.fetch_add(1, std::memory_order_relaxed);
+                            }
                         }
 
                         if (pResource->HasPendingWork()) // still have work to do?

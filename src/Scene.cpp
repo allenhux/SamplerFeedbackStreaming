@@ -1441,54 +1441,61 @@ void Scene::ScreenShot(std::wstring& in_fileName) const
 //-------------------------------------------------------------------------
 void Scene::GatherStatistics()
 {
-    // NOTE: streaming isn't aware of frame time.
-    // these numbers are approximately a measure of the number of operations during the last frame
-    const UINT numEvictions = m_pSFSManager->GetTotalNumEvictions();
-    const UINT numUploads = m_pSFSManager->GetTotalNumUploads();
-    static UINT numSubmits = 0;
+    // this number only used for statistics
+    // sort of ugly, but did not want variables mis-used in rest of render pipeline
+    static UINT m_frameNumber = 0;
 
-    m_numEvictionsPreviousFrame = numEvictions - m_numTotalEvictions;
-    m_numUploadsPreviousFrame = numUploads - m_numTotalUploads;
+    static UINT totalEvictions = m_pSFSManager->GetTotalNumEvictions();
+    static UINT totalUploads = m_pSFSManager->GetTotalNumUploads();
 
-    m_numTotalEvictions = numEvictions;
-    m_numTotalUploads = numUploads;
+    m_numEvictionsPreviousFrame = m_pSFSManager->GetTotalNumEvictions() - totalEvictions;
+    m_numUploadsPreviousFrame = m_pSFSManager->GetTotalNumUploads() - totalUploads;
+
+    totalEvictions += m_numEvictionsPreviousFrame;
+    totalUploads += m_numUploadsPreviousFrame;
 
     // statistics gathering
     if (m_args.m_timingFrameFileName.size() &&
         (m_frameNumber > m_args.m_timingStartFrame) &&
         (m_frameNumber <= m_args.m_timingStopFrame))
     {
-        UINT latestNumSubmits = m_pSFSManager->GetTotalNumSubmits();
-        UINT numSubmitsLastFrame = latestNumSubmits - numSubmits;
-        numSubmits = latestNumSubmits;
+        static UINT totalSubmits = m_pSFSManager->GetTotalNumSubmits();
+        static UINT totalSignals = m_pSFSManager->GetTotalNumSignals();
+
+        UINT numSubmitsPreviousFrame = m_pSFSManager->GetTotalNumSubmits() - totalSubmits;
+        UINT numSignalsPreviousFrame = m_pSFSManager->GetTotalNumSignals() - totalSignals;
+
+        totalSubmits += numSubmitsPreviousFrame;
+        totalSignals += numSignalsPreviousFrame;
 
         m_csvFile->Append(m_renderThreadTimes, m_updateFeedbackTimes,
             m_numUploadsPreviousFrame, m_numEvictionsPreviousFrame,
             // Note: these may be off by 1 frame, but probably good enough
             m_pSFSManager->GetCpuProcessFeedbackTime(),
             m_gpuProcessFeedbackTime, m_numFeedbackObjects,
-            numSubmitsLastFrame);
+            numSubmitsPreviousFrame, numSignalsPreviousFrame);
 
         if (m_frameNumber == m_args.m_timingStopFrame)
         {
             float measuredTime = (float)m_cpuTimer.Stop();
-            UINT measuredNumUploads = numUploads - m_startUploadCount;
+            UINT measuredNumUploads = totalUploads - m_startUploadCount;
             float tilesPerSecond = float(measuredNumUploads) / measuredTime;
-            float bytesPerTileDivMega = float(64 * 1024) / (1000.f * 1000.f);
-            float mbps = tilesPerSecond * bytesPerTileDivMega;
+            float MBperTile = float(64 * 1024) / (1000.f * 1000.f);
+            float mbps = tilesPerSecond * MBperTile;
             m_totalTileLatency = m_pSFSManager->GetTotalTileCopyLatency() - m_totalTileLatency;
-            float approximatePerTileLatency = 1000.f * (m_totalTileLatency / measuredNumUploads);
+            UINT numSubmitsTotal = m_pSFSManager->GetTotalNumSubmits() - m_startSubmitCount;
+            float approximatePerTileLatency = 1000.f * (m_totalTileLatency / numSubmitsTotal);
 
             DebugPrint(L"Gathering final statistics before exiting\n");
 
             m_csvFile->WriteEvents(m_hwnd, m_args);
             *m_csvFile
-                << "bandwidth_MB/s #uploads seconds latency_ms #submits\n"
+                << "MB/s,#uploads,seconds,#submits,ms/submit\n"
                 << mbps
-                << " " << measuredNumUploads
-                << " " << measuredTime
-                << " " << approximatePerTileLatency
-                << " " << m_pSFSManager->GetTotalNumSubmits() - m_startSubmitCount
+                << "," << measuredNumUploads
+                << "," << measuredTime
+                << "," << numSubmitsTotal
+                << "," << approximatePerTileLatency
                 << "\n";
             m_csvFile->close();
             m_csvFile = nullptr;
@@ -1511,9 +1518,9 @@ void Scene::GatherStatistics()
         // start timing and gathering uploads from the very beginning of the timed region
         if (m_args.m_timingFrameFileName.size())
         {
-            numSubmits = m_pSFSManager->GetTotalNumSubmits();
             m_startUploadCount = m_pSFSManager->GetTotalNumUploads();
             m_startSubmitCount = m_pSFSManager->GetTotalNumSubmits();
+            m_startSignalCount = m_pSFSManager->GetTotalNumSignals();
             m_totalTileLatency = m_pSFSManager->GetTotalTileCopyLatency();
             m_cpuTimer.Start();
         }
@@ -1535,7 +1542,7 @@ void Scene::Animate()
 
         if (m_args.m_cameraPaintMixer)
         {
-            m_args.m_cameraRollerCoaster = (0x04 & m_frameNumber);
+            m_args.m_cameraRollerCoaster = (0x04 & m_renderFenceValue);
         }
 
         static float theta = -XM_PIDIV2;
@@ -1881,24 +1888,20 @@ void Scene::HandleUIchanges()
 // the m_waitForAssetLoad setting pauses until packed mips load
 // do not animate or, for statistics purposes, increment frame #
 //-------------------------------------------------------------------------
-bool Scene::WaitForAssetLoad()
+bool Scene::AssetsLoaded()
 {
+    if (LoadingThread::Idle != m_loadingThreadState)
+    {
+        return false;
+    }
     for (const auto o : m_objects)
     {
-        if (!o->Drawable())
+        if ((nullptr == o) || (!o->Drawable()))
         {
-            // must give SFSManager a chance to process packed mip requests
-            D3D12_CPU_DESCRIPTOR_HANDLE minmipmapDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
-            m_pSFSManager->BeginFrame();
-            auto pCommandList = m_pSFSManager->EndFrame(minmipmapDescriptor);
-            m_commandQueue->ExecuteCommandLists(1, &pCommandList);
-
-            MoveToNextFrame();
-
-            return true;
+            return false;
         }
     }
-    return false;
+    return true;
 }
 
 //-------------------------------------------------------------------------
@@ -1926,14 +1929,7 @@ bool Scene::Draw()
     // load more spheres?
     // SceneResource destruction/creation must be done outside of BeginFrame/EndFrame
     LoadSpheres();
-#if 0
-    // FIXME
-    // after loading new objects
-    if (m_args.m_waitForAssetLoad && WaitForAssetLoad())
-    {
-        return true;
-    }
-#endif
+
     // prepare for new commands (need an open command list for LoadSpheres)
     m_commandAllocators[m_frameIndex]->Reset();
     m_commandList->Reset((ID3D12CommandAllocator*)m_commandAllocators[m_frameIndex].Get(), nullptr);
@@ -2019,13 +2015,17 @@ bool Scene::Draw()
     //-------------------------------------------
     // gather statistics before moving to next frame
     //-------------------------------------------
-    GatherStatistics();
-    m_renderThreadTimes.Set(RenderEvents::PreWaitNextFrame);
+    // wait until after loads have completed?
+    if ((!m_args.m_waitForAssetLoad) || (AssetsLoaded()))
+    {
+        m_args.m_waitForAssetLoad = false;
+        GatherStatistics();
+        m_renderThreadTimes.Set(RenderEvents::PreWaitNextFrame);
+        m_renderThreadTimes.NextFrame();
+    }
 
     MoveToNextFrame();
 
-    m_renderThreadTimes.Set(RenderEvents::PostWaitNextFrame);
-    m_renderThreadTimes.NextFrame();
 
     return success;
 }

@@ -74,6 +74,8 @@ namespace SFS
         GroupRemoveResources& GetFlushResources() { return m_flushResources; }
 
         UINT GetTotalNumSubmits() const { return m_numTotalSubmits; }
+        UINT GetTotalNumSignals() const { return m_numTotalSignals; }
+
         UINT64 GetTotalProcessTime() const { return m_processFeedbackTime; }
         float GetSecondsFromDelta(INT64 d) { return m_cpuTimer.GetSecondsFromDelta(d); }
     private:
@@ -111,7 +113,8 @@ namespace SFS
 
         std::atomic<bool> m_threadRunning{ false };
 
-        std::atomic<UINT> m_numTotalSubmits{ 0 };
+        std::atomic<UINT> m_numTotalSubmits{ 0 }; // number of DS::Submit() calls
+        std::atomic<UINT> m_numTotalSignals{ 0 }; // number of DS::Signal() calls
 
         const UINT m_minNumUploadRequests{ 2000 }; // heuristic to reduce Submit()s
         void SignalFileStreamer();

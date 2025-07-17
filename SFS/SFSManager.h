@@ -45,6 +45,7 @@ namespace SFS
         virtual UINT GetTotalNumEvictions() const override;
         virtual float GetTotalTileCopyLatency() const override;
         virtual UINT GetTotalNumSubmits() const override;
+        virtual UINT GetTotalNumSignals() const override;
         virtual void CaptureTraceFile(bool in_captureTrace) override;
         virtual void SetVisualizationMode(UINT in_mode) override;
         //-----------------------------------------------------------------

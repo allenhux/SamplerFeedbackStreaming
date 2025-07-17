@@ -1,1 +1,1 @@
-stress.bat -waitforassetload -hideUI -timingstart 1000 -timingstop 2000 -timingFileFrames "timing" %*
+stress.bat -waitforassetload -hideUI -timingstart 250 -timingstop 1250 -timingFileFrames "timing" %*

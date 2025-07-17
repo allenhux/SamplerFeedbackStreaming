@@ -9,7 +9,7 @@
 
 Texture2D g_streamingTexture : register(t0);
 
-Buffer<uint> g_minmipmap: register(t1);
+Buffer<uint> g_minmipmap : register(t1);
 
 SamplerState g_sampler : register(s0);
 

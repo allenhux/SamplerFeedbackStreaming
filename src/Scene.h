@@ -108,11 +108,6 @@ private:
     ComPtr<ID3D12Fence> m_renderFence;
     HANDLE m_renderFenceEvent{ NULL };
 
-    // used for animation or statistics gathering
-    // e.g. rotate by radians*m_framenumber
-    // frameNumber can optionally be stalled while waiting for initial resource load
-    UINT m_frameNumber{ 0 };
-
     std::default_random_engine m_gen;
 
     ComPtr<ID3D12CommandAllocator> m_commandAllocators[m_swapBufferCount];
@@ -268,10 +263,6 @@ private:
     std::unique_ptr<FrameEventTracing> m_csvFile{ nullptr };
     float m_gpuProcessFeedbackTime{ 0 };
 
-    // statistics: compute per-frame # evictions & uploads from delta from previous total
-    UINT m_numTotalEvictions{ 0 };
-    UINT m_numTotalUploads{ 0 };
-
     UINT m_numEvictionsPreviousFrame{ 0 };
     UINT m_numUploadsPreviousFrame{ 0 };
 
@@ -281,12 +272,13 @@ private:
     void GatherStatistics();
     UINT m_startUploadCount{ 0 };
     UINT m_startSubmitCount{ 0 };
+    UINT m_startSignalCount{ 0 };
     float m_totalTileLatency{ 0 }; // per-tile upload latency. NOT the same as per-UpdateList
     Timer m_cpuTimer;
     UINT m_numTilesVirtual{ 0 };
 
     void HandleUIchanges();
-    bool WaitForAssetLoad();
+    bool AssetsLoaded(); // returns true if all resources are drawable. used to delay start of gathering statistics
     void StartScene();
     void DrawUI();
     void HandleUiToggleFrustum();

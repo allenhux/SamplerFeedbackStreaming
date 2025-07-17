@@ -186,6 +186,7 @@ float SFS::Manager::GetCpuProcessFeedbackTime() { return m_cpuProcessFeedbackFra
 UINT SFS::Manager::GetTotalNumUploads() const { return m_dataUploader.GetTotalNumUploads(); }
 UINT SFS::Manager::GetTotalNumEvictions() const { return m_dataUploader.GetTotalNumEvictions(); }
 UINT SFS::Manager::GetTotalNumSubmits() const { return m_processFeedbackThread.GetTotalNumSubmits(); }
+UINT SFS::Manager::GetTotalNumSignals() const { return m_processFeedbackThread.GetTotalNumSignals(); }
 float SFS::Manager::GetTotalTileCopyLatency() const { return m_dataUploader.GetApproximateTileCopyLatency(); }
 
 //-----------------------------------------------------------------------------
