@@ -132,7 +132,6 @@
     <ClInclude Include="..\include\D3D12GpuTimer.h" />
     <ClInclude Include="..\include\DebugHelper.h" />
     <ClInclude Include="..\include\Timer.h" />
-    <ClInclude Include="..\include\TimeTracing.h" />
     <ClInclude Include="..\include\WindowCapture.h" />
     <ClInclude Include="AssetUploader.h" />
     <ClInclude Include="BufferViewer.h" />

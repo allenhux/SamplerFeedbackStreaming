@@ -74,7 +74,7 @@ void SFS::ProcessFeedbackThread::Start()
             UINT64 previousFrameFenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
 
             // start timer for this frame
-            INT64 prevFrameTime = m_cpuTimer.GetTime();
+            INT64 prevFrameTime = m_cpuTimer.GetTicks();
 
             // counter of number of signals. limit the number per frame to prevent "storms"
             constexpr UINT signalCounterMax = 8;
@@ -152,7 +152,7 @@ void SFS::ProcessFeedbackThread::Start()
                     // includes resources that still need work plus those that need update due to evictions
                     std::set<ResourceBase*> sharePending;
 
-                    prevFrameTime = m_cpuTimer.GetTime();
+                    prevFrameTime = m_cpuTimer.GetTicks();
                     for (auto i = m_delayedResources.begin(); i != m_delayedResources.end();)
                     {
                         auto pResource = *i;
@@ -186,7 +186,7 @@ void SFS::ProcessFeedbackThread::Start()
                     sharePending.insert(m_pendingResources.begin(), m_pendingResources.end());
                     m_pSFSManager->SharePendingResourcesRT(std::move(sharePending));
 
-                    m_processFeedbackTime += (m_cpuTimer.GetTime() - prevFrameTime);
+                    m_processFeedbackTime += (m_cpuTimer.GetTicks() - prevFrameTime);
                 } // end if new frame
 
                 // push uploads and evictions for stale resources

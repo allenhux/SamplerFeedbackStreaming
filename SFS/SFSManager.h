@@ -40,10 +40,10 @@ namespace SFS
         virtual float GetGpuTexelsPerMs() const override;
         virtual UINT GetMaxNumFeedbacksPerFrame() const override;
         virtual float GetGpuTime() const override;
-        virtual float GetCpuProcessFeedbackTime() override;
+        virtual float GetCpuProcessFeedbackTimeMs() override;
         virtual UINT GetTotalNumUploads() const override;
         virtual UINT GetTotalNumEvictions() const override;
-        virtual float GetTotalTileCopyLatency() const override;
+        virtual float GetTotalTileCopyLatencyMs() const override;
         virtual UINT GetTotalNumSubmits() const override;
         virtual UINT GetTotalNumSignals() const override;
         virtual void CaptureTraceFile(bool in_captureTrace) override;
@@ -59,11 +59,11 @@ namespace SFS
         BarrierList m_packedMipTransitionBarriers; // transition packed-mips from common (copy dest)
 
         UINT64 m_previousFeedbackTime{ 0 }; // m_processFeedbackTime at time of last query
-        float m_cpuProcessFeedbackFrameTime{ 0 }; // cpu time spent processing feedback (averaged over m_feedbackTimingFrequency)
+        float m_cpuProcessFeedbackFrameTimeMs{ 0 }; // cpu time spent processing feedback (averaged over m_feedbackTimingFrequency)
         float m_gpuFrameTime{ 0 };  // gpu render queue time (averaged over m_feedbackTimingFrequency)
 
         // every n frames swap
-        UINT m_feedbackTimingFrequency{ 50 };
+        UINT m_feedbackTimingFrequency{ 25 };
         UINT m_numFeedbackTimingFrames{ 0 };
         float m_texelsPerMs{ 50 };
         float m_gpuFeedbackTime{ 0 };

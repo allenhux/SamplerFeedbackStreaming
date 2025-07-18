@@ -118,9 +118,6 @@
     <ClInclude Include="..\include\Timer.h">
       <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\TimeTracing.h">
-      <Filter>lib</Filter>
-    </ClInclude>
     <ClInclude Include="..\include\WindowCapture.h">
       <Filter>lib</Filter>
     </ClInclude>

@@ -6,8 +6,6 @@
 
 #pragma once
 #include "FileStreamer.h"
-#include "Timer.h"
-
 #include "SimpleAllocator.h"
 
 //=======================================================================================
@@ -42,7 +40,6 @@ namespace SFS
         };
 
         std::wstring m_fileName; // only used for packed mips hack
-        RawCpuTimer m_cpuTimer;
 
         ComPtr<ID3D12CommandQueue> m_copyCommandQueue;
         ComPtr<ID3D12GraphicsCommandList> m_copyCommandList;

@@ -273,8 +273,9 @@ private:
     UINT m_startUploadCount{ 0 };
     UINT m_startSubmitCount{ 0 };
     UINT m_startSignalCount{ 0 };
-    float m_totalTileLatency{ 0 }; // per-tile upload latency. NOT the same as per-UpdateList
-    Timer m_cpuTimer;
+    float m_totalTileLatencyMs{ 0 }; // per-tile upload latency. NOT the same as per-UpdateList
+    CpuTimer m_cpuTimer;
+    INT64 m_cpuTimerStart{ 0 };
     UINT m_numTilesVirtual{ 0 };
 
     void HandleUIchanges();

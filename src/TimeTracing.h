@@ -24,13 +24,19 @@ public:
         {
             f.resize((UINT)T::Num, 0);
         }
-        m_timer.Start();
     }
 
     // record time corresponding to a particular event
     void Set(T in_eventEnum)
     {
-        float t = (float)m_timer.GetTime();
+        if (0 == m_cpuTimerStart)
+        {
+            m_cpuTimerStart = m_timer.GetTicks();
+        }
+
+        // FIXME? sacrificing precision for smaller memory footprint
+        float t = (float)m_timer.GetMsSince(m_cpuTimerStart);
+
         UINT index = UINT(in_eventEnum);
         auto& events = m_frames[m_frameNumber];
         const UINT lastIndex = UINT(T::Num) - 1;
@@ -80,7 +86,9 @@ public:
         return total;
     }
 private:
-    Timer m_timer;
+    CpuTimer m_timer;
+    INT64 m_cpuTimerStart{ 0 };
+
     std::vector<Events> m_frames;
     UINT m_frameNumber;
     UINT m_mostRecentFrame; // where the latest bits were previously written

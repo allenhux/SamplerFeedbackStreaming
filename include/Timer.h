@@ -14,33 +14,34 @@
 #endif
 #include <Windows.h>
 
+/*-----------------------------------------------------------------------------
+MSDN:
+    In general, the performance counter results are consistent across all processors in
+    multi-core and multi-processor systems even when measured on different threads or processes
+
+    How often does QPC roll over?
+    Not less than 100 years from the most recent system boot, and potentially longer based
+    on the underlying hardware timer used. For most applications, rollover isn't a concern.
+-----------------------------------------------------------------------------*/
+
 //=============================================================================
-// return time in seconds
+// return time in milliseconds
+// follows coding example in MSDN, but converting to milliseconds instead of microseconds
+// https://learn.microsoft.com/en-us/windows/win32/sysinfo/acquiring-high-resolution-time-stamps
+// "To guard against loss-of-precision, we convert to microseconds *before* dividing by ticks-per-second."
 //=============================================================================
-class Timer
+class CpuTimer
 {
 public:
-    Timer();
-    void   Start();
-    double Stop() const { return GetTime(); }
-    double GetTime() const;
-
+	CpuTimer() : m_performanceFrequency({ []() { LARGE_INTEGER l{};
+	::QueryPerformanceFrequency(&l); return l; }() }) {}
+	static INT64 GetTicks() { LARGE_INTEGER i; QueryPerformanceCounter(&i); return i.QuadPart; }
+	float GetMsSince(INT64 in_previousTicks) const { return GetMsFromDelta(GetTicks() - in_previousTicks); }
+	float GetMsFromDelta(INT64 in_delta) const
+    { return float(in_delta * m_ticksToMs) / float(m_performanceFrequency.QuadPart); }
 private:
-    LARGE_INTEGER m_startTime;
-    LARGE_INTEGER m_performanceFrequency;
-    double m_oneOverTicksPerSecond;
-};
-
-class RawCpuTimer
-{
-public:
-    RawCpuTimer() { ::QueryPerformanceFrequency(&m_performanceFrequency); m_oneOverTicksPerSecond = 1.f / (float)m_performanceFrequency.QuadPart; }
-    INT64 GetTime() const { LARGE_INTEGER i; QueryPerformanceCounter(&i); return i.QuadPart; }
-    float GetSecondsSince(INT64 in_previousTime) const { return float(GetTime() - in_previousTime) * m_oneOverTicksPerSecond; }
-    float GetSecondsFromDelta(INT64 in_delta) const { return float(in_delta) * m_oneOverTicksPerSecond; }
-private:
-    LARGE_INTEGER m_performanceFrequency;
-    float m_oneOverTicksPerSecond;
+    const LARGE_INTEGER m_performanceFrequency;
+    static constexpr UINT m_ticksToMs{ 1000 };
 };
 
 //-----------------------------------------------------------------------------
@@ -69,35 +70,6 @@ private:
     float m_sum;
 };
 
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-inline Timer::Timer()
-{
-    m_startTime.QuadPart = 0;
-    ::QueryPerformanceFrequency(&m_performanceFrequency);
-    m_oneOverTicksPerSecond = 1. / (double)m_performanceFrequency.QuadPart;
-}
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-inline void Timer::Start()
-{
-    ::QueryPerformanceCounter(&m_startTime);
-}
-
-//-----------------------------------------------------------------------------
-// not intended to be executed within inner loop
-//-----------------------------------------------------------------------------
-inline double Timer::GetTime() const
-{
-    LARGE_INTEGER endTime;
-    ::QueryPerformanceCounter(&endTime);
-
-    const LONGLONG s = m_startTime.QuadPart;
-    const LONGLONG e = endTime.QuadPart;
-    return double(e - s) * m_oneOverTicksPerSecond;
-}
-
 /*======================================================
 Usage:
 Either: call once every loop with Update(), e.g. for average frametime
@@ -106,28 +78,23 @@ Or: call in pairs Start()...Update() to average a region
 class TimerAverageOver
 {
 public:
-    TimerAverageOver(UINT in_numFrames = 30) :
-        m_averageOver(in_numFrames)
-    {
-        m_timer.Start();
-        m_previousTime = 0;
-    }
+    TimerAverageOver(UINT in_numFrames = 30) : m_averageOver(in_numFrames) {}
 
     void Start()
     {
-        m_previousTime = (float)m_timer.GetTime();
+        m_previousTime = m_timer.GetTicks();
     }
 
     void Update()
     {
-        float t = (float)m_timer.GetTime();
-        float delta = t - m_previousTime;
+        INT64 t = m_timer.GetTicks();
+        float delta = m_timer.GetMsFromDelta(t - m_previousTime);
         m_previousTime = t;
 
         m_averageOver.Update(delta);
     }
 
-    float Get() const
+    float GetMs() const
     {
         return m_averageOver.Get();
     }
@@ -138,10 +105,10 @@ private:
     TimerAverageOver& operator=(const TimerAverageOver&) = delete;
     TimerAverageOver& operator=(TimerAverageOver&&) = delete;
 
-    Timer m_timer;
+    CpuTimer m_timer;
     AverageOver m_averageOver;
 
-    float m_previousTime;
+    INT64 m_previousTime{ 0 };
 };
 
 // if something increases with each sample, e.g. time or # of transactions,

@@ -69,15 +69,13 @@ namespace SFS
         UINT GetTotalNumUploads() const { return m_numTotalUploads; }
         void AddEvictions(UINT in_numEvictions) { m_numTotalEvictions += in_numEvictions; }
         UINT GetTotalNumEvictions() const { return m_numTotalEvictions; }
-        float GetApproximateTileCopyLatency() const { return m_pFenceThreadTimer->GetSecondsFromDelta(m_totalTileCopyLatency); } // sum of per-tile latencies so far
+        float GetTotalTileCopyLatencyMs() const { return m_fenceThreadTimer.GetMsFromDelta(m_totalTileCopyLatency); } // sum of per-tile latencies so far
 
         void SetVisualizationMode(UINT in_mode) { m_pFileStreamer->SetVisualizationMode(in_mode); }
         void CaptureTraceFile(bool in_captureTrace) { m_pFileStreamer->CaptureTraceFile(in_captureTrace); }
     private:
         // upload buffer size
         const UINT m_stagingBufferSizeMB{ 0 };
-
-        RawCpuTimer m_cpuTimer;
 
         // fence to monitor forward progress of the mapping queue. independent of the frame queue
         ComPtr<ID3D12Fence> m_mappingFence;
@@ -131,7 +129,7 @@ namespace SFS
         std::thread m_fenceMonitorThread;
         SFS::SynchronizationFlag m_fenceMonitorFlag; // sleeps until flag set
         HANDLE m_fenceEvents[2]{};
-        RawCpuTimer* m_pFenceThreadTimer{ nullptr }; // init timer on the thread that uses it. can't really worry about thread migration.
+        CpuTimer m_fenceThreadTimer;
         AllocatorMT<UpdateList*> m_monitorTasks;
 
         void StartThreads();

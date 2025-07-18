@@ -184,10 +184,6 @@ void SFS::DataUploader::StartThreads()
     // launch thread to monitor fences
     m_fenceMonitorThread = std::thread([&]
         {
-            // initialize timer on the thread that will use it
-            RawCpuTimer fenceMonitorThread;
-            m_pFenceThreadTimer = &fenceMonitorThread;
-
             while (m_threadsRunning)
             {
                 FenceMonitorThread();
@@ -300,6 +296,7 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
 
     if (in_updateList.GetNumStandardUpdates())
     {
+        in_updateList.m_copyLatencyTimer = m_fenceThreadTimer.GetTicks();
         m_pFileStreamer->StreamTexture(in_updateList);
     }
 
@@ -347,13 +344,6 @@ void SFS::DataUploader::FenceMonitorThread()
         ASSERT(UpdateList::State::STATE_FREE != updateList.m_executionState);
 
         bool freeUpdateList = false;
-
-        // assign a start time to every in-flight update list. this will give us an upper bound on latency.
-        // latency is only measured for tile uploads
-        if (0 == updateList.m_copyLatencyTimer)
-        {
-            updateList.m_copyLatencyTimer = m_pFenceThreadTimer->GetTime();
-        }
 
         switch (updateList.m_executionState)
         {
@@ -421,7 +411,7 @@ void SFS::DataUploader::FenceMonitorThread()
                 {
                     updateList.m_pResource->NotifyCopyComplete(updateList.m_coords);
 
-                    auto updateLatency = m_pFenceThreadTimer->GetTime() - updateList.m_copyLatencyTimer;
+                    auto updateLatency = m_fenceThreadTimer.GetTicks() - updateList.m_copyLatencyTimer;
                     m_totalTileCopyLatency.fetch_add(updateLatency, std::memory_order_relaxed);
                     m_numTotalUploads.fetch_add(updateList.GetNumStandardUpdates(), std::memory_order_relaxed);
                 }
@@ -468,8 +458,6 @@ void SFS::DataUploader::FenceMonitorThread()
 // Submit Thread
 // On submission, all updatelists need mapping
 // set next state depending on the task
-// Note: QueryPerformanceCounter() needs to be called from the same CPU for values to be compared,
-//       but this thread starts work while a different thread handles completion
 // NOTE: if UpdateTileMappings is slow, throughput will be impacted
 //-----------------------------------------------------------------------------
 void SFS::DataUploader::MappingThread()

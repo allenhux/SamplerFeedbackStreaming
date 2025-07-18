@@ -76,7 +76,7 @@ namespace SFS
         UINT GetTotalNumSignals() const { return m_numTotalSignals; }
 
         UINT64 GetTotalProcessTime() const { return m_processFeedbackTime; }
-        float GetSecondsFromDelta(INT64 d) { return m_cpuTimer.GetSecondsFromDelta(d); }
+        float GetMsFromDelta(INT64 d) { return m_cpuTimer.GetMsFromDelta(d); }
     private:
         ManagerPFT* const m_pSFSManager;
         DataUploader& m_dataUploader;
@@ -107,7 +107,7 @@ namespace SFS
         // sleep until this is set:
         SFS::SynchronizationFlag m_processFeedbackFlag;
 
-        RawCpuTimer m_cpuTimer;
+        CpuTimer m_cpuTimer;
         std::atomic<UINT64> m_processFeedbackTime{ 0 }; // sum of cpu timer times since start
 
         std::atomic<bool> m_threadRunning{ false };

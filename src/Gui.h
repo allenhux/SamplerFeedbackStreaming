@@ -24,8 +24,8 @@ public:
     {
         float m_gpuDrawTime;       // time to draw the objects
         float m_gpuFeedbackTime;   // time to clear & resolve feedback and upload residency maps
-        float m_cpuDrawTime;       // time cpu is submitting draw calls (render thread)
-        float m_cpuFeedbackTime;   // time cpu is working on feedback & related datastructures (update thread)
+        float m_cpuDrawTimeMs;       // time cpu is submitting draw calls (render thread)
+        float m_cpuFeedbackTimeMs;   // time cpu is working on feedback & related datastructures (update thread)
         int m_scrollMipDim;
         UINT m_numObjectsLoaded;
         UINT m_numTilesUploaded;
@@ -74,7 +74,7 @@ private:
 
     TotalSince m_cpuTimes;
     TotalSince m_numUploads;
-    RawCpuTimer m_cpuTimer;
+    CpuTimer m_cpuTimer;
 
     int m_numObjects{ 1 };
     std::string m_message;

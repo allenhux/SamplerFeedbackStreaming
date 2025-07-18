@@ -552,13 +552,13 @@ int main()
     std::cout << "number of submits: " << tracePlayer.GetNumSubmits() << "\n";
     std::cout << "staging buffer size MB: " << tracePlayerParams.m_stagingBufferSizeMB << "\n";
     std::cout << "executing trace, # iterations = " << numItersPlayback << "\n";
-    Timer timer;
-    timer.Start();
+    CpuTimer timer;
+    auto start = timer.GetTicks();
     for (UINT i = 0; i < numItersPlayback; i++)
     {
         tracePlayer.PlaybackTrace();
     }
-    double seconds = timer.Stop();
+    double seconds = 1000 * timer.GetMsSince(start);
 
     double bytesToBandwidth = numItersPlayback / (1024. * 1024. * seconds);
 

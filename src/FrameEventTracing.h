@@ -45,7 +45,7 @@ public:
         const RenderEventList& in_renderList,
         const UpdateEventList& in_updateList,
         UINT in_numUploads, UINT in_numEvictions,
-        float in_cpuProcessFeedbackTime,
+        float in_cpuProcessFeedbackTimeMs,
         float in_gpuProcessFeedbackTime,
         UINT in_numFeedbackResolves, UINT in_numSubmits, UINT in_numSignals)
     {
@@ -53,13 +53,14 @@ public:
             in_renderList.GetLatest(),
             in_updateList.GetLatest(),
             in_numUploads, in_numEvictions,
-            in_cpuProcessFeedbackTime, in_gpuProcessFeedbackTime,
+            in_cpuProcessFeedbackTimeMs, in_gpuProcessFeedbackTime,
             in_numFeedbackResolves, in_numSubmits, in_numSignals });
     }
 
     void WriteEvents(HWND in_hWnd, const CommandLineArgs& in_args);
 private:
-    Timer m_timer;
+    CpuTimer m_timer;
+    INT64 m_startTicker{ 0 };
 
     struct FrameEvents
     {
@@ -67,7 +68,7 @@ private:
         TimeTracing<UpdateEvents>::Accessor m_updateTimes;
         UINT m_numTileCopiesQueued;
         UINT m_numTilesEvicted;
-        float m_cpuFeedbackTime;
+        float m_cpuFeedbackTimeMs;
         float m_gpuFeedbackTime;
         UINT m_numGpuFeedbackResolves;
         UINT m_numSubmits;
@@ -89,12 +90,12 @@ inline FrameEventTracing::FrameEventTracing(
     // reserve a bunch of space
     m_events.reserve(1000);
 
-    m_timer.Start();
+    m_startTicker = m_timer.GetTicks();
 }
 
 inline void FrameEventTracing::WriteEvents(HWND in_hWnd, const CommandLineArgs& in_args)
 {
-    double totalTime = m_timer.Stop();
+    float totalTimeMs = m_timer.GetMsFromDelta(m_startTicker);
 
     RECT windowRect;
     GetClientRect(in_hWnd, &windowRect);
@@ -126,15 +127,15 @@ inline void FrameEventTracing::WriteEvents(HWND in_hWnd, const CommandLineArgs& 
         float waitOnFencesBegin = e.m_renderTimes.Get(RenderEvents::PreWaitNextFrame);
 
         *this
-            << (tumEndFrameBegin - frameBegin) * 1000                // render thread drawing via DrawIndexInstanced(), etc.
-            << "," << (tumEndFrame - tumEndFrameBegin) * 1000        // SFSM::EndFrame()
-            << "," << (waitOnFencesBegin - tumEndFrame) * 1000       // ExecuteCommandLists()
-            << "," << (waitOnFencesBegin - frameBegin) * 1000        // frame time
+            << (tumEndFrameBegin - frameBegin)                // render thread drawing via DrawIndexInstanced(), etc.
+            << "," << (tumEndFrame - tumEndFrameBegin)        // SFSM::EndFrame()
+            << "," << (waitOnFencesBegin - tumEndFrame)       // ExecuteCommandLists()
+            << "," << (waitOnFencesBegin - frameBegin)        // frame time
 
             << "," << e.m_numTilesEvicted // copies queued
             << "," << e.m_numTileCopiesQueued  // tile virtual->physical removed
 
-            << "," << e.m_cpuFeedbackTime * 1000
+            << "," << e.m_cpuFeedbackTimeMs
             << "," << e.m_gpuFeedbackTime * 1000
             << "," << e.m_numGpuFeedbackResolves
             << "," << e.m_numSubmits
@@ -143,5 +144,5 @@ inline void FrameEventTracing::WriteEvents(HWND in_hWnd, const CommandLineArgs& 
             << std::endl;
     }
 
-    *this << "Total Time (s): " << totalTime << std::endl;
+    *this << "Total Time (s): " << totalTimeMs / 1000.f << std::endl;
 }

@@ -182,12 +182,12 @@ void SFS::ManagerBase::UseDirectStorage(bool in_useDS)
 float SFS::Manager::GetGpuTexelsPerMs() const { return m_texelsPerMs; }
 UINT SFS::Manager::GetMaxNumFeedbacksPerFrame() const { return m_maxNumResolvesPerFrame; }
 float SFS::Manager::GetGpuTime() const { return m_gpuFrameTime; }
-float SFS::Manager::GetCpuProcessFeedbackTime() { return m_cpuProcessFeedbackFrameTime; }
+float SFS::Manager::GetCpuProcessFeedbackTimeMs() { return m_cpuProcessFeedbackFrameTimeMs; }
 UINT SFS::Manager::GetTotalNumUploads() const { return m_dataUploader.GetTotalNumUploads(); }
 UINT SFS::Manager::GetTotalNumEvictions() const { return m_dataUploader.GetTotalNumEvictions(); }
 UINT SFS::Manager::GetTotalNumSubmits() const { return m_processFeedbackThread.GetTotalNumSubmits(); }
 UINT SFS::Manager::GetTotalNumSignals() const { return m_processFeedbackThread.GetTotalNumSignals(); }
-float SFS::Manager::GetTotalTileCopyLatency() const { return m_dataUploader.GetApproximateTileCopyLatency(); }
+float SFS::Manager::GetTotalTileCopyLatencyMs() const { return m_dataUploader.GetTotalTileCopyLatencyMs(); }
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -457,7 +457,7 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
         m_gpuFeedbackTime = 0;
 #if 1
         UINT64 processFeedbackTime = m_processFeedbackThread.GetTotalProcessTime(); // snapshot of live counter
-        m_cpuProcessFeedbackFrameTime = m_processFeedbackThread.GetSecondsFromDelta(processFeedbackTime - m_previousFeedbackTime) / m_feedbackTimingFrequency;
+        m_cpuProcessFeedbackFrameTimeMs = m_processFeedbackThread.GetMsFromDelta(processFeedbackTime - m_previousFeedbackTime) / m_feedbackTimingFrequency;
         m_previousFeedbackTime = processFeedbackTime; // remember current time for next call
 #endif
     }

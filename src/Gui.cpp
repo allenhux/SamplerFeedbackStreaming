@@ -93,11 +93,11 @@ void Gui::DrawHeapOccupancyBar(UINT in_numTilesCommitted, UINT in_totalHeapSize,
 //-----------------------------------------------------------------------------
 // compute MB/s in a consistent way across UI
 //-----------------------------------------------------------------------------
-float Gui::ComputeBandwidth(UINT in_numTiles, float in_numSeconds)
+float Gui::ComputeBandwidth(UINT in_numTiles, float in_ms)
 {
-    float tilesPerSecond = float(in_numTiles) / in_numSeconds;
-    float bytesPerTileDivMega = float(64 * 1024) / (1000.f * 1000.f);
-    return (tilesPerSecond * bytesPerTileDivMega);
+    float tilesPerMs = float(in_numTiles) / in_ms;
+    float mbPerTile = 64.f / 1024.f;
+    return (tilesPerMs * mbPerTile * 1000.f);
 }
 
 //-----------------------------------------------------------------------------
@@ -119,8 +119,8 @@ void Gui::DrawLineGraph(const std::vector<float>& in_ringBuffer, UINT in_head, c
     ASSERT(m_cpuTimes.GetNumEntries() == m_numUploads.GetNumEntries());
 
     auto numTiles = m_numUploads.GetRange();
-    float seconds = m_cpuTimer.GetSecondsFromDelta(m_cpuTimes.GetRange());
-    float mbps = ComputeBandwidth((UINT)numTiles, seconds);
+    float ms = m_cpuTimer.GetMsFromDelta(m_cpuTimes.GetRange());
+    float mbps = ComputeBandwidth((UINT)numTiles, ms);
 
     float graphMin = 0.0f;
     float graphMax = 0.0f;
@@ -152,8 +152,8 @@ void Gui::DrawLineGraph(const std::vector<float>& in_ringBuffer, UINT in_head, c
 //-----------------------------------------------------------------------------
 void Gui::UpdateBandwidthHistory(UINT in_numTilesUploaded)
 {
-    float seconds = m_cpuTimer.GetSecondsFromDelta(m_cpuTimes.GetMostRecentDelta());
-    m_bandwidthHistory[m_bandwidthHistoryIndex] = ComputeBandwidth(in_numTilesUploaded, seconds);
+    float ms = m_cpuTimer.GetMsFromDelta(m_cpuTimes.GetMostRecentDelta());
+    m_bandwidthHistory[m_bandwidthHistoryIndex] = ComputeBandwidth(in_numTilesUploaded, ms);
     m_bandwidthHistoryIndex = (m_bandwidthHistoryIndex + 1) % m_bandwidthHistory.size();
 }
 
@@ -162,7 +162,7 @@ void Gui::UpdateBandwidthHistory(UINT in_numTilesUploaded)
 //-----------------------------------------------------------------------------
 void Gui::DrawMini(ID3D12GraphicsCommandList* in_pCommandList, const DrawParams& in_drawParams)
 {
-    m_cpuTimes.Update(m_cpuTimer.GetTime());
+    m_cpuTimes.Update(m_cpuTimer.GetTicks());
     m_numUploads.AddDelta(in_drawParams.m_numTilesUploaded);
     UpdateBandwidthHistory(in_drawParams.m_numTilesUploaded);
 
@@ -278,7 +278,7 @@ void Gui::ToggleBenchmarkMode(CommandLineArgs& in_args)
 void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     CommandLineArgs& in_args, const DrawParams& in_drawParams, ButtonChanges& out_buttonChanges)
 {
-    m_cpuTimes.Update(m_cpuTimer.GetTime());
+    m_cpuTimes.Update(m_cpuTimer.GetTicks());
     m_numUploads.AddDelta(in_drawParams.m_numTilesUploaded);
     UpdateBandwidthHistory(in_drawParams.m_numTilesUploaded);
 
@@ -319,15 +319,15 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
         DrawLineGraph(m_bandwidthHistory, m_bandwidthHistoryIndex, ImVec2(m_width, 50.0f));
         // GPU timers
         ImGui::Text("GPU ms: Feedback |   Draw");
-        ImGui::Text("         %7.2f | %6.3f",
+        ImGui::Text("         %6.2f | %6.2f",
             in_drawParams.m_gpuFeedbackTime * 1000.f,
             in_drawParams.m_gpuDrawTime * 1000.f);
         // CPU timers
         ImGui::Separator();
         ImGui::Text("CPU ms: Feedback |  Draw  |  Frame");
         ImGui::Text("         %7.2f | %6.2f | %6.2f",
-            in_drawParams.m_cpuFeedbackTime * 1000.f, in_drawParams.m_cpuDrawTime * 1000.f,
-            (1000.f * m_cpuTimer.GetSecondsFromDelta(m_cpuTimes.GetRange())) / (float)m_cpuTimes.GetNumEntries());
+            in_drawParams.m_cpuFeedbackTimeMs, in_drawParams.m_cpuDrawTimeMs,
+            (m_cpuTimer.GetMsFromDelta(m_cpuTimes.GetRange())) / (float)m_cpuTimes.GetNumEntries());
     }
 
     //---------------------------------------------------------------------

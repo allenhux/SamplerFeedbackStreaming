@@ -1471,31 +1471,30 @@ void Scene::GatherStatistics()
         m_csvFile->Append(m_renderThreadTimes, m_updateFeedbackTimes,
             m_numUploadsPreviousFrame, m_numEvictionsPreviousFrame,
             // Note: these may be off by 1 frame, but probably good enough
-            m_pSFSManager->GetCpuProcessFeedbackTime(),
+            m_pSFSManager->GetCpuProcessFeedbackTimeMs(),
             m_gpuProcessFeedbackTime, m_numFeedbackObjects,
             numSubmitsPreviousFrame, numSignalsPreviousFrame);
 
         if (m_frameNumber == m_args.m_timingStopFrame)
         {
-            float measuredTime = (float)m_cpuTimer.Stop();
+            float measuredTimeMs = m_cpuTimer.GetMsSince(m_cpuTimerStart);
             UINT measuredNumUploads = totalUploads - m_startUploadCount;
-            float tilesPerSecond = float(measuredNumUploads) / measuredTime;
-            float MBperTile = float(64 * 1024) / (1000.f * 1000.f);
-            float mbps = tilesPerSecond * MBperTile;
-            m_totalTileLatency = m_pSFSManager->GetTotalTileCopyLatency() - m_totalTileLatency;
+            float tilesPerMs = float(measuredNumUploads) / measuredTimeMs;
+            float bandwidthMBps = tilesPerMs * float(64 * 1024) / 1000.f;
+            m_totalTileLatencyMs = m_pSFSManager->GetTotalTileCopyLatencyMs() - m_totalTileLatencyMs;
             UINT numSubmitsTotal = m_pSFSManager->GetTotalNumSubmits() - m_startSubmitCount;
-            float approximatePerTileLatency = 1000.f * (m_totalTileLatency / numSubmitsTotal);
+            float latencyPerSubmitMs = (m_totalTileLatencyMs / numSubmitsTotal);
 
             DebugPrint(L"Gathering final statistics before exiting\n");
 
             m_csvFile->WriteEvents(m_hwnd, m_args);
             *m_csvFile
                 << "MB/s,#uploads,seconds,#submits,ms/submit\n"
-                << mbps
+                << bandwidthMBps
                 << "," << measuredNumUploads
-                << "," << measuredTime
+                << "," << measuredTimeMs / 1000.f
                 << "," << numSubmitsTotal
-                << "," << approximatePerTileLatency
+                << "," << latencyPerSubmitMs
                 << "\n";
             m_csvFile->close();
             m_csvFile = nullptr;
@@ -1521,8 +1520,8 @@ void Scene::GatherStatistics()
             m_startUploadCount = m_pSFSManager->GetTotalNumUploads();
             m_startSubmitCount = m_pSFSManager->GetTotalNumSubmits();
             m_startSignalCount = m_pSFSManager->GetTotalNumSignals();
-            m_totalTileLatency = m_pSFSManager->GetTotalTileCopyLatency();
-            m_cpuTimer.Start();
+            m_totalTileLatencyMs = m_pSFSManager->GetTotalTileCopyLatencyMs();
+            m_cpuTimerStart = m_cpuTimer.GetTicks();
         }
     }
 
@@ -1772,10 +1771,10 @@ void Scene::DrawUI()
         {
             // pass in raw cpu frame time and raw # uploads. GUI will keep a running average of bandwidth
             auto a = m_renderThreadTimes.GetLatest();
-            guiDrawParams.m_cpuDrawTime = a.Get(RenderEvents::PreEndFrame) - a.Get(RenderEvents::PreBeginFrame);
+            guiDrawParams.m_cpuDrawTimeMs = 1000.f * (a.Get(RenderEvents::PreEndFrame) - a.Get(RenderEvents::PreBeginFrame));
         }
 
-        guiDrawParams.m_cpuFeedbackTime = m_pSFSManager->GetCpuProcessFeedbackTime();
+        guiDrawParams.m_cpuFeedbackTimeMs = m_pSFSManager->GetCpuProcessFeedbackTimeMs();
         if (m_pTerrain && m_pTerrain->Drawable())
         {
             guiDrawParams.m_scrollMipDim = m_pTerrain->GetStreamingResource()->GetTiledResource()->GetDesc().MipLevels;
