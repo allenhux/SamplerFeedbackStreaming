@@ -76,9 +76,12 @@ void SFS::ProcessFeedbackThread::Start()
             // start timer for this frame
             INT64 prevFrameTime = m_cpuTimer.GetTicks();
 
-            // counter of number of signals. limit the number per frame to prevent "storms"
-            constexpr UINT signalCounterMax = 8;
+            // limit the number of signals per frame to prevent "storms"
+            constexpr UINT signalCounterMax = 16;
             UINT signalCounter = 0;
+
+            // limit the number of DS Enqueues (==tiles) between signals
+            constexpr UINT uploadsRequestedMax = 128;
 
             while (m_threadRunning)
             {
@@ -216,6 +219,15 @@ void SFS::ProcessFeedbackThread::Start()
                             {
                                 uploadsRequested += numUploads;
                                 m_numTotalSubmits.fetch_add(1, std::memory_order_relaxed);
+
+                                // Limit the # of DS Enqueues (== # tiles) between signals
+                                if ((uploadsRequested > uploadsRequestedMax) && (signalCounter < signalCounterMax))
+                                {
+                                    SignalFileStreamer();
+                                    uploadsRequested = 0;
+                                    signalCounter++; // prevents "storms" of submits
+                                }
+
                             }
                         }
 
@@ -235,7 +247,7 @@ void SFS::ProcessFeedbackThread::Start()
                     if (numEvictions) { m_dataUploader.AddEvictions(numEvictions); }
                 } // end loop over pending resources
 
-                // if there are uploads, maybe signal depending on heuristic to minimize # signals
+                // catch remainder uploads before next frame
                 if (uploadsRequested && (signalCounter < signalCounterMax))
                 {
                     SignalFileStreamer();

@@ -8,7 +8,7 @@
 
     // maximum number of in-flight batches of uploads, each batch corresponds to 1 texture
     // starvation is prevented via a stale queue
-    "numStreamingBatches": 512,
+    "numStreamingBatches": 256,
 
     // number of frames to delay evicting a tile
     "evictionDelay": 8,

@@ -1771,7 +1771,7 @@ void Scene::DrawUI()
         {
             // pass in raw cpu frame time and raw # uploads. GUI will keep a running average of bandwidth
             auto a = m_renderThreadTimes.GetLatest();
-            guiDrawParams.m_cpuDrawTimeMs = 1000.f * (a.Get(RenderEvents::PreEndFrame) - a.Get(RenderEvents::PreBeginFrame));
+            guiDrawParams.m_cpuDrawTimeMs = (a.Get(RenderEvents::PreEndFrame) - a.Get(RenderEvents::PreBeginFrame));
         }
 
         guiDrawParams.m_cpuFeedbackTimeMs = m_pSFSManager->GetCpuProcessFeedbackTimeMs();
