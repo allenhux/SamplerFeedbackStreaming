@@ -175,7 +175,7 @@ private:
 
     void WaitForGpu();
 
-    float GetFrameTime();
+    float GetFrameTimeMs();
 
     bool IsDeviceOk(HRESULT in_hr);
     void CreateRenderTargets();

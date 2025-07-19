@@ -306,11 +306,15 @@ RECT Scene::GetGuiRect()
 //-----------------------------------------------------------------------------
 void Scene::MoveView(int in_x, int in_y, int in_z)
 {
-    float translationRate = 0.1f * GetFrameTime();
+    float translationRate = 0.75f * GetFrameTimeMs();
 
     if (0x8000 & GetKeyState(VK_SHIFT))
     {
-        translationRate *= 8;
+        translationRate *= 4;
+    }
+    if (0x8000 & GetKeyState(VK_CONTROL))
+    {
+        translationRate *= 4;
     }
 
     float x = in_x * translationRate;
@@ -340,7 +344,7 @@ void Scene::RotateView(float in_x, float in_y, float in_z)
 
 void Scene::RotateViewKey(int in_x, int in_y, int in_z)
 {
-    float rotationRate = 0.001f * GetFrameTime();
+    float rotationRate = 0.001f * GetFrameTimeMs();
     float x = in_x * -rotationRate;
     float y = in_y * rotationRate;
     float z = in_z * -rotationRate;
@@ -358,9 +362,9 @@ void Scene::RotateViewPixels(int in_x, int in_y)
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-float Scene::GetFrameTime()
+float Scene::GetFrameTimeMs()
 {
-    return 1000.0f * m_renderThreadTimes.GetAverageTotal();
+    return m_renderThreadTimes.GetAverageTotal();
 }
 
 //-----------------------------------------------------------------------------
