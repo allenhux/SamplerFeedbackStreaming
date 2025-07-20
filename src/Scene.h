@@ -151,7 +151,7 @@ private:
     std::vector<FrameConstantData*> m_pFrameConstantData{ nullptr }; // left in the mapped state
     std::vector<ComPtr<ID3D12Resource>> m_frameConstantBuffers;
 
-    Gui* m_pGui{ nullptr };
+    std::unique_ptr<Gui> m_gui;
     Gui::ButtonChanges m_uiButtonChanges; // track changes in UI settings
 
     class TextureViewer* m_pTextureViewer{ nullptr };
@@ -259,7 +259,7 @@ private:
     //-----------------------------------
     FrameEventTracing::RenderEventList m_renderThreadTimes;
     FrameEventTracing::UpdateEventList m_updateFeedbackTimes;
-    class D3D12GpuTimer* m_pGpuTimer { nullptr };
+    std::unique_ptr<class D3D12GpuTimer> m_gpuTimer;
     std::unique_ptr<FrameEventTracing> m_csvFile{ nullptr };
     float m_gpuProcessFeedbackTime{ 0 };
 

@@ -47,24 +47,25 @@ public:
     // map and read a timer. useful if we know a valid time is ready.
     float MapReadBack(UINT in_index);
 
-    typedef std::vector<std::pair<float, std::string>> TimeArray;
-    const TimeArray& GetTimes() const { return m_times; }
+    float GetTimeSeconds(UINT i) const { return m_times[i].first; }
+    const std::string& GetName(UINT i) const { return m_times[i].second; }
 
     // for GpuScopeTimer
     std::uint32_t GetDynamicIndex(const std::string& in_name);
 private:
     template<typename T> using ComPtr = Microsoft::WRL::ComPtr<T>;
 
-    std::uint32_t m_numTimers;   // how many we expose. we need double to record begin + end
-    std::uint32_t m_totalTimers;
+    std::uint32_t m_numTimers{0};   // how many we expose. we need double to record begin + end
+    std::uint32_t m_totalTimers{0};
+    typedef std::vector<std::pair<float, std::string>> TimeArray;
     TimeArray m_times;
-    std::uint64_t m_gpuFrequency;
+    double m_gpuFrequency{ 0 };
 
     Microsoft::WRL::ComPtr<ID3D12QueryHeap> m_heap;
     Microsoft::WRL::ComPtr<ID3D12Resource> m_buffer;
 
     // for GpuScopeTimer
-    std::uint32_t m_dynamicIndex;
+    std::uint32_t m_dynamicIndex{ 0 };
     std::map<std::string, std::uint32_t> m_timeMap;
 };
 
@@ -73,7 +74,7 @@ class GpuScopeTimer
 public:
     GpuScopeTimer(D3D12GpuTimer* in_pGpuTimer,
         ID3D12GraphicsCommandList* in_pCommandList, const std::string& in_name) :
-        m_pGpuTimer(in_pGpuTimer), m_index(0)
+        m_pGpuTimer(in_pGpuTimer)
     {
         if (in_pGpuTimer)
         {
@@ -93,7 +94,7 @@ public:
 private:
     D3D12GpuTimer* m_pGpuTimer;
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> m_commandList;
-    std::uint32_t m_index;
+    std::uint32_t m_index{ 0 };
 };
 
 //-----------------------------------------------------------------------------
@@ -104,8 +105,6 @@ inline D3D12GpuTimer::D3D12GpuTimer(
     TimerType in_timeType)
     : m_numTimers(in_numTimers)
     , m_totalTimers(in_numTimers * 2) // begin + end, so we can take a difference
-    , m_gpuFrequency(0)
-    , m_dynamicIndex(0)
     , m_times(m_numTimers)
 {
     for (auto& t : m_times)
@@ -144,7 +143,9 @@ inline D3D12GpuTimer::D3D12GpuTimer(
     ComPtr<ID3D12CommandQueue> cmdQueue = nullptr;
     ThrowIfFailed(in_pDevice->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&cmdQueue)));
 
-    ThrowIfFailed(cmdQueue->GetTimestampFrequency(&m_gpuFrequency));
+    UINT64 frequency{ 0 };
+    ThrowIfFailed(cmdQueue->GetTimestampFrequency(&frequency));
+    m_gpuFrequency = double(frequency);
 }
 
 //-----------------------------------------------------------------------------
@@ -188,7 +189,7 @@ inline float D3D12GpuTimer::MapReadBack(UINT in_index)
         deltaTime = -deltaTime;
     }
 
-    const float delta = float(deltaTime) / float(m_gpuFrequency);
+    const float delta = float(deltaTime / m_gpuFrequency);
     m_times[in_index].first = delta;
 
     // Unmap with an empty range (written range).
@@ -207,21 +208,7 @@ inline void D3D12GpuTimer::ResolveTimer(ID3D12GraphicsCommandList* in_pCommandLi
 
     if (in_mapReadback)
     {
-        UINT64* pTimestamps = nullptr;
-        const auto range = CD3DX12_RANGE(index, index + 1);
-        ThrowIfFailed(m_buffer->Map(0, &range, (void**)&pTimestamps));
-        UINT64 deltaTime = pTimestamps[index + 1] - pTimestamps[index];
-        if (pTimestamps[index] > pTimestamps[index + 1])
-        {
-            deltaTime = pTimestamps[index] - pTimestamps[index + 1];
-        }
-
-        const float delta = float(deltaTime) / float(m_gpuFrequency);
-        m_times[in_index].first = delta;
-
-        // Unmap with an empty range (written range).
-        D3D12_RANGE emptyRange{ 0,0 };
-        m_buffer->Unmap(0, &emptyRange);
+        MapReadBack(in_index);
     }
 }
 

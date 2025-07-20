@@ -192,7 +192,7 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
     m_maxVirtualTiles = 1 << (gpuVirtualAddressLimits.MaxGPUVirtualAddressBitsPerProcess - 16);
     m_maxVirtualTiles -= reserved; // add 50% of the whole addressable space back
 
-    m_pGpuTimer = new D3D12GpuTimer(m_device.Get(), 8, D3D12GpuTimer::TimerType::Direct);
+    m_gpuTimer = std::make_unique<D3D12GpuTimer>(m_device.Get(), 8, D3D12GpuTimer::TimerType::Direct);
 
     // get the adapter this device was created with
     LUID adapterLUID = m_device->GetAdapterLuid();
@@ -226,7 +226,8 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
     SetViewMatrix(XMMatrixLookAtLH(vEyePt, lookAt, vUpVec));
 
     UINT minNumObjects = m_args.m_skyTexture.size() ? 2 : 1;
-    m_pGui = new Gui(m_hwnd, m_device.Get(), m_srvHeap.Get(),
+
+    m_gui = std::make_unique<Gui>(m_hwnd, m_device.Get(), m_srvHeap.Get(),
         (UINT)DescriptorHeapOffsets::GUI, m_swapBufferCount,
         SharedConstants::SWAP_CHAIN_FORMAT, adapterDescription,
         minNumObjects, m_args);
@@ -259,9 +260,6 @@ Scene::~Scene()
     {
         b->Unmap(0, nullptr);
     }
-
-    delete m_pGpuTimer;
-    delete m_pGui;
 
     DeleteTerrainViewers();
 
@@ -296,8 +294,8 @@ Scene::~Scene()
 RECT Scene::GetGuiRect()
 {
     RECT r{};
-    r.right = (LONG)m_pGui->GetWidth();
-    r.bottom = (LONG)m_pGui->GetHeight();
+    r.right = (LONG)m_gui->GetWidth();
+    r.bottom = (LONG)m_gui->GetHeight();
 
     return r;
 }
@@ -1190,8 +1188,8 @@ void Scene::LoadSpheres()
             m_objects.resize(m_maxNumObjects);
             m_args.m_maxNumObjects = m_maxNumObjects;
             m_args.m_numObjects = m_maxNumObjects;
-            m_pGui->SetMaxObjects(m_maxNumObjects);
-            m_pGui->SetMessage("Reached Max Addressable Memory");
+            m_gui->SetMaxObjects(m_maxNumObjects);
+            m_gui->SetMessage("Reached Max Addressable Memory");
             m_maxNumObjects = 0;
         }
         break;
@@ -1755,8 +1753,6 @@ void Scene::DrawUI()
     //-------------------------------------------
     // Display UI
     //-------------------------------------------
-    const auto& times = m_pGpuTimer->GetTimes();
-    float gpuDrawTime = times[0].first; // frame draw time
     if (m_args.m_showUI)
     {
         // note: TextureViewer and BufferViewer may have internal descriptor heaps
@@ -1770,7 +1766,7 @@ void Scene::DrawUI()
         }
 
         Gui::DrawParams guiDrawParams;
-        guiDrawParams.m_gpuDrawTime = gpuDrawTime;
+        guiDrawParams.m_gpuDrawTime = m_gpuTimer->GetTimeSeconds(0);
         guiDrawParams.m_gpuFeedbackTime = m_gpuProcessFeedbackTime;
         {
             // pass in raw cpu frame time and raw # uploads. GUI will keep a running average of bandwidth
@@ -1793,11 +1789,11 @@ void Scene::DrawUI()
 
         if (m_args.m_uiModeMini)
         {
-            m_pGui->DrawMini(m_commandList.Get(), guiDrawParams);
+            m_gui->DrawMini(m_commandList.Get(), guiDrawParams);
         }
         else
         {
-            m_pGui->Draw(m_commandList.Get(), m_args, guiDrawParams, m_uiButtonChanges);
+            m_gui->Draw(m_commandList.Get(), m_args, guiDrawParams, m_uiButtonChanges);
         }
     }
 }
@@ -1954,7 +1950,7 @@ bool Scene::Draw()
     // draw everything
     //-------------------------------------------
     {
-        GpuScopeTimer gpuScopeTimer(m_pGpuTimer, m_commandList.Get(), "GPU Frame Time");
+        GpuScopeTimer gpuScopeTimer(m_gpuTimer.get(), m_commandList.Get(), "GPU Frame Time");
 
         // set RTV, DSV, descriptor heap, etc.
         StartScene();
@@ -1990,7 +1986,7 @@ bool Scene::Draw()
         m_aliasingBarriers.clear();
     }
 
-    m_pGpuTimer->ResolveAllTimers(m_commandList.Get());
+    m_gpuTimer->ResolveAllTimers(m_commandList.Get());
     m_commandList->Close();
 
     //-------------------------------------------

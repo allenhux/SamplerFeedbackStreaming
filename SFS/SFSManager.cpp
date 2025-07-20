@@ -229,7 +229,7 @@ void SFS::Manager::BeginFrame()
     m_frameFenceValue++;
 
     // accumulate gpu time from last frame
-    m_gpuFeedbackTime += m_gpuTimerResolve.GetTimes()[m_renderFrameIndex].first;
+    m_gpuFeedbackTime += m_gpuTimerResolve.GetTimeSeconds(m_renderFrameIndex);
 
     // index used to track command list allocators, timers, etc.
     m_renderFrameIndex = m_frameFenceValue % m_numSwapBuffers;
