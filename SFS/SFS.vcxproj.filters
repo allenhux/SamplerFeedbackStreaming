@@ -62,9 +62,6 @@
     <ClInclude Include="UpdateList.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ResidencyThread.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="ProcessFeedbackThread.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -119,9 +116,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ManagerBase.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ResidencyThread.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ProcessFeedbackThread.cpp">

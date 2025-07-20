@@ -27,9 +27,6 @@ namespace SFS
         void NotifyPackedMips();
         void NotifyEvicted(const std::vector<D3D12_TILED_RESOURCE_COORDINATE>& in_coords);
 
-        // oncrement count when an UpdateList is created targeting this resource
-        void AddUpdateList() { m_numUpdateLists++; }
-
         ID3D12Resource* GetTiledResource() const { return m_resources.GetTiledResource(); }
 
         const FileHandle* GetFileHandle() const { return m_pFileHandle.get(); }

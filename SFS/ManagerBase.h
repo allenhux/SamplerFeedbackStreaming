@@ -19,7 +19,6 @@ Implementation of SFS Manager
 #include "D3D12GpuTimer.h"
 #include "Streaming.h" // for ComPtr
 #include "DataUploader.h"
-#include "ResidencyThread.h"
 #include "ProcessFeedbackThread.h"
 
 //=============================================================================
@@ -93,9 +92,6 @@ namespace SFS
         // resources where feedback or eviction requested
         std::set<ResourceBase*> m_pendingResources;
 
-        // a thread to update residency maps based on feedback
-        ResidencyThread m_residencyThread;
-
         // a thread to process feedback (when available) and queue tile loads / evictions to datauploader
         ProcessFeedbackThread m_processFeedbackThread;
 
@@ -153,6 +149,7 @@ namespace SFS
         const bool m_traceCaptureMode{ false };
         std::atomic<UINT> m_numTotalEvictions{ 0 };
         std::atomic<UINT> m_numTotalUploads{ 0 };
+        std::atomic<UINT> m_numTotalSubmits{ 0 }; // number of DS::Submit() calls
     private:
 		bool m_gpuUploadHeapSupported{ false }; // if supported, use GPU upload heaps for residency maps
     };

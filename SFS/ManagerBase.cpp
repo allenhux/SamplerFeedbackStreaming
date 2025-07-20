@@ -24,12 +24,11 @@ SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_p
     , m_evictionDelay(std::max(in_desc.m_swapChainBufferCount + 1, in_desc.m_evictionDelay))
     , m_directCommandQueue(in_desc.m_pDirectCommandQueue)
     , m_device(in_pDevice)
-    , m_dataUploader(in_pDevice, in_desc.m_maxNumCopyBatches, in_desc.m_stagingBufferSizeMB, in_desc.m_maxTileMappingUpdatesPerApiCall, (int)in_desc.m_threadPriority)
+    , m_dataUploader((ManagerDU*)this, m_processFeedbackThread.GetFlushResources(), in_pDevice, in_desc.m_maxNumCopyBatches, in_desc.m_stagingBufferSizeMB, in_desc.m_maxTileMappingUpdatesPerApiCall, (int)in_desc.m_threadPriority)
     , m_traceCaptureMode{ in_desc.m_traceCaptureMode }
     , m_oldSharedResidencyMaps(in_desc.m_swapChainBufferCount + 1, nullptr)
     , m_oldSharedClearUavHeaps(in_desc.m_swapChainBufferCount + 1, nullptr)
     , m_processFeedbackThread((ManagerPFT*)this, m_dataUploader, (int)in_desc.m_threadPriority)
-    , m_residencyThread((ManagerRT*)this, m_processFeedbackThread.GetFlushResources(), (int)in_desc.m_threadPriority)
 {
     ASSERT(D3D12_COMMAND_LIST_TYPE_DIRECT == m_directCommandQueue->GetDesc().Type);
 
@@ -103,8 +102,6 @@ void SFS::ManagerBase::StartThreads()
 {
     // process sampler feedback buffers, generate upload and eviction commands
     m_processFeedbackThread.Start();
-    // update residency maps
-    m_residencyThread.Start();
 }
 
 //-----------------------------------------------------------------------------
@@ -117,7 +114,6 @@ void SFS::ManagerBase::Finish()
     ASSERT(!GetWithinFrame());
  
     m_processFeedbackThread.Stop();
-    m_residencyThread.Stop();
 
     // now we are no longer producing work for the DataUploader, so its commands can be drained
     m_dataUploader.FlushCommands();
@@ -186,14 +182,13 @@ void SFS::ManagerBase::AllocateSharedResidencyMap()
 
         m_residencyMap.Allocate(m_device.Get(), requiredSize, uploadHeapProperties);
     }
-    m_residencyMapLock.Release();
-
     auto pDest = m_residencyMap.GetData();
     for (auto p : m_streamingResources)
     {
         // copy current minmipmap state or initialize to default state
         p->WriteMinMipMap((UINT8*)pDest);
     }
+    m_residencyMapLock.Release();
 }
 
 //-----------------------------------------------------------------------------
