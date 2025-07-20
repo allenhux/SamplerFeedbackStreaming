@@ -413,7 +413,6 @@ void SFS::DataUploader::FenceMonitorThread()
 
                     auto updateLatency = m_fenceThreadTimer.GetTicks() - updateList.m_copyLatencyTimer;
                     m_totalTileCopyLatency.fetch_add(updateLatency, std::memory_order_relaxed);
-                    m_numTotalUploads.fetch_add(updateList.GetNumStandardUpdates(), std::memory_order_relaxed);
                 }
 
                 freeUpdateList = true;

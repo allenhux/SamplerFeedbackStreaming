@@ -66,11 +66,7 @@ namespace SFS
         //----------------------------------
         // statistics and visualization
         //----------------------------------
-        UINT GetTotalNumUploads() const { return m_numTotalUploads; }
-        void AddEvictions(UINT in_numEvictions) { m_numTotalEvictions += in_numEvictions; }
-        UINT GetTotalNumEvictions() const { return m_numTotalEvictions; }
         float GetTotalTileCopyLatencyMs() const { return m_fenceThreadTimer.GetMsFromDelta(m_totalTileCopyLatency); } // sum of per-tile latencies so far
-
         void SetVisualizationMode(UINT in_mode) { m_pFileStreamer->SetVisualizationMode(in_mode); }
         void CaptureTraceFile(bool in_captureTrace) { m_pFileStreamer->CaptureTraceFile(in_captureTrace); }
     private:
@@ -150,8 +146,6 @@ namespace SFS
         //-------------------------------------------
         // statistics
         //-------------------------------------------
-        std::atomic<UINT> m_numTotalEvictions{ 0 };
-        std::atomic<UINT> m_numTotalUploads{ 0 };
         std::atomic<UINT> m_numTotalUpdateListsProcessed{ 0 };
         std::atomic<INT64> m_totalTileCopyLatency{ 0 }; // total approximate latency for all copies. divide by m_numTotalUploads then get the time with m_cpuTimer.GetSecondsFromDelta() 
     };

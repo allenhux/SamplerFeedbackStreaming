@@ -183,8 +183,8 @@ float SFS::Manager::GetGpuTexelsPerMs() const { return m_texelsPerMs; }
 UINT SFS::Manager::GetMaxNumFeedbacksPerFrame() const { return m_maxNumResolvesPerFrame; }
 float SFS::Manager::GetGpuTime() const { return m_gpuFrameTime; }
 float SFS::Manager::GetCpuProcessFeedbackTimeMs() { return m_cpuProcessFeedbackFrameTimeMs; }
-UINT SFS::Manager::GetTotalNumUploads() const { return m_dataUploader.GetTotalNumUploads(); }
-UINT SFS::Manager::GetTotalNumEvictions() const { return m_dataUploader.GetTotalNumEvictions(); }
+UINT SFS::Manager::GetTotalNumUploads() const { return m_numTotalUploads; }
+UINT SFS::Manager::GetTotalNumEvictions() const { return m_numTotalEvictions; }
 UINT SFS::Manager::GetTotalNumSubmits() const { return m_processFeedbackThread.GetTotalNumSubmits(); }
 UINT SFS::Manager::GetTotalNumSignals() const { return m_processFeedbackThread.GetTotalNumSignals(); }
 float SFS::Manager::GetTotalTileCopyLatencyMs() const { return m_dataUploader.GetTotalTileCopyLatencyMs(); }

@@ -27,6 +27,8 @@ namespace SFS
         {
             m_residencyThread.SharePendingResourcesRT(std::move(in_resources));
         }
+        void AddUploads(UINT in_numUploads) { m_numTotalUploads.fetch_add(in_numUploads, std::memory_order_relaxed); }
+        void AddEvictions(UINT in_numEvictions) { m_numTotalEvictions.fetch_add(in_numEvictions, std::memory_order_relaxed); }
     };
 }
 
@@ -195,14 +197,15 @@ void SFS::ProcessFeedbackThread::Start()
                 // push uploads and evictions for stale resources
                 if (m_pendingResources.size())
                 {
-                    UINT numEvictions = 0;
+                    UINT sumEvictions = 0;
+					UINT sumUploads = 0;
                     for (auto i = m_pendingResources.begin(); i != m_pendingResources.end();)
                     {
                         ResourceBase* pResource = *i;
 
                         // tiles that are "loading" can't be evicted. as soon as they arrive, they can be.
                         // note: since we aren't unmapping evicted tiles, we can evict even if no UpdateLists are available
-                        numEvictions += pResource->QueuePendingTileEvictions();
+                        sumEvictions += pResource->QueuePendingTileEvictions();
 
                         if (m_dataUploader.GetNumUpdateListsAvailable()
                             && (0 == m_newResources.size()) // upload packed mips first
@@ -217,6 +220,7 @@ void SFS::ProcessFeedbackThread::Start()
                             UINT numUploads = pResource->QueuePendingTileLoads();
                             if (numUploads)
                             {
+								sumUploads += numUploads;
                                 uploadsRequested += numUploads;
                                 m_numTotalSubmits.fetch_add(1, std::memory_order_relaxed);
 
@@ -244,7 +248,8 @@ void SFS::ProcessFeedbackThread::Start()
                             i = m_pendingResources.erase(i);
                         }
                     }
-                    if (numEvictions) { m_dataUploader.AddEvictions(numEvictions); }
+                    m_pSFSManager->AddUploads(sumUploads);
+                    m_pSFSManager->AddEvictions(sumEvictions);
                 } // end loop over pending resources
 
                 // catch remainder uploads before next frame

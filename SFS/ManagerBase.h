@@ -102,11 +102,6 @@ namespace SFS
         // are we between BeginFrame and EndFrame? useful for debugging
         std::atomic<bool> m_withinFrame{ false };
 
-        //-------------------------------------------
-        // statistics
-        //-------------------------------------------
-        const bool m_traceCaptureMode{ false };
-
         void StartThreads();
 
         // direct queue is used to monitor progress of render frames so we know when feedback buffers are ready to be used
@@ -152,6 +147,12 @@ namespace SFS
         void RemoveResources();
         // delete heaps that have been requested via Destroy()
         void RemoveHeaps();
+        //-------------------------------------------
+        // statistics
+        //-------------------------------------------
+        const bool m_traceCaptureMode{ false };
+        std::atomic<UINT> m_numTotalEvictions{ 0 };
+        std::atomic<UINT> m_numTotalUploads{ 0 };
     private:
 		bool m_gpuUploadHeapSupported{ false }; // if supported, use GPU upload heaps for residency maps
     };
