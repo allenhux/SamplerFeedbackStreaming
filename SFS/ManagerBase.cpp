@@ -178,7 +178,7 @@ void SFS::ManagerBase::AllocateSharedResidencyMap()
             ASSERT(D3D12_MEMORY_POOL_UNKNOWN == uploadHeapProperties.MemoryPoolPreference);
         }
 
-		// defer deletion of current residency map
+        // defer deletion of current residency map
         {
             auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
             m_oldSharedResidencyMaps[i] = m_residencyMap.GetResource();

@@ -33,12 +33,15 @@ MSDN:
 class CpuTimer
 {
 public:
-	CpuTimer() : m_performanceFrequency({ []() { LARGE_INTEGER l{};
-	::QueryPerformanceFrequency(&l); return l; }() }) {}
-	static INT64 GetTicks() { LARGE_INTEGER i; QueryPerformanceCounter(&i); return i.QuadPart; }
-	float GetMsSince(INT64 in_previousTicks) const { return GetMsFromDelta(GetTicks() - in_previousTicks); }
-	float GetMsFromDelta(INT64 in_delta) const
-    { return float(in_delta * m_ticksToMs) / float(m_performanceFrequency.QuadPart); }
+    CpuTimer() : m_performanceFrequency({ []() { LARGE_INTEGER l{};
+    ::QueryPerformanceFrequency(&l); return l; }() }) {
+    }
+    static INT64 GetTicks() { LARGE_INTEGER i; QueryPerformanceCounter(&i); return i.QuadPart; }
+    float GetMsSince(INT64 in_previousTicks) const { return GetMsFromDelta(GetTicks() - in_previousTicks); }
+    float GetMsFromDelta(INT64 in_delta) const
+    {
+        return float(in_delta * m_ticksToMs) / float(m_performanceFrequency.QuadPart);
+    }
 private:
     const LARGE_INTEGER m_performanceFrequency;
     static constexpr UINT m_ticksToMs{ 1000 };
@@ -137,7 +140,7 @@ public:
     // delta between the last two samples
     UINT64 GetMostRecentDelta()
     {
-        auto latest = (m_index + m_values.size() - 1) % m_values.size(); 
+        auto latest = (m_index + m_values.size() - 1) % m_values.size();
         auto prior = (m_index + m_values.size() - 2) % m_values.size();
         return m_values[latest] - m_values[prior];
     }

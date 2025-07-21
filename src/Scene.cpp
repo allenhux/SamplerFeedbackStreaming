@@ -812,13 +812,13 @@ void Scene::PrepareScene()
     std::normal_distribution<float>scaleDis(midPoint, stdDev);
 
     PlanetPoseGenerator::Settings settings{
-		.numPoses = m_args.m_maxNumObjects,
+        .numPoses = m_args.m_maxNumObjects,
         .gap = SharedConstants::SPHERE_RADIUS,
         .minDistance = (float)m_args.m_terrainParams.m_terrainSideSize,
         .minRadius = SharedConstants::SPHERE_RADIUS,
         .maxRadius = SharedConstants::SPHERE_RADIUS * SharedConstants::MAX_SPHERE_SCALE
     };
-	PlanetPoseGenerator poseGenerator(settings);
+    PlanetPoseGenerator poseGenerator(settings);
     m_universeSize = poseGenerator.GeneratePoses(m_objectPoses.m_positions);
 
     // load texture file headers

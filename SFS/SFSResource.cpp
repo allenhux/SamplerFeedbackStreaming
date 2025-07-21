@@ -55,8 +55,8 @@ void SFS::ResourceBase::CreateShaderResourceView(D3D12_CPU_DESCRIPTOR_HANDLE in_
 //-----------------------------------------------------------------------------
 bool SFS::Resource::Drawable()
 {
-	// the application should call Drawable() before EndFrame()
-	// during EndFrame() packed mips are transitioned to D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE
+    // the application should call Drawable() before EndFrame()
+    // during EndFrame() packed mips are transitioned to D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE
     if (PackedMipStatus::NEEDS_TRANSITION <= m_packedMipStatus)
     {
         // SFSManager::AllocateSharedResidencyMap() allocates for all new resources, drawable or not

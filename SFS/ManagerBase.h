@@ -153,7 +153,7 @@ namespace SFS
         // delete heaps that have been requested via Destroy()
         void RemoveHeaps();
     private:
-		bool m_gpuUploadHeapSupported{ false }; // if supported, use GPU upload heaps for residency maps
+        bool m_gpuUploadHeapSupported{ false }; // if supported, use GPU upload heaps for residency maps
     };
 }
 /*

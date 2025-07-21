@@ -326,13 +326,6 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
 //-----------------------------------------------------------------------------
 void SFS::DataUploader::FenceMonitorThread()
 {
-    // if no outstanding work, sleep
-    // m_updateListAllocator.GetReadableCount() would be a more conservative test for whether there are any active tasks
-    if (0 == m_monitorTasks.GetReadableCount())
-    {
-        m_fenceMonitorFlag.Wait();
-    }
-
     bool loadPackedMips = false;
 
     UINT64 mappingFenceValue = m_mappingFence->GetCompletedValue();
@@ -359,13 +352,9 @@ void SFS::DataUploader::FenceMonitorThread()
                 m_pFileStreamer->StreamPackedMips(updateList);
 
                 loadPackedMips = true;  // set flag so we signal fence below
-                updateList.m_executionState = UpdateList::State::STATE_PACKED_INITIALIZE;
+                updateList.m_executionState = UpdateList::State::STATE_PACKED_COPY_PENDING;
             }
             break; // give other resources a chance to start streaming
-
-        case UpdateList::State::STATE_PACKED_INITIALIZE:
-            updateList.m_executionState = UpdateList::State::STATE_PACKED_COPY_PENDING;
-            [[fallthrough]];
 
         case UpdateList::State::STATE_PACKED_COPY_PENDING:
             ASSERT(1 == updateList.GetNumStandardUpdates());
@@ -418,7 +407,7 @@ void SFS::DataUploader::FenceMonitorThread()
 
                 freeUpdateList = true;
             }
-        break;
+            break;
 
         default:
             break;
@@ -441,15 +430,21 @@ void SFS::DataUploader::FenceMonitorThread()
         m_pFileStreamer->Signal();
     }
 
+    // if no outstanding work, sleep
+    // m_updateListAllocator.GetReadableCount() would be a more conservative test for whether there are any active tasks
+    if (0 == m_monitorTasks.GetReadableCount())
+    {
+        m_fenceMonitorFlag.Wait();
+    }
     // if still have tasks but fences haven't advanced, can sleep for a bit
-    if ((m_monitorTasks.GetReadableCount()) &&
+    else if (
         (m_mappingFence->GetCompletedValue() == mappingFenceValue) &&
         (m_pFileStreamer->GetCompletedValue() == copyFenceValue))
     {
         ThrowIfFailed(m_mappingFence->SetEventOnCompletion(mappingFenceValue + 1, m_fenceEvents[0]));
         m_pFileStreamer->SetEventOnCompletion(copyFenceValue + 1, m_fenceEvents[1]);
         // wait for a bit. expect signal soon.
-        WaitForMultipleObjects(2, m_fenceEvents, false, 180);
+        WaitForMultipleObjects(2, m_fenceEvents, FALSE, 180);
     }
 
 }

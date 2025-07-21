@@ -20,18 +20,18 @@ public:
     {
         UINT numPoses{ 0 };
         float gap{ 0 };
-		float minDistance{ 0 };
+        float minDistance{ 0 };
         float minRadius{ 0 };
         float maxRadius{ 0 };
     };
-	PlanetPoseGenerator(const Settings& in_settings) : m_settings(in_settings) {}
+    PlanetPoseGenerator(const Settings& in_settings) : m_settings(in_settings) {}
 
     // returns universe size
     float GeneratePoses(std::vector<DirectX::XMVECTOR>& out_planetPose);
 private:
     Settings m_settings;
     float m_universeSize{ 0 };
-	float m_growSize{ 0 }; // rate of universe growth to fit more objects
+    float m_growSize{ 0 }; // rate of universe growth to fit more objects
 
     const UINT m_numTries{ 250 }; // more tries results in tighter packing, at the expense of more time
 
