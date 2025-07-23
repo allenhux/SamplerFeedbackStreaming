@@ -531,9 +531,12 @@ UINT SFS::ResourceBase::QueuePendingTileEvictions(UpdateList*& out_pUpdateList)
     // narrow the ready evictions to just the delayed evictions.
     pendingEvictions.resize(numDelayed);
 
-    out_pUpdateList = m_pSFSManager->AllocateUpdateList(this);
-    ASSERT(out_pUpdateList);
-    out_pUpdateList->m_evictCoords.swap(evictions);
+    if (evictions.size())
+    {
+        out_pUpdateList = m_pSFSManager->AllocateUpdateList(this);
+        ASSERT(out_pUpdateList);
+        out_pUpdateList->m_evictCoords.swap(evictions);
+    }
 
     return numEvictions;
 }
@@ -627,8 +630,11 @@ bool SFS::ResourceBase::UpdateMinMipMap()
     // NOTE: packed mips status is not atomic, but m_tileResidencyChanged is sufficient
     ASSERT(Drawable());
 
+    bool changed = false;
     if (m_tileMappingState.GetAnyRefCount())
     {
+        ASSERT(!m_refCountsZero);
+
         const UINT width = GetMinMipMapWidth();
         const UINT height = GetMinMipMapHeight();
 
@@ -659,7 +665,11 @@ bool SFS::ResourceBase::UpdateMinMipMap()
                             break;
                         }
                     }
-                    m_minMipMap[tileIndex] = minMip;
+                    if (minMip != m_minMipMap[tileIndex])
+                    { 
+                        m_minMipMap[tileIndex] = minMip;
+                        changed = true;
+                    }
                 }
                 tileIndex++;
             } // end y
@@ -669,11 +679,12 @@ bool SFS::ResourceBase::UpdateMinMipMap()
     // if refcount is 0, then tile state is either not resident or eviction pending
     else
     {
+        m_refCountsZero = true;
         m_minMipMap.assign(m_minMipMap.size(), m_maxMip);
+        changed = true;
     }
 
-    // FIXME? could return false if no change was necessary
-    return true;
+    return changed;
 }
 
 //=============================================================================
@@ -724,7 +735,8 @@ void SFS::ResourceBase::EvictionDelay::MoveAllToPending()
 //-----------------------------------------------------------------------------
 bool SFS::ResourceBase::EvictionDelay::Rescue(const SFS::ResourceBase::TileMappingState& in_tileMappingState)
 {
-    bool residencyImproved = false;
+    bool rescued = false;
+
     // note: it is possible even for the most recent evictions to have refcount > 0
     // because a tile can be evicted then loaded again within a single ProcessFeedback() call
     for (auto& evictions : m_mappings)
@@ -742,17 +754,18 @@ bool SFS::ResourceBase::EvictionDelay::Rescue(const SFS::ResourceBase::TileMappi
                 {
                     numPending--;
                     c = evictions[numPending];
-                    residencyImproved = true;
                 }
                 else // refcount still 0, this tile may still be evicted
                 {
                     i++;
                 }
             }
+            if (numPending != evictions.size()) { rescued = true; }
             evictions.resize(numPending);
         }
     }
-    return residencyImproved;
+
+    return rescued;
 }
 
 //-----------------------------------------------------------------------------

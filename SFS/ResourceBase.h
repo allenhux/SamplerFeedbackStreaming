@@ -276,6 +276,8 @@ namespace SFS
             void Append(D3D12_TILED_RESOURCE_COORDINATE in_coord) { m_mappings.front().push_back(in_coord); }
 
             Coords& GetReadyToEvict() { return m_mappings.back(); }
+
+            // FIXME: this is aspirational. it would also be cool if it looked later, to end() - swapchaincount.
             bool GetResidencyChangeNeeded() const { return !m_mappings.front().empty(); }
 
             void NextFrame();

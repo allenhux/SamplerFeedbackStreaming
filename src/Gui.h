@@ -41,8 +41,7 @@ public:
         bool m_directStorageToggle{ false };
         bool m_frustumToggle{ false };
         bool m_visualizationChange{ false };
-        bool m_toggleDemoMode{ false };
-        bool m_toggleBenchmarkMode{ false };
+        bool m_setDefaultView{ false };
     };
 
     void Draw(ID3D12GraphicsCommandList* in_pCommandList,
@@ -83,12 +82,6 @@ private:
     std::vector<float> m_bandwidthHistory;
     UINT m_bandwidthHistoryIndex{ 0 };
     void UpdateBandwidthHistory(UINT in_numTilesUploaded);
-
-    bool m_benchmarkMode{ false };
-    void ToggleBenchmarkMode(CommandLineArgs& in_args);
-
-    bool m_demoMode{ false };
-    void ToggleDemoMode(CommandLineArgs& in_args);
 
     float ComputeBandwidth(UINT in_numTiles, float in_numSeconds);
 

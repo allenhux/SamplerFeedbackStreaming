@@ -135,6 +135,19 @@ void Scene::DisableDebugLayerMessages()
 }
 
 //-----------------------------------------------------------------------------
+// intial view. also callable via UI
+//-----------------------------------------------------------------------------
+void Scene::SetDefaultView()
+{
+    float eyePos = 100.0f;
+    XMVECTOR vEyePt = XMVectorSet(eyePos, eyePos, eyePos, 1.0f);
+    XMVECTOR lookAt = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+    XMVECTOR vUpVec = XMVectorSet(0.0f, 1.0f, 0.0f, 1.0f);
+
+    SetViewMatrix(XMMatrixLookAtLH(vEyePt, lookAt, vUpVec));
+}
+
+//-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
     m_args(in_args), m_hwnd(in_hwnd)
@@ -217,13 +230,7 @@ Scene::Scene(const CommandLineArgs& in_args, HWND in_hwnd) :
     m_assetUploader.Init(m_device.Get());
 
     PrepareScene();
-
-    float eyePos = 100.0f;
-    XMVECTOR vEyePt = XMVectorSet(eyePos, eyePos, eyePos, 1.0f);
-    XMVECTOR lookAt = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
-    XMVECTOR vUpVec = XMVectorSet(0.0f, 1.0f, 0.0f, 1.0f);
-
-    SetViewMatrix(XMMatrixLookAtLH(vEyePt, lookAt, vUpVec));
+    SetDefaultView();
 
     UINT minNumObjects = m_args.m_skyTexture.size() ? 2 : 1;
 
@@ -294,8 +301,11 @@ Scene::~Scene()
 RECT Scene::GetGuiRect()
 {
     RECT r{};
-    r.right = (LONG)m_gui->GetWidth();
-    r.bottom = (LONG)m_gui->GetHeight();
+    if (m_args.m_showUI)
+    {
+        r.right = (LONG)m_gui->GetWidth();
+        r.bottom = (LONG)m_gui->GetHeight();
+    }
 
     return r;
 }
@@ -308,11 +318,11 @@ void Scene::MoveView(int in_x, int in_y, int in_z)
 
     if (0x8000 & GetKeyState(VK_SHIFT))
     {
-        translationRate *= 4;
+        translationRate *= 5;
     }
     if (0x8000 & GetKeyState(VK_CONTROL))
     {
-        translationRate *= 4;
+        translationRate *= 5;
     }
 
     float x = in_x * translationRate;
@@ -1536,6 +1546,15 @@ void Scene::GatherStatistics()
 //-------------------------------------------------------------------------
 void Scene::Animate()
 {
+    // time since last frame
+    float deltaTime = 0;
+    {
+        static auto t0 = m_cpuTimer.GetTicks();
+        auto t1 = m_cpuTimer.GetTicks();
+        deltaTime = m_cpuTimer.GetMsFromDelta(t1 - t0);
+        t0 = t1;
+    }
+
     // animate camera
     if (m_args.m_cameraAnimationRate)
     {
@@ -1547,12 +1566,13 @@ void Scene::Animate()
         }
 
         static float theta = -XM_PIDIV2;
-        const float delta = 0.01f * m_args.m_cameraAnimationRate;
+        float delta = 0.001f * m_args.m_cameraAnimationRate * deltaTime;
         float radius = m_universeSize * .8f;
 
         if (m_args.m_cameraRollerCoaster)
         {
             radius = m_universeSize * .333f;
+            delta /= 2.f;
         }
 
         theta += delta;
@@ -1582,7 +1602,7 @@ void Scene::Animate()
     }
 
     // spin objects
-    float rotation = m_args.m_animationRate * 0.01f;
+    float rotation = m_args.m_animationRate * 0.0015f * deltaTime;
 
     // per-frame per-object compute visibility, lod, etc.
     const XMMATRIX worldProj = m_viewMatrix * m_projection;
@@ -1865,18 +1885,9 @@ void Scene::HandleUIchanges()
         {
             m_pSFSManager->SetVisualizationMode((UINT)m_args.m_dataVisualizationMode);
         }
-
-        if (m_uiButtonChanges.m_toggleBenchmarkMode)
+        if (m_uiButtonChanges.m_setDefaultView)
         {
-            m_benchmarkMode = !m_benchmarkMode;
-            if (!m_demoMode) { SwapCameraForDemo(m_benchmarkMode); }
-            else { m_demoMode = false; }
-        }
-        if (m_uiButtonChanges.m_toggleDemoMode)
-        {
-            m_demoMode = !m_demoMode;
-            if (!m_benchmarkMode) { SwapCameraForDemo(m_demoMode); }
-            else { m_benchmarkMode = false; }
+            SetDefaultView();
         }
 
         m_uiButtonChanges = Gui::ButtonChanges(); // reset

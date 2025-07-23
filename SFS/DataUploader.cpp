@@ -191,10 +191,10 @@ SFS::FileStreamer* SFS::DataUploader::SetStreamer(StreamerType in_streamerType, 
 //-----------------------------------------------------------------------------
 void SFS::DataUploader::StartThreads()
 {
-    // launch notify thread
     ASSERT(false == m_threadsRunning);
     m_threadsRunning = true;
 
+    // launch thread to map tiles
     m_mappingThread = std::thread([&]
         {
             while (m_threadsRunning)

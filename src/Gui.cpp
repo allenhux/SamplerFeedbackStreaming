@@ -216,65 +216,6 @@ void Gui::DrawMini(ID3D12GraphicsCommandList* in_pCommandList, const DrawParams&
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-void Gui::ToggleDemoMode(CommandLineArgs& in_args)
-{
-    m_demoMode = !m_demoMode;
-
-    static float bias = 0;
-    static float cameraRate = 0.4f;
-    static float animationRate = 0.4f;
-    static int numObjects = (int)m_initialArgs.m_maxNumObjects;
-
-    if (m_demoMode)
-    {
-        bias = 0;
-        cameraRate = 0.4f;
-        animationRate = 0.4f;
-        numObjects = (int)m_initialArgs.m_maxNumObjects / 2;
-    }
-
-    std::swap(bias, in_args.m_lodBias);
-    std::swap(cameraRate, in_args.m_cameraAnimationRate);
-    std::swap(animationRate, in_args.m_animationRate);
-    std::swap(numObjects, in_args.m_numObjects);
-    m_numObjects = in_args.m_numObjects;
-
-    in_args.m_showFeedbackMaps = false;
-}
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-void Gui::ToggleBenchmarkMode(CommandLineArgs& in_args)
-{
-    m_benchmarkMode = !m_benchmarkMode;
-
-    static bool paintmixer = true;
-    static float bias = -2;
-    static float cameraRate = 2;
-    static float animationRate = 2;
-    static int numObjects = (int)m_initialArgs.m_maxNumObjects;
-
-    if (m_benchmarkMode)
-    {
-        paintmixer = true;
-        bias = -2;
-        cameraRate = 2;
-        animationRate = 2;
-        numObjects = (int)m_initialArgs.m_maxNumObjects;
-    }
-
-    std::swap(paintmixer, in_args.m_cameraPaintMixer);
-    std::swap(bias, in_args.m_lodBias);
-    std::swap(cameraRate, in_args.m_cameraAnimationRate);
-    std::swap(animationRate, in_args.m_animationRate);
-    std::swap(numObjects, in_args.m_numObjects);
-    m_numObjects = in_args.m_numObjects;
-
-    in_args.m_showFeedbackMaps = false;
-}
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
 void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     CommandLineArgs& in_args, const DrawParams& in_drawParams, ButtonChanges& out_buttonChanges)
 {
@@ -366,16 +307,10 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     //---------------------------------------------------------------------
     // terrain feedback viewer
     //---------------------------------------------------------------------
-    ImGuiTreeNodeFlags feedbackNodeFlags = ImGuiTreeNodeFlags_None;
+    in_args.m_showFeedbackMaps = ImGui::CollapsingHeader("Terrain Object Feedback Viewer",
+        in_args.m_showFeedbackMaps ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None);
     if (in_args.m_showFeedbackMaps)
     {
-        feedbackNodeFlags = ImGuiTreeNodeFlags_DefaultOpen;
-    }
-    in_args.m_showFeedbackMaps = ImGui::CollapsingHeader("Terrain Object Feedback Viewer", feedbackNodeFlags);
-    if (in_args.m_showFeedbackMaps)
-    {
-        // in_args.m_cameraUpLock = true;
-
         ImGui::Indent(indent);
         ImGui::Checkbox("Mip Window Orientation", &in_args.m_showFeedbackMapVertical);
         ImGui::Checkbox("Raw Feedback", &in_args.m_showFeedbackViewer);
@@ -430,21 +365,43 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
     //---------------------------------------------------------------------
     // demo mode
     //---------------------------------------------------------------------
-    out_buttonChanges.m_toggleDemoMode = ImGui::Button("DEMO MODE", ImVec2(-1, 0));
-    if (out_buttonChanges.m_toggleDemoMode)
+    if (ImGui::Button("DEMO MODE", ImVec2(-1, 0)))
     {
-        if (m_benchmarkMode) { ToggleBenchmarkMode(in_args); }
-        ToggleDemoMode(in_args);
+        in_args.m_cameraRollerCoaster = false;
+        in_args.m_lodBias = 0;
+        in_args.m_cameraAnimationRate = 0.4f;
+        in_args.m_animationRate = 0.4f;
+        in_args.m_numObjects = (int)m_initialArgs.m_maxNumObjects / 2;
+        m_numObjects = in_args.m_numObjects;
+        in_args.m_showFeedbackMaps = false;
     }
 
     //---------------------------------------------------------------------
     // benchmark mode
     //---------------------------------------------------------------------
-    out_buttonChanges.m_toggleBenchmarkMode = ImGui::Button("BENCHMARK MODE", ImVec2(-1, 0));
-    if (out_buttonChanges.m_toggleBenchmarkMode)
+    if (ImGui::Button("BENCHMARK MODE", ImVec2(-1, 0)))
     {
-        if (m_demoMode) { ToggleDemoMode(in_args); }
-        ToggleBenchmarkMode(in_args);
+        in_args.m_cameraRollerCoaster = true;
+        in_args.m_lodBias = -2;
+        in_args.m_cameraAnimationRate = 2;
+        in_args.m_animationRate = 2;
+        in_args.m_numObjects = (int)m_initialArgs.m_maxNumObjects;
+        m_numObjects = in_args.m_numObjects;
+        in_args.m_showFeedbackMaps = false;
+    }
+    
+    //---------------------------------------------------------------------
+    // re-center view
+    //---------------------------------------------------------------------
+    if (ImGui::Button("Reset View", ImVec2(-1, 0)))
+    {
+        in_args.m_cameraRollerCoaster = false;
+        in_args.m_lodBias = 0;
+        in_args.m_cameraAnimationRate = 0;
+        in_args.m_animationRate = .1f;
+
+        out_buttonChanges.m_setDefaultView = true;
+        in_args.m_showFeedbackMaps = true;
     }
 
     // resize the UI to fit the dynamically-sized components

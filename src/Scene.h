@@ -207,6 +207,8 @@ private:
     void CreateTerrainViewers();
     void DeleteTerrainViewers();
 
+    void SetDefaultView();
+
     //-----------------------------------
     // scene graph
     //-----------------------------------
@@ -284,7 +286,5 @@ private:
     void DrawUI();
     void HandleUiToggleFrustum();
 
-    bool m_demoMode{ false };
-    bool m_benchmarkMode{ false };
     void SwapCameraForDemo(bool in_capture);
 };

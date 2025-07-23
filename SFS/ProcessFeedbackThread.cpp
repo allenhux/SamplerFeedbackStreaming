@@ -187,7 +187,7 @@ void SFS::ProcessFeedbackThread::Start()
                         }
                     } // end loop over active resources
 
-                    m_dataUploader.AddResidencyChanged(residencyChanged);
+                    m_dataUploader.AddResidencyChanged(std::move(residencyChanged));
 
                     m_processFeedbackTime += (m_cpuTimer.GetTicks() - prevFrameTime);
                 } // end if new frame

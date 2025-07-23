@@ -79,8 +79,6 @@ void SFS::ResourceDU::NotifyEvicted(const std::vector<D3D12_TILED_RESOURCE_COORD
         ASSERT(TileMappingState::Residency::Evicting == m_tileMappingState.GetResidency(t));
         m_tileMappingState.SetResidency(t, TileMappingState::Residency::NotResident);
     }
-
-    m_numUpdateLists--; // decrement resource's count of in-flight updatelists
 }
 #endif
 //-----------------------------------------------------------------------------
