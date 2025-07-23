@@ -23,11 +23,14 @@ namespace SFS
 {
     class ResourceDU;
     class ResourceBase;
+    class ManagerDU; // for lock on ResidencyMap
 
     class DataUploader
     {
     public:
         DataUploader(
+			ManagerDU* in_pSFSManager,
+            class GroupFlushResources& in_grr,
             ID3D12Device* in_pDevice,
             UINT in_maxCopyBatches,                     // maximum number of batches
             UINT in_stagingBufferSizeMB,                // upload buffer size
@@ -63,18 +66,34 @@ namespace SFS
 
         const auto& GetUpdateLists() const { return m_updateLists; }
 
+		void CheckFlushResources() { m_fenceMonitorFlag.Set(); } // wake the fence monitor thread to check for flushed resources
+
+        // ProcessFeedbackThread calls this to notify that a resource's residency has changed
+        void AddResidencyChanged(std::set<ResourceBase*> in_resources)
+        {
+            if (0 == m_residencyChangedStaging.Size())
+            {
+                m_residencyChangedStaging.Swap(in_resources);
+            }
+            else
+            {
+                m_residencyChangedStaging.Acquire().insert(in_resources.begin(), in_resources.end());
+                m_residencyChangedStaging.Release();
+            }
+            m_fenceMonitorFlag.Set();
+        }
+
         //----------------------------------
         // statistics and visualization
         //----------------------------------
-        UINT GetTotalNumUploads() const { return m_numTotalUploads; }
-        void AddEvictions(UINT in_numEvictions) { m_numTotalEvictions += in_numEvictions; }
-        UINT GetTotalNumEvictions() const { return m_numTotalEvictions; }
         float GetTotalTileCopyLatencyMs() const { return m_fenceThreadTimer.GetMsFromDelta(m_totalTileCopyLatency); } // sum of per-tile latencies so far
-
         void SetVisualizationMode(UINT in_mode) { m_pFileStreamer->SetVisualizationMode(in_mode); }
         void CaptureTraceFile(bool in_captureTrace) { m_pFileStreamer->CaptureTraceFile(in_captureTrace); }
     private:
-        // upload buffer size
+        // back-channel for ProcessFeedbackThread to notify residency changes
+        LockedContainer<std::set<ResourceBase*>> m_residencyChangedStaging;
+
+        // upload buffer size. Required to allow dynamic changing of file streamer
         const UINT m_stagingBufferSizeMB{ 0 };
 
         // fence to monitor forward progress of the mapping queue. independent of the frame queue
@@ -147,11 +166,12 @@ namespace SFS
         void LoadTextureFromMemory(UpdateList& out_updateList);
         void SubmitTextureLoadsFromMemory();
 
+        ManagerDU* const m_pSFSManager{ nullptr };
+        class GroupFlushResources& m_flushResources;
+
         //-------------------------------------------
         // statistics
         //-------------------------------------------
-        std::atomic<UINT> m_numTotalEvictions{ 0 };
-        std::atomic<UINT> m_numTotalUploads{ 0 };
         std::atomic<UINT> m_numTotalUpdateListsProcessed{ 0 };
         std::atomic<INT64> m_totalTileCopyLatency{ 0 }; // total approximate latency for all copies. divide by m_numTotalUploads then get the time with m_cpuTimer.GetSecondsFromDelta() 
     };

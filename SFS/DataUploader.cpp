@@ -12,17 +12,40 @@
 #include "FileStreamerDS.h"
 #include "SFSHeap.h"
 #include "ProcessFeedbackThread.h"
+#include "ManagerBase.h"
+#include "ProcessFeedbackThread.h" // for GroupFlushResources
+
+//=============================================================================
+// severely limited SFSManager interface
+//=============================================================================
+namespace SFS
+{
+    class ManagerDU : private ManagerBase
+    {
+    public:
+        UINT8* ResidencyMapAcquire()
+        {
+            m_residencyMapLock.Acquire();
+            return (UINT8*)m_residencyMap.GetData();
+        }
+        void ResidencyMapRelease() { m_residencyMapLock.Release(); }
+    };
+}
 
 //=============================================================================
 // Internal class that uploads texture data into a reserved resource
 //=============================================================================
 SFS::DataUploader::DataUploader(
+    ManagerDU* in_pSFSManager,
+    GroupFlushResources& in_grr,
     ID3D12Device* in_pDevice,
     UINT in_maxCopyBatches,                  // maximum number of batches
     UINT in_stagingBufferSizeMB,             // upload buffer size
     UINT in_maxTileMappingUpdatesPerApiCall, // some HW/drivers seem to have a limit
     int in_threadPriority) :
-    m_updateLists(in_maxCopyBatches)
+    m_pSFSManager(in_pSFSManager)
+	, m_flushResources(in_grr)
+    , m_updateLists(in_maxCopyBatches)
     , m_updateListAllocator(in_maxCopyBatches)
     , m_stagingBufferSizeMB(in_stagingBufferSizeMB)
     , m_mappingUpdater(in_maxTileMappingUpdatesPerApiCall)
@@ -261,7 +284,6 @@ SFS::UpdateList* SFS::DataUploader::AllocateUpdateList(SFS::ResourceDU* in_pStre
         ASSERT(UpdateList::State::STATE_FREE == pUpdateList->m_executionState);
 
         pUpdateList->Reset(in_pStreamingResource);
-        in_pStreamingResource->AddUpdateList(); // increment resource's count of in-flight updatelists
         pUpdateList->m_executionState = UpdateList::State::STATE_ALLOCATED;
     }
 
@@ -290,7 +312,7 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
 {
     ASSERT(UpdateList::State::STATE_ALLOCATED == in_updateList.m_executionState);
 
-    // set to submitted, allowing mapping within MappingThread
+    // set to submitted, allowing mapping within MappingThread (but it hasn't been added to m_mappingTasks yet)
     // fenceMonitorThread will wait for the copy fence to become valid before progressing state
     in_updateList.m_executionState = UpdateList::State::STATE_SUBMITTED;
 
@@ -298,6 +320,19 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
     {
         in_updateList.m_copyLatencyTimer = m_fenceThreadTimer.GetTicks();
         m_pFileStreamer->StreamTexture(in_updateList);
+    }
+    // FIXME NOTE: if not unmapping evictions, then bypass the mapping thread
+    else if (0 != in_updateList.GetNumEvictions())
+    {
+        in_updateList.m_executionState = UpdateList::State::STATE_MAP_PENDING;
+        in_updateList.m_mappingFenceValue = m_mappingFenceValue - 1; // set to previously signaled state
+        // add to fence polling thread
+        {
+            m_monitorTasks.GetWriteableValue() = &in_updateList;
+            m_monitorTasks.Commit();
+            m_fenceMonitorFlag.Set();
+        }
+        return;
     }
 
     // add to submit task queue
@@ -327,6 +362,7 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
 void SFS::DataUploader::FenceMonitorThread()
 {
     bool loadPackedMips = false;
+    std::set<ResourceBase*> notifiedResources;
 
     UINT64 mappingFenceValue = m_mappingFence->GetCompletedValue();
     UINT64 copyFenceValue = m_pFileStreamer->GetCompletedValue();
@@ -391,8 +427,6 @@ void SFS::DataUploader::FenceMonitorThread()
                 if (updateList.GetNumEvictions())
                 {
                     updateList.m_pResource->NotifyEvicted(updateList.m_evictCoords);
-
-                    m_numTotalEvictions.fetch_add(updateList.GetNumEvictions(), std::memory_order_relaxed);
                 }
 #endif
                 // notify regular tiles
@@ -402,9 +436,9 @@ void SFS::DataUploader::FenceMonitorThread()
 
                     auto updateLatency = m_fenceThreadTimer.GetTicks() - updateList.m_copyLatencyTimer;
                     m_totalTileCopyLatency.fetch_add(updateLatency, std::memory_order_relaxed);
-                    m_numTotalUploads.fetch_add(updateList.GetNumStandardUpdates(), std::memory_order_relaxed);
                 }
 
+                notifiedResources.insert((ResourceBase*)updateList.m_pResource);
                 freeUpdateList = true;
             }
             break;
@@ -428,6 +462,51 @@ void SFS::DataUploader::FenceMonitorThread()
     {
         // DS Filestreamer may need a nudge if small amounts of data to move
         m_pFileStreamer->Signal();
+    }
+
+    // flush resources?
+    // handles the very rare case where a flush occurs after updatelists have been processed
+	// but before notifiedResources have had UpdateMinMipMap() called
+    if (GroupFlushResources::Flags::ResidencyThread & m_flushResources.GetFlags())
+    {
+        // number of resources likely > # to be removed
+        ContainerRemove(notifiedResources, m_flushResources.BypassLockGetValues());
+
+        ContainerRemove(m_residencyChangedStaging.Acquire(), m_flushResources.BypassLockGetValues());
+        m_residencyChangedStaging.Release();
+
+        m_flushResources.ClearFlag(GroupFlushResources::Flags::ResidencyThread);
+    }
+
+    // check if ProcessFeedbackThread produced residency changes
+    // that did not generate UpdateLists
+    if (m_residencyChangedStaging.Size())
+    {
+        std::set<ResourceBase*> residencyChanged;
+        m_residencyChangedStaging.Swap(residencyChanged);
+        notifiedResources.insert(residencyChanged.begin(), residencyChanged.end());
+    }
+
+    // add resources that had notifications
+    if (notifiedResources.size())
+    {
+        std::vector<ResourceBase*> updating;
+        updating.reserve(notifiedResources.size());
+        for (auto r : notifiedResources)
+        {
+            // update those min mip maps that have changed
+            if (r->UpdateMinMipMap())
+            {
+                updating.push_back(r);
+            }
+        }
+        if (updating.size())
+        {
+            // only blocks if resource buffer is being re-allocated (effectively never)
+            UINT8* pDest = m_pSFSManager->ResidencyMapAcquire();
+            for (auto r : updating) { r->WriteMinMipMap(pDest); }
+            m_pSFSManager->ResidencyMapRelease();
+        }
     }
 
     // if no outstanding work, sleep
@@ -499,6 +578,11 @@ void SFS::DataUploader::MappingThread()
                 updateList.m_coords, updateList.m_heapIndices);
 
             updateList.m_executionState = UpdateList::State::STATE_UPLOADING;
+        }
+		// NOTE!! if not unmapping, shouldn't enter here
+        else if (updateList.GetNumEvictions())
+        {
+            ASSERT(0);
         }
 
         // no uploads or evictions? must be mapping packed mips

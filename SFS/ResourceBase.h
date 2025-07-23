@@ -23,6 +23,7 @@ namespace SFS
     class ManagerSR;
     class Heap;
     class FileHandle;
+    struct UpdateList;
 
     //=============================================================================
     // unpacked mips are dynamically loaded/evicted, preserving a min-mip-map
@@ -113,14 +114,17 @@ namespace SFS
 
         // call once per frame (as indicated e.g. by advancement of frame fence)
         // if a feedback buffer is ready, process it to generate lists of tiles to load/evict
-        void ProcessFeedback(UINT64 in_frameFenceCompletedValue);
+        // return true if residency changed
+        bool ProcessFeedback(UINT64 in_frameFenceCompletedValue);
 
         // try to load/evict tiles.
         // returns # tiles requested for upload
-        UINT QueuePendingTileLoads();
+        // re-uses or allocates updatelist
+        UINT QueuePendingTileLoads(UpdateList*& out_pUpdateList);
 
         // returns # tiles evicted
-        UINT QueuePendingTileEvictions();
+		// allocates updatelist if necessary
+        UINT QueuePendingTileEvictions(UpdateList*& out_pUpdateList);
 
         bool HasDelayedWork() // tiles to load / evict now or later
         {
@@ -145,8 +149,6 @@ namespace SFS
         // called by SFSM::SetVisualizationMode()
         void ClearAllocations();
 
-        // Residency Thread needs to update or may need to update soon
-        bool HasInFlightUpdates() const { return m_tileResidencyChanged || (0 != m_numUpdateLists); }
         void Reset(); // free all heap allocations, including packed mips. treat as "new"
     protected:
         const SFSResourceDesc m_resourceDesc;
@@ -174,13 +176,6 @@ namespace SFS
         // read by QueueEviction() - render thread, to avoid setting evict all unnecessarily
         // written by ProcessFeedback()
         std::atomic<bool> m_refCountsZero{ true };
-
-        // standard tile copy complete notification (not packed mips)
-        // exchanged by UpdateMinMip()
-        // set by ProcessFeedback()
-        std::atomic<bool> m_tileResidencyChanged{ false };
-
-        std::atomic<UINT> m_numUpdateLists{ 0 };
 
         SFS::InternalResources m_resources;
         std::unique_ptr<SFS::FileHandle> m_pFileHandle;
@@ -265,8 +260,6 @@ namespace SFS
             TileLayers<UINT32> m_heapIndices;
         };
         TileMappingState m_tileMappingState;
-
-        void SetResidencyChanged();
     private:
         // only using double-buffering for feedback history
         static constexpr UINT QUEUED_FEEDBACK_FRAMES = 2;
@@ -281,7 +274,9 @@ namespace SFS
             EvictionDelay(UINT in_numSwapBuffers);
 
             void Append(D3D12_TILED_RESOURCE_COORDINATE in_coord) { m_mappings.front().push_back(in_coord); }
+
             Coords& GetReadyToEvict() { return m_mappings.back(); }
+            bool GetResidencyChangeNeeded() const { return !m_mappings.front().empty(); }
 
             void NextFrame();
             void Clear();
@@ -289,7 +284,7 @@ namespace SFS
 
             // drop pending evictions for tiles that now have non-zero refcount
             // return true if tiles were rescued
-            void Rescue(const TileMappingState& in_tileMappingState);
+            bool Rescue(const TileMappingState& in_tileMappingState);
 
             // total # tiles being tracked
             bool HasDelayedWork() const

@@ -64,9 +64,6 @@ void SFS::ResourceDU::NotifyCopyComplete(const std::vector<D3D12_TILED_RESOURCE_
         ASSERT(TileMappingState::Residency::Loading == m_tileMappingState.GetResidency(t));
         m_tileMappingState.SetResidency(t, TileMappingState::Residency::Resident);
     }
-
-    SetResidencyChanged();
-    m_numUpdateLists--; // decrement resource's count of in-flight updatelists
 }
 #if 0
 // NOTE: dead code. currently not un-mapping tiles
@@ -83,7 +80,6 @@ void SFS::ResourceDU::NotifyEvicted(const std::vector<D3D12_TILED_RESOURCE_COORD
         m_tileMappingState.SetResidency(t, TileMappingState::Residency::NotResident);
     }
 
-    SetResidencyChanged();
     m_numUpdateLists--; // decrement resource's count of in-flight updatelists
 }
 #endif
@@ -93,5 +89,4 @@ void SFS::ResourceDU::NotifyEvicted(const std::vector<D3D12_TILED_RESOURCE_COORD
 void SFS::ResourceDU::NotifyPackedMips()
 {
     m_packedMipStatus = PackedMipStatus::NEEDS_TRANSITION;
-    m_numUpdateLists--; // decrement resource's count of in-flight updatelists
 }

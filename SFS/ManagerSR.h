@@ -64,8 +64,6 @@ namespace SFS
             return m_dataUploader.GetMappingQueue();
         }
 
-        void SetResidencyChanged() { m_residencyThread.Wake(); }
-
         FileHandle* OpenFile(const std::wstring& in_filename) { return m_dataUploader.OpenFile(in_filename); }
 
         void SetPending(ResourceBase* in_pResource) { m_pendingResources.insert(in_pResource); }
