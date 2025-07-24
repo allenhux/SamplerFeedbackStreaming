@@ -239,14 +239,15 @@ void SFS::FileStreamerReference::CopyTiles(ID3D12GraphicsCommandList* out_pCopyC
 {
     // generate copy command list
     D3D12_TILE_REGION_SIZE tileRegionSize{ 1, FALSE, 0, 0, 0 };
-    DXGI_FORMAT textureFormat = in_pUpdateList->m_pResource->GetTextureFormat();
+    Atlas* pAtlas = in_pUpdateList->m_pResource->GetAtlas();
+
     UINT numTiles = (UINT)in_indices.size();
     for (UINT i = 0; i < numTiles; i++)
     {
         D3D12_TILED_RESOURCE_COORDINATE coord;
-        ID3D12Resource* pAtlas = in_pUpdateList->m_pResource->GetHeap()->ComputeCoordFromTileIndex(coord, in_pUpdateList->m_heapIndices[i], textureFormat);
+        ID3D12Resource* pDstRsrc = pAtlas->ComputeCoordFromTileIndex(coord, in_pUpdateList->m_heapIndices[i]);
 
-        out_pCopyCmdList->CopyTiles(pAtlas, &coord,
+        out_pCopyCmdList->CopyTiles(pDstRsrc, &coord,
             &tileRegionSize, in_pSrcResource,
             D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES * in_indices[i],
             D3D12_TILE_COPY_FLAG_LINEAR_BUFFER_TO_SWIZZLED_TILED_RESOURCE | D3D12_TILE_COPY_FLAG_NO_HAZARD);
@@ -320,13 +321,14 @@ void SFS::FileStreamerReference::CopyThread()
                 // generate copy commands
                 // copy from we left of last time (copyEnd) until the last load that completed (lastSignaled)
                 D3D12_TILE_REGION_SIZE tileRegionSize{ 1, FALSE, 0, 0, 0 };
-                DXGI_FORMAT textureFormat = c.m_pUpdateList->m_pResource->GetTextureFormat();
+                Atlas* pAtlas = c.m_pUpdateList->m_pResource->GetAtlas();
+
                 for (UINT i = c.m_copyEnd; i < c.m_lastSignaled; i++)
                 {
                     D3D12_TILED_RESOURCE_COORDINATE coord;
-                    ID3D12Resource* pAtlas = c.m_pUpdateList->m_pResource->GetHeap()->ComputeCoordFromTileIndex(coord, c.m_pUpdateList->m_heapIndices[i], textureFormat);
+                    ID3D12Resource* pDstRsrc = pAtlas->ComputeCoordFromTileIndex(coord, c.m_pUpdateList->m_heapIndices[i]);
 
-                    m_copyCommandList->CopyTiles(pAtlas, &coord,
+                    m_copyCommandList->CopyTiles(pDstRsrc, &coord,
                         &tileRegionSize, m_uploadBuffer.GetResource(),
                         D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES * c.m_uploadIndices[i],
                         D3D12_TILE_COPY_FLAG_LINEAR_BUFFER_TO_SWIZZLED_TILED_RESOURCE | D3D12_TILE_COPY_FLAG_NO_HAZARD);

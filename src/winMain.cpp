@@ -634,8 +634,6 @@ int WINAPI WinMain(
             bool drawSuccess = g_pScene->Draw();
             if (!drawSuccess)
             {
-                delete g_pScene;
-                g_pScene = nullptr;
                 MessageBox(0, L"Device Lost", L"ERROR", MB_OK);
                 exit(-1);
             }

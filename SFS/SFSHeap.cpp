@@ -91,10 +91,13 @@ UINT SFS::Atlas::CreateAtlas(
     ThrowIfFailed(device->CreateReservedResource(&rd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&out_pDst)));
     out_pDst->SetName(L"DataUploader::m_atlas");
 
-    D3D12_PACKED_MIP_INFO packedMipInfo; // unused, for now
-    D3D12_TILE_SHAPE tileShape; // unused, for now
     UINT numAtlasTiles = 0;
-    device->GetResourceTiling(out_pDst.Get(), &numAtlasTiles, &packedMipInfo, &tileShape, &subresourceCount, 0, &m_atlasTiling);
+    D3D12_SUBRESOURCE_TILING tiling{};
+    device->GetResourceTiling(out_pDst.Get(), &numAtlasTiles, nullptr, nullptr, &subresourceCount, 0, &tiling);
+    m_width = tiling.WidthInTiles;
+#ifdef _DEBUG
+    m_height = tiling.HeightInTiles;
+#endif
 
     numAtlasTiles = std::min(in_maxTiles, numAtlasTiles);
 
@@ -130,26 +133,6 @@ UINT SFS::Atlas::CreateAtlas(
 }
 
 //-----------------------------------------------------------------------------
-// take a linear offset and return a tile coordinate
-//-----------------------------------------------------------------------------
-ID3D12Resource* SFS::Atlas::ComputeCoordFromTileIndex(D3D12_TILED_RESOURCE_COORDINATE& out_coord, UINT in_index)
-{
-    ASSERT(in_index < m_atlasNumTiles);
-
-    // which atlas does this land in:
-    UINT atlasIndex = in_index / m_numTilesPerAtlas;
-    in_index -= (m_numTilesPerAtlas * atlasIndex);
-
-    const UINT w = m_atlasTiling.WidthInTiles;
-    UINT y = in_index / w;
-    ASSERT(y < m_atlasTiling.HeightInTiles);
-    UINT x = in_index - (w * y);
-
-    out_coord = D3D12_TILED_RESOURCE_COORDINATE{ x, y, 0, 0 };
-    return m_atlases[atlasIndex].Get();
-}
-
-//-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 SFS::Heap::Heap(SFS::ManagerBase* in_pSfsManager,
     ID3D12CommandQueue* in_pQueue, UINT in_sizeInMB)
@@ -175,7 +158,7 @@ SFS::Heap::~Heap()
 //-----------------------------------------------------------------------------
 // creation of new SFSResource must verify there is an atlas for that format
 //-----------------------------------------------------------------------------
-void SFS::Heap::AllocateAtlas(ID3D12CommandQueue* in_pQueue, const DXGI_FORMAT in_format)
+SFS::Atlas* SFS::Heap::AllocateAtlas(ID3D12CommandQueue* in_pQueue, const DXGI_FORMAT in_format)
 {
     SFS::Atlas* pAtlas = nullptr;
     for (auto p : m_atlases)
@@ -191,25 +174,5 @@ void SFS::Heap::AllocateAtlas(ID3D12CommandQueue* in_pQueue, const DXGI_FORMAT i
         pAtlas = new SFS::Atlas(m_tileHeap.Get(), in_pQueue, m_heapAllocator.GetCapacity(), in_format);
         m_atlases.push_back(pAtlas);
     }
-}
-
-//-----------------------------------------------------------------------------
-// find the corresponding coordinate into an atlas for this linear heap (tile) index
-//-----------------------------------------------------------------------------
-ID3D12Resource* SFS::Heap::ComputeCoordFromTileIndex(D3D12_TILED_RESOURCE_COORDINATE& out_coord, UINT in_index, const DXGI_FORMAT in_format)
-{
-    SFS::Atlas* pAtlas = nullptr;
-
-    // FIXME: this is an O(n) search. for very small n, is this fine?
-    for (auto p : m_atlases)
-    {
-        if (p->GetFormat() == in_format)
-        {
-            pAtlas = p;
-            break;
-        }
-    }
-    ASSERT(pAtlas);
-
-    return pAtlas->ComputeCoordFromTileIndex(out_coord, in_index);
+    return pAtlas;
 }

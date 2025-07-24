@@ -24,16 +24,33 @@ namespace SFS
         Atlas(ID3D12Heap* in_pHeap, ID3D12CommandQueue* in_pQueue, UINT in_numTilesHeap, DXGI_FORMAT in_format);
 
         // return a resource pointer and a coordinate into that resource from linear tile index
-        ID3D12Resource* ComputeCoordFromTileIndex(D3D12_TILED_RESOURCE_COORDINATE& out_coord, UINT in_index);
+        ID3D12Resource* ComputeCoordFromTileIndex(D3D12_TILED_RESOURCE_COORDINATE& out_coord, UINT in_index)
+        {
+            ASSERT(in_index < m_atlasNumTiles);
+
+            // which atlas does this land in:
+            UINT atlasIndex = in_index / m_numTilesPerAtlas;
+            in_index -= (m_numTilesPerAtlas * atlasIndex);
+
+            out_coord.Y = in_index / m_width;
+            ASSERT(out_coord.Y < m_height);
+            out_coord.X = in_index - (m_width * out_coord.Y);
+
+            return m_atlases[atlasIndex].Get();
+        }
 
         DXGI_FORMAT GetFormat() const { return m_format; }
     private:
-        const DXGI_FORMAT m_format;
-
-        D3D12_SUBRESOURCE_TILING m_atlasTiling;
         std::vector<SFS::ComPtr<ID3D12Resource>> m_atlases;
-        UINT m_numTilesPerAtlas{ 0 };
+
+        const DXGI_FORMAT m_format;
         const UINT m_atlasNumTiles;
+
+        UINT m_numTilesPerAtlas{ 0 };
+        UINT m_width;
+#ifdef _DEBUG
+        UINT m_height;
+#endif
 
         // returns number of tiles covered by the atlas
         UINT CreateAtlas(ComPtr<ID3D12Resource>& out_pDst,
@@ -59,9 +76,8 @@ namespace SFS
         virtual ~Heap();
 
         // allocate atlases for a format. does nothing if format already has an atlas
-        void AllocateAtlas(ID3D12CommandQueue* in_pQueue, const DXGI_FORMAT in_format);
+        Atlas* AllocateAtlas(ID3D12CommandQueue* in_pQueue, const DXGI_FORMAT in_format);
 
-        ID3D12Resource* ComputeCoordFromTileIndex(D3D12_TILED_RESOURCE_COORDINATE& out_coord, UINT in_index, const DXGI_FORMAT in_format);
         ID3D12Heap* GetHeap() const { return m_tileHeap.Get(); }
         SimpleAllocator& GetAllocator() { return m_heapAllocator; }
         bool GetDestroyable() const { return m_destroy; }

@@ -44,5 +44,7 @@ namespace SFS
         {
             return m_resourceDesc.m_tileData[m_resourceDesc.GetLinearIndex(in_coord.X, in_coord.Y, in_coord.Subresource)];
         }
+
+        Atlas* GetAtlas() { return m_pAtlas; }
     };
 }

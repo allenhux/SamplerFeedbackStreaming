@@ -22,6 +22,7 @@ namespace SFS
 {
     class ManagerSR;
     class Heap;
+    class Atlas;
     class FileHandle;
     struct UpdateList;
 
@@ -180,6 +181,7 @@ namespace SFS
         SFS::InternalResources m_resources;
         std::unique_ptr<SFS::FileHandle> m_pFileHandle;
         SFS::Heap* m_pHeap{ nullptr };
+        SFS::Atlas* m_pAtlas{ nullptr };
 
         UINT64 m_clearUavDescriptorOffset{ 0 };
 

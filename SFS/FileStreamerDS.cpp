@@ -95,18 +95,18 @@ void SFS::FileStreamerDS::StreamTexture(SFS::UpdateList& in_updateList)
 {
     ASSERT(in_updateList.GetNumStandardUpdates());
 
-    DXGI_FORMAT textureFormat = in_updateList.m_pResource->GetTextureFormat();
-    auto pDstHeap = in_updateList.m_pResource->GetHeap();
+    Atlas* pAtlas = in_updateList.m_pResource->GetAtlas();
 
     DSTORAGE_REQUEST request{};
     request.Options.DestinationType = DSTORAGE_REQUEST_DESTINATION_TILES;
     request.Destination.Tiles.TileRegionSize = D3D12_TILE_REGION_SIZE{ 1, FALSE, 0, 0, 0 };
+    request.UncompressedSize = D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES;
 
     if (VisualizationMode::DATA_VIZ_NONE == m_visualizationMode)
     {
         request.Options.SourceType = DSTORAGE_REQUEST_SOURCE_FILE;
         request.Source.File.Source = GetFileHandle(in_updateList.m_pResource->GetFileHandle());
-        request.UncompressedSize = D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES;
+        request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)in_updateList.m_pResource->GetCompressionFormat();
 
         UINT numCoords = (UINT)in_updateList.m_coords.size();
         for (UINT i = 0; i < numCoords; i++)
@@ -115,18 +115,16 @@ void SFS::FileStreamerDS::StreamTexture(SFS::UpdateList& in_updateList)
             request.Source.File.Offset = fileOffset.m_offset;
             request.Source.File.Size = fileOffset.m_numBytes;
 
-            D3D12_TILED_RESOURCE_COORDINATE coord{};
-            ID3D12Resource* pAtlas = pDstHeap->ComputeCoordFromTileIndex(coord, in_updateList.m_heapIndices[i], textureFormat);
+            D3D12_TILED_RESOURCE_COORDINATE& coord = request.Destination.Tiles.TiledRegionStartCoordinate;
+            ID3D12Resource* pDstRsrc = pAtlas->ComputeCoordFromTileIndex(coord, in_updateList.m_heapIndices[i]);
 
-            request.Destination.Tiles.Resource = pAtlas;
-            request.Destination.Tiles.TiledRegionStartCoordinate = coord;
-            request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)in_updateList.m_pResource->GetCompressionFormat();
+            request.Destination.Tiles.Resource = pDstRsrc;
 
             m_fileQueue->EnqueueRequest(&request);
 
             if (m_captureTrace)
             {
-                TraceRequest(pAtlas, coord, request);
+                TraceRequest(pDstRsrc, coord, request);
             }
         }
     }
@@ -134,7 +132,7 @@ void SFS::FileStreamerDS::StreamTexture(SFS::UpdateList& in_updateList)
     {
         request.Options.SourceType = DSTORAGE_REQUEST_SOURCE_MEMORY;
         request.Source.Memory.Size = D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES;
-        request.UncompressedSize = D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES;
+        DXGI_FORMAT textureFormat = in_updateList.m_pResource->GetTextureFormat();
 
         UINT numCoords = (UINT)in_updateList.m_coords.size();
         for (UINT i = 0; i < numCoords; i++)
@@ -142,9 +140,9 @@ void SFS::FileStreamerDS::StreamTexture(SFS::UpdateList& in_updateList)
             request.Source.Memory.Source = GetVisualizationData(in_updateList.m_coords[i], textureFormat);
 
             D3D12_TILED_RESOURCE_COORDINATE coord{};
-            ID3D12Resource* pAtlas = pDstHeap->ComputeCoordFromTileIndex(coord, in_updateList.m_heapIndices[i], textureFormat);
+            ID3D12Resource* pDstRsrc = pAtlas->ComputeCoordFromTileIndex(coord, in_updateList.m_heapIndices[i]);
 
-            request.Destination.Tiles.Resource = pAtlas;
+            request.Destination.Tiles.Resource = pDstRsrc;
             request.Destination.Tiles.TiledRegionStartCoordinate = coord;
 
             m_memoryQueue->EnqueueRequest(&request);

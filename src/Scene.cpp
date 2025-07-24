@@ -1342,13 +1342,14 @@ void Scene::DrawObjects()
             // This provides a big fps boost. packed mips start at around 128x128, which is 16K screen pixels!
             bool isTiny = o->GetScreenAreaPixels() < o->GetScreenAreaThreshold();
 
+            bool evict = !isVisible || isTiny;
+
             // get sampler feedback for this object?
-            bool queueFeedback = isVisible && (!isTiny)
+            bool queueFeedback = (!m_args.m_waitForAssetLoad)
+                && (!evict)
                 && (numTexels < texelLimit)
                 && (m_numFeedbackObjects < maxNumFeedbacks);
             queueFeedback = queueFeedback || m_args.m_updateEveryObjectEveryFrame;
-
-            bool evict = !isVisible || isTiny;
 
             if (isVisible)
             {
@@ -1468,8 +1469,7 @@ void Scene::GatherStatistics()
 
     // statistics gathering
     if (m_args.m_timingFrameFileName.size() &&
-        (m_frameNumber > m_args.m_timingStartFrame) &&
-        (m_frameNumber <= m_args.m_timingStopFrame))
+        (m_frameNumber > m_args.m_timingStartFrame))
     {
         static UINT totalSubmits = m_pSFSManager->GetTotalNumSubmits();
         static UINT totalSignals = m_pSFSManager->GetTotalNumSignals();
@@ -1487,7 +1487,7 @@ void Scene::GatherStatistics()
             m_gpuProcessFeedbackTime, m_numFeedbackObjects,
             numSubmitsPreviousFrame, numSignalsPreviousFrame);
 
-        if (m_frameNumber == m_args.m_timingStopFrame)
+        if (m_frameNumber >= m_args.m_timingStopFrame)
         {
             float measuredTimeMs = m_cpuTimer.GetMsSince(m_cpuTimerStart);
             UINT measuredNumUploads = totalUploads - m_startUploadCount;
@@ -1498,6 +1498,9 @@ void Scene::GatherStatistics()
             float latencyPerSubmitMs = (m_totalTileLatencyMs / numSubmitsTotal);
 
             DebugPrint(L"Gathering final statistics before exiting\n");
+
+            SetFullScreen(false);
+            Resize();
 
             m_csvFile->WriteEvents(m_hwnd, m_args);
             *m_csvFile
@@ -1510,6 +1513,7 @@ void Scene::GatherStatistics()
                 << "\n";
             m_csvFile->close();
             m_csvFile = nullptr;
+            exit(0);
         }
     }
 
@@ -1547,7 +1551,8 @@ void Scene::GatherStatistics()
 void Scene::Animate()
 {
     // time since last frame
-    float deltaTime = 0;
+    float deltaTime = 18;
+    if (m_args.m_timingFrameFileName.empty())
     {
         static auto t0 = m_cpuTimer.GetTicks();
         auto t1 = m_cpuTimer.GetTicks();
@@ -1900,7 +1905,7 @@ void Scene::HandleUIchanges()
 //-------------------------------------------------------------------------
 bool Scene::AssetsLoaded()
 {
-    if (LoadingThread::Idle != m_loadingThreadState)
+    if ((LoadingThread::Idle != m_loadingThreadState) || (m_args.m_numObjects != m_objects.size()))
     {
         return false;
     }

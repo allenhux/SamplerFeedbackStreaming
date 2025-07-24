@@ -633,7 +633,7 @@ bool SFS::ResourceBase::UpdateMinMipMap()
     bool changed = false;
     if (m_tileMappingState.GetAnyRefCount())
     {
-        ASSERT(!m_refCountsZero);
+        m_refCountsZero = false;
 
         const UINT width = GetMinMipMapWidth();
         const UINT height = GetMinMipMapHeight();
@@ -795,7 +795,7 @@ bool SFS::ResourceBase::InitPackedMips()
     if (0 == m_resourceDesc.m_mipInfo.m_numPackedMips)
     {
         // make sure my heap has an atlas corresponding to my format
-        m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), (DXGI_FORMAT)m_resourceDesc.m_textureFormat);
+        m_pAtlas = m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), (DXGI_FORMAT)m_resourceDesc.m_textureFormat);
 
         m_packedMipStatus = PackedMipStatus::NEEDS_TRANSITION;
         return true;
@@ -824,7 +824,7 @@ bool SFS::ResourceBase::InitPackedMips()
     if (pUpdateList)
     {
         // make sure my heap has an atlas corresponding to my format
-        m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), (DXGI_FORMAT)m_resourceDesc.m_textureFormat);
+        m_pAtlas = m_pHeap->AllocateAtlas(m_pSFSManager->GetMappingQueue(), (DXGI_FORMAT)m_resourceDesc.m_textureFormat);
 
         m_packedMipStatus = PackedMipStatus::REQUESTED;
 
