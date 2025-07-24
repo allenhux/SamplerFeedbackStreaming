@@ -83,11 +83,11 @@ void SFS::ProcessFeedbackThread::Start()
             INT64 prevFrameTime = m_cpuTimer.GetTicks();
 
             // limit the number of signals per frame to prevent "storms"
-            constexpr UINT signalCounterMax = 16;
+            constexpr UINT signalCounterMax = 8;
             UINT signalCounter = 0;
 
             // limit the number of DS Enqueues (==tiles) between signals
-            constexpr UINT uploadsRequestedMax = 128;
+            constexpr UINT uploadsRequestedMax2 = 192;
 
             while (m_threadRunning)
             {
