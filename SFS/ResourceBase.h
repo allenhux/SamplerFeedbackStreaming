@@ -125,7 +125,7 @@ namespace SFS
 
         // returns # tiles evicted
 		// allocates updatelist if necessary
-        UINT QueuePendingTileEvictions(UpdateList*& out_pUpdateList);
+        void QueuePendingTileEvictions(UpdateList*& out_pUpdateList);
 
         bool HasDelayedWork() // tiles to load / evict now or later
         {

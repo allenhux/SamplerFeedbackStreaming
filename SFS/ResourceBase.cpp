@@ -477,9 +477,9 @@ Note that the multi-frame delay for evictions prevents allocation of an index th
 // note there are only tiles to evict after processing feedback, but it's possible
 // there was no UpdateList available at the time, so they haven't been evicted yet.
 //-----------------------------------------------------------------------------
-UINT SFS::ResourceBase::QueuePendingTileEvictions(UpdateList*& out_pUpdateList)
+void SFS::ResourceBase::QueuePendingTileEvictions(UpdateList*& out_pUpdateList)
 {
-    if (0 == m_delayedEvictions.GetReadyToEvict().size()) { return 0; }
+    if (0 == m_delayedEvictions.GetReadyToEvict().size()) { return; }
 
     auto& pendingEvictions = m_delayedEvictions.GetReadyToEvict();
 
@@ -487,7 +487,6 @@ UINT SFS::ResourceBase::QueuePendingTileEvictions(UpdateList*& out_pUpdateList)
 	evictions.reserve(pendingEvictions.size());
 
     UINT numDelayed = 0;
-    UINT numEvictions = 0;
     for (auto& coord : pendingEvictions)
     {
         // if the heap index is valid, but the tile is not resident, there's a /pending load/
@@ -512,7 +511,6 @@ UINT SFS::ResourceBase::QueuePendingTileEvictions(UpdateList*& out_pUpdateList)
             m_pHeap->GetAllocator().Free(heapIndex);
             heapIndex = TileMappingState::InvalidIndex;
 			evictions.push_back(coord);
-            numEvictions++;
         }
         // valid index but not resident means there is a pending load, do not evict
         // try again later
@@ -537,8 +535,6 @@ UINT SFS::ResourceBase::QueuePendingTileEvictions(UpdateList*& out_pUpdateList)
         ASSERT(out_pUpdateList);
         out_pUpdateList->m_evictCoords.swap(evictions);
     }
-
-    return numEvictions;
 }
 
 //-----------------------------------------------------------------------------

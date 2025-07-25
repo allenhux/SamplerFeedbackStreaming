@@ -79,9 +79,6 @@ void SFS::ProcessFeedbackThread::Start()
             UINT uploadsRequested = 0; // remember if any work was queued so we can signal afterwards
             UINT64 previousFrameFenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
 
-            // start timer for this frame
-            INT64 prevFrameTime = m_cpuTimer.GetTicks();
-
             // limit the number of signals per frame to prevent "storms"
             constexpr UINT signalCounterMax = 16;
             UINT signalCounter = 0;
@@ -127,6 +124,14 @@ void SFS::ProcessFeedbackThread::Start()
                     CheckFlushResources();
 
                     signalCounter = 0;
+
+                    // flush uploads from last frame
+                    if (uploadsRequested)
+                    {
+                        SignalFileStreamer();
+                        uploadsRequested = 0;
+                        signalCounter++; // prevents "storms" of submits
+                    }
                 }
 
                 // prioritize loading packed mips, as objects shouldn't be displayed until packed mips load                
@@ -159,7 +164,8 @@ void SFS::ProcessFeedbackThread::Start()
                     // Once per frame: process feedback buffers
                     std::set<ResourceBase*> residencyChanged;
 
-                    prevFrameTime = m_cpuTimer.GetTicks();
+                    auto feedbackTime = m_cpuTimer.GetTicks();
+
                     for (auto i = m_delayedResources.begin(); i != m_delayedResources.end();)
                     {
                         auto pResource = *i;
@@ -189,29 +195,28 @@ void SFS::ProcessFeedbackThread::Start()
 
                     m_dataUploader.AddResidencyChanged(std::move(residencyChanged));
 
-                    m_processFeedbackTime += (m_cpuTimer.GetTicks() - prevFrameTime);
+                    m_processFeedbackTime += (m_cpuTimer.GetTicks() - feedbackTime);
                 } // end if new frame
 
                 // push uploads and evictions for stale resources
                 if (m_pendingResources.size())
                 {
-                    UINT sumEvictions = 0;
-					UINT sumUploads = 0;
                     for (auto i = m_pendingResources.begin(); i != m_pendingResources.end();)
                     {
                         ResourceBase* pResource = *i;
 
                         if (m_dataUploader.GetNumUpdateListsAvailable() && m_threadRunning) // don't add work while exiting
                         {
+                            auto processingTime = m_cpuTimer.GetTicks();
+
                             UpdateList* pUpdateList = nullptr;
 
                             // tiles that are "loading" can't be evicted. as soon as they arrive, they can be.
-                            sumEvictions += pResource->QueuePendingTileEvictions(pUpdateList);
+                            pResource->QueuePendingTileEvictions(pUpdateList);
 
-                            UINT numUploads = 0;
                             if (0 == m_newResources.size()) // load packed mips before loading other tiles
                             {
-                                numUploads = pResource->QueuePendingTileLoads(pUpdateList);
+                                uploadsRequested += pResource->QueuePendingTileLoads(pUpdateList);
                             }
 
                             if (pUpdateList)
@@ -219,18 +224,14 @@ void SFS::ProcessFeedbackThread::Start()
                                 m_pSFSManager->SubmitUpdateList(*pUpdateList);
                             }
 
-                            if (numUploads)
+                            // Limit the # of DS Enqueues (== # tiles) between signals
+                            if ((uploadsRequested > uploadsRequestedMax) && (signalCounter < signalCounterMax))
                             {
-                                sumUploads += numUploads; // statistics
-                                uploadsRequested += numUploads; // submit heuristics
-                                // Limit the # of DS Enqueues (== # tiles) between signals
-                                if ((uploadsRequested > uploadsRequestedMax) && (signalCounter < signalCounterMax))
-                                {
-                                    SignalFileStreamer();
-                                    uploadsRequested = 0;
-                                    signalCounter++; // prevents "storms" of submits
-                                }
+                                SignalFileStreamer();
+                                uploadsRequested = 0;
+                                signalCounter++; // prevents "storms" of submits
                             }
+                            m_processFeedbackTime += (m_cpuTimer.GetTicks() - processingTime);
                         }
 
                         if (pResource->HasPendingWork()) // still have work to do?
@@ -248,18 +249,18 @@ void SFS::ProcessFeedbackThread::Start()
                     }
                 } // end loop over pending resources
 
-                // catch remainder uploads before next frame
-                if (uploadsRequested && (signalCounter < signalCounterMax))
-                {
-                    SignalFileStreamer();
-                    uploadsRequested = 0;
-                    signalCounter++; // prevents "storms" of submits
-                }
-
                 // nothing to do? wait for next frame
                 // development note: ok to Wait() if uploadsRequested != 0. signalCounter will be reset next frame, and those updates will get a signal
                 if (0 == m_pendingResources.size())
                 {
+                    // don't sleep with uploads lingering
+                    if (uploadsRequested)
+                    {
+                        SignalFileStreamer();
+                        uploadsRequested = 0;
+                        signalCounter++; // prevents "storms" of submits
+                    }
+
                     m_processFeedbackFlag.Wait();
                 }
             }
