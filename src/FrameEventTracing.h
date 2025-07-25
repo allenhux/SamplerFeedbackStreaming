@@ -95,7 +95,7 @@ inline FrameEventTracing::FrameEventTracing(
 
 inline void FrameEventTracing::WriteEvents(HWND in_hWnd, const CommandLineArgs& in_args)
 {
-    float totalTimeMs = m_timer.GetMsFromDelta(m_startTicker);
+    float totalTimeMs = m_timer.GetMsSince(m_startTicker);
 
     RECT windowRect;
     GetClientRect(in_hWnd, &windowRect);
