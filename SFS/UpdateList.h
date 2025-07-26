@@ -34,7 +34,7 @@ namespace SFS
 
         // initialize to ready
         std::atomic<State> m_executionState{ State::STATE_FREE };
-        std::atomic<bool> m_copyFenceValid{ false };
+        std::atomic<bool> m_mappingFenceValid{ false };
 
         // for the tiled resource, streaming info, and to notify complete
         ResourceDU* m_pResource{ nullptr };
@@ -68,7 +68,7 @@ namespace SFS
         void Reset(SFS::ResourceDU* in_pResource)
         {
             m_pResource = in_pResource;
-            m_copyFenceValid = false;
+            m_mappingFenceValid = false;
             m_coords.clear();
             m_heapIndices.clear();
             m_evictCoords.clear();

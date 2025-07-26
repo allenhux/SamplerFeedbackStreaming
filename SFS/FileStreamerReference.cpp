@@ -127,7 +127,6 @@ void SFS::FileStreamerReference::StreamPackedMips(SFS::UpdateList& in_updateList
     // FIXME: need copytextureregion(s) for packed mips
 
     in_updateList.m_copyFenceValue = m_copyFenceValue - 1; // HACK to force completion
-    in_updateList.m_copyFenceValid = true;
 }
 
 //-----------------------------------------------------------------------------
@@ -341,7 +340,6 @@ void SFS::FileStreamerReference::CopyThread()
             if (c.m_pUpdateList->GetNumStandardUpdates() == c.m_copyEnd)
             {
                 c.m_pUpdateList->m_copyFenceValue = c.m_copyFenceValue;
-                c.m_pUpdateList->m_copyFenceValid = true;
                 c.m_pUpdateList = nullptr; // clear for debugging purposes. the updatelist can be re-cycled before the copyBatch
                 c.m_state = CopyBatch::State::WAIT_COMPLETE;
             }

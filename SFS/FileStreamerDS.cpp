@@ -70,23 +70,22 @@ SFS::FileHandle* SFS::FileStreamerDS::OpenFile(const std::wstring& in_path)
 //-----------------------------------------------------------------------------
 void SFS::FileStreamerDS::StreamPackedMips(SFS::UpdateList& in_updateList)
 {
-    DSTORAGE_REQUEST request = {};
+    UpdateList::PackedMip& packedMip = (UpdateList::PackedMip&)in_updateList.m_coords[0];
+
+    DSTORAGE_REQUEST request{};
+    request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)in_updateList.m_pResource->GetCompressionFormat();
     request.Options.SourceType = DSTORAGE_REQUEST_SOURCE_FILE;
     request.Options.DestinationType = DSTORAGE_REQUEST_DESTINATION_MULTIPLE_SUBRESOURCES;
-    UpdateList::PackedMip packedMip;
-    packedMip.m_coord = in_updateList.m_coords[0];
     request.Source.File.Source = GetFileHandle(in_updateList.m_pResource->GetFileHandle());
-    request.Source.File.Size = packedMip.m_mipInfo.numBytes;
     request.Source.File.Offset = packedMip.m_mipInfo.offset;
-    request.UncompressedSize = packedMip.m_mipInfo.uncompressedSize;
+    request.Source.File.Size = packedMip.m_mipInfo.numBytes;
     request.Destination.MultipleSubresources.Resource = in_updateList.m_pResource->GetTiledResource();
     request.Destination.MultipleSubresources.FirstSubresource = in_updateList.m_pResource->GetPackedMipsFirstSubresource();
-    request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)in_updateList.m_pResource->GetCompressionFormat();
+    request.UncompressedSize = packedMip.m_mipInfo.uncompressedSize;
 
     m_fileQueue->EnqueueRequest(&request);
 
     in_updateList.m_copyFenceValue = m_copyFenceValue;
-    in_updateList.m_copyFenceValid = true;
 }
 
 //-----------------------------------------------------------------------------
@@ -104,9 +103,9 @@ void SFS::FileStreamerDS::StreamTexture(SFS::UpdateList& in_updateList)
 
     if (VisualizationMode::DATA_VIZ_NONE == m_visualizationMode)
     {
+        request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)in_updateList.m_pResource->GetCompressionFormat();
         request.Options.SourceType = DSTORAGE_REQUEST_SOURCE_FILE;
         request.Source.File.Source = GetFileHandle(in_updateList.m_pResource->GetFileHandle());
-        request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)in_updateList.m_pResource->GetCompressionFormat();
 
         UINT numCoords = (UINT)in_updateList.m_coords.size();
         for (UINT i = 0; i < numCoords; i++)
@@ -150,7 +149,6 @@ void SFS::FileStreamerDS::StreamTexture(SFS::UpdateList& in_updateList)
     }
 
     in_updateList.m_copyFenceValue = m_copyFenceValue;
-    in_updateList.m_copyFenceValid = true;
 }
 
 //-----------------------------------------------------------------------------

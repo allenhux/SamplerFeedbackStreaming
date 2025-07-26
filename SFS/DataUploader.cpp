@@ -39,14 +39,14 @@ namespace SFS
 //=============================================================================
 SFS::DataUploader::DataUploader(
     ManagerDU* in_pSFSManager,
-    GroupFlushResources& in_grr,
+    GroupFlushResources& in_gfr,
     ID3D12Device* in_pDevice,
     UINT in_maxCopyBatches,                  // maximum number of batches
     UINT in_stagingBufferSizeMB,             // upload buffer size
     UINT in_maxTileMappingUpdatesPerApiCall, // some HW/drivers seem to have a limit
     int in_threadPriority) :
     m_pSFSManager(in_pSFSManager)
-	, m_flushResources(in_grr)
+	, m_flushResources(in_gfr)
     , m_updateLists(in_maxCopyBatches)
     , m_updateListAllocator(in_maxCopyBatches)
     , m_stagingBufferSizeMB(in_stagingBufferSizeMB)
@@ -79,7 +79,7 @@ SFS::DataUploader::DataUploader(
         }
     }
 
-    InitDirectStorage(in_pDevice);
+    InitDirectStorage();
 
     //NOTE: SFSManager must call SetStreamer() to start streaming
     //SetStreamer(StreamerType::Reference);
@@ -97,7 +97,7 @@ SFS::DataUploader::~DataUploader()
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-void SFS::DataUploader::InitDirectStorage(ID3D12Device* in_pDevice)
+void SFS::DataUploader::InitDirectStorage()
 {
     // initialize to default values
     DSTORAGE_CONFIGURATION dsConfig{};
@@ -112,49 +112,6 @@ void SFS::DataUploader::InitDirectStorage(ID3D12Device* in_pDevice)
     m_dsFactory->SetDebugFlags(debugFlags);
 
     m_dsFactory->SetStagingBufferSize(m_stagingBufferSizeMB * 1024 * 1024);
-
-    DSTORAGE_QUEUE_DESC queueDesc{};
-    queueDesc.Capacity = DSTORAGE_MAX_QUEUE_CAPACITY;
-    queueDesc.Priority = DSTORAGE_PRIORITY_NORMAL;
-    queueDesc.SourceType = DSTORAGE_REQUEST_SOURCE_MEMORY;
-    queueDesc.Device = in_pDevice;
-    ThrowIfFailed(m_dsFactory->CreateQueue(&queueDesc, IID_PPV_ARGS(&m_memoryQueue)));
-
-    ThrowIfFailed(in_pDevice->CreateFence(m_memoryFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_memoryFence)));
-    m_memoryFenceValue++;
-}
-
-//-----------------------------------------------------------------------------
-// handle request to load a texture from cpu memory
-// used for packed mips, which don't participate in fine-grained streaming
-// FIXME: dead and busted.
-//-----------------------------------------------------------------------------
-void SFS::DataUploader::LoadTextureFromMemory(SFS::UpdateList& out_updateList)
-{
-    ASSERT(0);
-    UpdateList::PackedMip packedMip{ .m_coord = out_updateList.m_coords[0] };
-
-    DSTORAGE_REQUEST request = {};
-    request.Options.SourceType = DSTORAGE_REQUEST_SOURCE_MEMORY;
-    request.Options.DestinationType = DSTORAGE_REQUEST_DESTINATION_MULTIPLE_SUBRESOURCES;
-    request.Source.Memory.Source = 0; // FIXME
-    request.Source.Memory.Size = packedMip.m_mipInfo.numBytes;
-    request.UncompressedSize = packedMip.m_mipInfo.uncompressedSize;
-    request.Destination.MultipleSubresources.Resource = out_updateList.m_pResource->GetTiledResource();
-    request.Destination.MultipleSubresources.FirstSubresource = out_updateList.m_pResource->GetPackedMipsFirstSubresource();
-    request.Options.CompressionFormat = (DSTORAGE_COMPRESSION_FORMAT)out_updateList.m_pResource->GetCompressionFormat();
-
-    out_updateList.m_copyFenceValue = m_memoryFenceValue;
-    m_memoryQueue->EnqueueRequest(&request);
-}
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-void SFS::DataUploader::SubmitTextureLoadsFromMemory()
-{
-    m_memoryQueue->EnqueueSignal(m_memoryFence.Get(), m_memoryFenceValue);
-    m_memoryQueue->Submit();
-    m_memoryFenceValue++;
 }
 
 //-----------------------------------------------------------------------------
@@ -322,30 +279,25 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
     // fenceMonitorThread will wait for the copy fence to become valid before progressing state
     in_updateList.m_executionState = UpdateList::State::STATE_SUBMITTED;
 
-    if (in_updateList.GetNumStandardUpdates())
+    // FIXME NOTE: if not unmapping evictions, then bypass the mapping thread for evict-only updatelists
+    if ((0 == in_updateList.GetNumStandardUpdates()) && (0 != in_updateList.GetNumEvictions()))
     {
-        in_updateList.m_copyLatencyTimer = m_fenceThreadTimer.GetTicks();
-        m_pFileStreamer->StreamTexture(in_updateList);
-    }
-    // FIXME NOTE: if not unmapping evictions, then bypass the mapping thread
-    else if (0 != in_updateList.GetNumEvictions())
-    {
+        in_updateList.m_mappingFenceValue = m_mappingFence->GetCompletedValue(); // set to previously signaled state
+        in_updateList.m_mappingFenceValid = true;
         in_updateList.m_executionState = UpdateList::State::STATE_MAP_PENDING;
-        in_updateList.m_mappingFenceValue = m_mappingFenceValue - 1; // set to previously signaled state
-        // add to fence polling thread
-        {
-            m_monitorTasks.GetWriteableValue() = &in_updateList;
-            m_monitorTasks.Commit();
-            m_fenceMonitorFlag.Set();
-        }
-        return;
     }
-
-    // add to submit task queue
+    else // add to mapping thread before starting the copy (because DS::Submit can block)
     {
         m_mappingTasks.GetWriteableValue() = &in_updateList;
         m_mappingTasks.Commit();
         m_mappingFlag.Set();
+    }
+
+    if (in_updateList.GetNumStandardUpdates())
+    {
+        in_updateList.m_copyLatencyTimer = m_fenceThreadTimer.GetTicks();
+        m_pFileStreamer->StreamTexture(in_updateList);
+        in_updateList.m_executionState = UpdateList::State::STATE_UPLOADING;
     }
 
     // add to fence polling thread
@@ -402,7 +354,7 @@ void SFS::DataUploader::FenceMonitorThread()
             ASSERT(1 == updateList.GetNumStandardUpdates());
             ASSERT(0 == updateList.GetNumEvictions());
 
-            if ((updateList.m_copyFenceValid) && (m_pFileStreamer->GetCompletedValue() >= updateList.m_copyFenceValue))
+            if (m_pFileStreamer->GetCompletedValue() >= updateList.m_copyFenceValue)
             {
                 updateList.m_pResource->NotifyPackedMips();
                 freeUpdateList = true;
@@ -412,8 +364,7 @@ void SFS::DataUploader::FenceMonitorThread()
         case UpdateList::State::STATE_UPLOADING:
             ASSERT(0 != updateList.GetNumStandardUpdates());
 
-            // only check copy fence if the fence has been set (avoid race condition)
-            if ((updateList.m_copyFenceValid) && (m_pFileStreamer->GetCompletedValue() >= updateList.m_copyFenceValue))
+            if (m_pFileStreamer->GetCompletedValue() >= updateList.m_copyFenceValue)
             {
                 updateList.m_executionState = UpdateList::State::STATE_MAP_PENDING;
             }
@@ -424,7 +375,9 @@ void SFS::DataUploader::FenceMonitorThread()
             [[fallthrough]];
 
         case UpdateList::State::STATE_MAP_PENDING:
-            if (m_mappingFence->GetCompletedValue() >= updateList.m_mappingFenceValue)
+            // only check mapping fence if the fence has been set (avoid race condition)
+            if (updateList.m_mappingFenceValid &&
+                (m_mappingFence->GetCompletedValue() >= updateList.m_mappingFenceValue))
             {
 #if 0
                 // NOTE: dead code. currently not un-mapping tiles
@@ -556,10 +509,11 @@ void SFS::DataUploader::MappingThread()
         auto& updateList = *m_mappingTasks.GetReadableValue(); // get the next task
         m_mappingTasks.Free(); // consume this task. not FREE yet, just no longer tracking in this thread
 
-        ASSERT(UpdateList::State::STATE_SUBMITTED == updateList.m_executionState);
+        ASSERT(UpdateList::State::STATE_SUBMITTED <= updateList.m_executionState);
 
         // set to the fence value to be signaled next
         updateList.m_mappingFenceValue = m_mappingFenceValue;
+        updateList.m_mappingFenceValid = true;
 
 #if 0
         // NOTE: dead code. currently not un-mapping tiles
@@ -569,8 +523,11 @@ void SFS::DataUploader::MappingThread()
         {
             m_mappingUpdater.UnMap(GetMappingQueue(), updateList.m_pResource->GetTiledResource(), updateList.m_evictCoords);
 
-            // this will skip the uploading state unless there are uploads
-            updateList.m_executionState = UpdateList::State::STATE_MAP_PENDING;
+            // skip the uploading state if no uploads
+            if (0 == updateList.GetNumStandardUpdates())
+            {
+                updateList.m_executionState = UpdateList::State::STATE_MAP_PENDING;
+            }
         }
 #endif
 
@@ -582,8 +539,6 @@ void SFS::DataUploader::MappingThread()
                 updateList.m_pResource->GetTiledResource(),
                 updateList.m_pResource->GetHeap()->GetHeap(),
                 updateList.m_coords, updateList.m_heapIndices);
-
-            updateList.m_executionState = UpdateList::State::STATE_UPLOADING;
         }
 		// NOTE!! if not unmapping, shouldn't enter here
         else if (updateList.GetNumEvictions())

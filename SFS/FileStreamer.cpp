@@ -12,27 +12,24 @@
 //-----------------------------------------------------------------------------
 // color lookup table
 //-----------------------------------------------------------------------------
-float SFS::FileStreamer::m_lut[16][3] =
+float SFS::FileStreamer::m_lut[SFS::FileStreamer::m_lutSize][3] =
 {
     { 1, 1, 1 },             // white
     { 1, 0.25f, 0.25f },     // light red
-    { 0.25f, 1, 0.25f },     // light green
-    { 0.25f, 0.25f, 1 },     // light blue
-
-    { 1, 0.25f, 1 },         // light magenta
+    { 1, 0.647f, 0.1f },     // orange
     { 1, 1, 0.25f },         // light yellow
+    { 0.25f, 1, 0.25f },     // light green
+    { 0.10f, 0.3f, 1 },      // light blue
+    { 0.294f, 0.1f, 0.51f }, // indigo
+    { 0.5f, 0.1f, 1 },       // violet
+    { 1, 0.25f, 1 },         // light magenta
     { 0.25f, 1, 1 },         // light cyan
-    { 0.9f, 0.5f, 0.2f },    // orange
-
-    { 0.59f, 0.48f, 0.8f },  // dark magenta
     { 0.53f, 0.25f, 0.11f },
     { 0.8f, 0.48f, 0.53f},
     { 0.64f, 0.8f, 0.48f },
-
     { 0.48f, 0.75f, 0.8f },
     { 0.5f, 0.25f, 0.75f },
     { 0.99f, 0.68f, 0.42f },
-    { .4f, .5f, .6f }
 };
 
 //-----------------------------------------------------------------------------
@@ -215,9 +212,9 @@ void SFS::FileStreamer::InitializeBC1()
     {
         float* color = m_lut[i];
 
-        UINT r = UINT(0x1f * color[0]);
+        UINT b = UINT(0x1f * color[0]);
         UINT g = UINT(0x3f * color[1]);
-        UINT b = UINT(0x1f * color[2]);
+        UINT r = UINT(0x1f * color[2]);
 
         {
             UINT16* pDst = (UINT16*)&block;
@@ -245,10 +242,10 @@ void* SFS::FileStreamer::GetVisualizationData(const D3D12_TILED_RESOURCE_COORDIN
     UINT colorIndex = in_coord.Subresource;
     if (VisualizationMode::DATA_VIZ_TILE == m_visualizationMode)
     {
-        colorIndex = randomColorIndex++ & 0x0f;
+        colorIndex = randomColorIndex++;
     }
 
-    colorIndex = std::min(colorIndex, (UINT)15);
+    colorIndex %= SFS::FileStreamer::m_lutSize;
 
     // FIXME? support more formats
     BYTE* pSrc = nullptr;

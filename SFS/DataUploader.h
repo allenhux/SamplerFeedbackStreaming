@@ -30,7 +30,7 @@ namespace SFS
     public:
         DataUploader(
 			ManagerDU* in_pSFSManager,
-            class GroupFlushResources& in_grr,
+            class GroupFlushResources& in_gfr,
             ID3D12Device* in_pDevice,
             UINT in_maxCopyBatches,                     // maximum number of batches
             UINT in_stagingBufferSizeMB,                // upload buffer size
@@ -158,13 +158,8 @@ namespace SFS
 
         // DS memory queue used just for loading packed mips
         // separate memory queue means needing a second fence - can't wait across DS queues
-        void InitDirectStorage(ID3D12Device* in_pDevice);
+        void InitDirectStorage();
         ComPtr<IDStorageFactory> m_dsFactory;
-        ComPtr<IDStorageQueue> m_memoryQueue;
-        ComPtr<ID3D12Fence> m_memoryFence;
-        UINT64 m_memoryFenceValue{ 0 };
-        void LoadTextureFromMemory(UpdateList& out_updateList);
-        void SubmitTextureLoadsFromMemory();
 
         ManagerDU* const m_pSFSManager{ nullptr };
         class GroupFlushResources& m_flushResources;
