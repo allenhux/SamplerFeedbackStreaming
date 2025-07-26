@@ -250,10 +250,10 @@ void SFS::ProcessFeedbackThread::Start()
                 } // end loop over pending resources
 
                 // nothing to do? wait for next frame
-                // development note: ok to Wait() if uploadsRequested != 0. signalCounter will be reset next frame, and those updates will get a signal
-                if (0 == m_pendingResources.size())
+                // also, can't do work without updatelists. might get one before end of frame, though
+                if ((0 == m_pendingResources.size()) || (0 == m_dataUploader.GetNumUpdateListsAvailable()))
                 {
-                    // don't sleep with uploads lingering
+                    // don't have to leave uploads lingering before sleeping
                     if (uploadsRequested)
                     {
                         SignalFileStreamer();

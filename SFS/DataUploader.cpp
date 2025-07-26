@@ -29,6 +29,8 @@ namespace SFS
             return (UINT8*)m_residencyMap.GetData();
         }
         void ResidencyMapRelease() { m_residencyMapLock.Release(); }
+
+        void WakePFT() { m_processFeedbackThread.Wake(); }
     };
 }
 
@@ -299,10 +301,14 @@ void SFS::DataUploader::FreeUpdateList(SFS::UpdateList& in_updateList)
     // otherwise there can be a race with the mapping thread
     in_updateList.m_executionState = UpdateList::State::STATE_FREE;
 
+    bool wakePFT = (0 == m_updateListAllocator.GetWritableCount());
+
     // return the index to this updatelist to the pool
     UINT i = UINT(&in_updateList - m_updateLists.data());
     m_updateListAllocator.GetReadableValue() = i;
     m_updateListAllocator.Free();
+
+    if (wakePFT) { m_pSFSManager->WakePFT(); }
 }
 
 //-----------------------------------------------------------------------------
