@@ -140,34 +140,36 @@ A new DirectStorage trace capture and playback utility has been added so DirectS
 stress.bat -timingstart 200 -timingstop 700 -capturetrace
 traceplayer.exe -file uploadTraceFile_1.json -mediadir media -staging 128
 ```
-## TileUpdateManager: a library for streaming textures
+# SFS: a library for streaming textures
 
-The sample includes a library *TileUpdateManager* with a minimal set of APIs defined in [SamplerFeedbackStreaming.h](TileUpdateManager/SamplerFeedbackStreaming.h). The central object, *TileUpdateManager*, allows for the creation of streaming textures and heaps to contain them. These objects handle all the feedback resource creation, readback, processing, and file/IO.
+The sample includes a library **SFS** with a minimal set of APIs defined in [SamplerFeedbackStreaming.h](SFS/SamplerFeedbackStreaming.h). The central object, *SFSManager*, allows for the creation of streaming textures and heaps. These objects handle all the feedback resource creation, readback, processing, and file/IO.
 
-The application creates a TileUpdateManager and 1 or more heaps in Scene.cpp:
+The application creates an **SFSManager** and 1 or more heaps in Scene.cpp:
 
 ```cpp
-m_pTileUpdateManager = std::make_unique<TileUpdateManager>(m_device.Get(), m_commandQueue.Get(), tumDesc);
+m_pSFSManager = SFSManager::Create(desc);
 
-    
 // create 1 or more heaps to contain our StreamingResources
 for (UINT i = 0; i < m_args.m_numHeaps; i++)
 {
-    m_sharedHeaps.push_back(m_pTileUpdateManager->CreateStreamingHeap(m_args.m_streamingHeapSize));
+    m_sharedHeaps.push_back(m_pSFSManager->CreateHeap(m_args.m_sfsHeapSizeMB));
 }
+
 ```
 
-Each SceneObject creates its own StreamingResource. Note **a StreamingResource can be used by multiple objects**, but this sample was designed to emphasize the ability to manage many resources and so objects are 1:1 with StreamingResources.
+Each SceneObject has its own SFSResource. Note **an SFSResource can be used by multiple objects**, but this sample was designed to emphasize the ability to manage many resources and so objects are 1:1 with SFSResources.
 
 ```cpp
-m_pStreamingResource = std::unique_ptr<StreamingResource>(in_pTileUpdateManager->CreateStreamingResource(in_filename, in_pStreamingHeap));
+m_pSFSManager->CreateResource(m_sfsResourceDescs[fileIndex], pHeap, textureFilename)
 ```
 
-# How It Works
+## How It Works
 
-This implementation of Sampler Feedback Streaming uses DX12 Sampler Feedback in combination with DX12 Reserved Resources, aka Tiled Resources. A multi-threaded CPU library processes feedback from the GPU, makes decisions about which tiles to load and evict, loads data from disk storage, and submits mapping and uploading requests via GPU copy queues. There is no explicit GPU-side synchronization between the queues, so rendering frame rate is not dependent on completion of copy commands (on GPUs that support concurrent multi-queue operation) - in this sample, GPU time is mostly a function of the Sampler Feedback Resolve() operations described below. The CPU threads run continuously and asynchronously from the GPU (pausing when there's no work to do), polling fence completion states to determine when feedback is ready to process or copies and memory mapping has completed.
+This implementation of Sampler Feedback Streaming uses DX12 Sampler Feedback in combination with DX12 Reserved Resources, aka Tiled Resources. A multi-threaded CPU library processes feedback from the GPU, makes decisions about which tiles to load and evict, loads data from disk storage, and submits mapping and uploading requests via GPU copy queues.
 
-All the magic can be found in  the **TileUpdateManager** library (see the internal file [TileUpdateManager.h](TileUpdateManager/TileUpdateManager.h) - applications should include [SamplerFeedbackStreaming.h](TileUpdateManager/SamplerFeedbackStreaming.h)), which abstracts the creation of StreamingResources and heaps while internally managing feedback resources, file I/O, and GPU memory mapping.
+Frame rate is not dependent on completion of copy commands; the GPU never waits, even while textures are modified mid-frame. The CPU writes asynchronously to buffers that clamp texture sampling so the GPU always reads valid data. GPU time is mostly a function of the Sampler Feedback Resolve() operations (described below) and GPU decompression when using DirectStorage. The CPU threads run continuously and asynchronously from the GPU (pausing when there's no work to do), polling fence completion states to determine when feedback is ready to process and when copies and memory mapping has completed.
+
+All the magic can be found in  the **SFS** library (see  [SamplerFeedbackStreaming.h](SFS/SamplerFeedbackStreaming.h)), which abstracts the creation of streaming resources and heaps while internally managing feedback resources, file I/O, and GPU memory mapping.
 
 The technique works as follows:
 
@@ -211,53 +213,36 @@ float4 psFB(VS_OUT input) : SV_TARGET0
 ## 4. Process Feedback
 Sampler Feedback resources are opaque, and must be *Resolved* before interpretting on the CPU.
 
-Resolving feedback for one resource is inexpensive, but adds up when there are 1000 objects. Expanse has a configurable time limit for the amount of feedback resolved each frame. The "FB" shaders are only used for a subset of resources such that the amount of feedback produced can be resolved within the time limit. The time limit is managed by the application, not by the TileUpdateManager library, by keeping a running average of resolve time as reported by GPU timers.
+Resolving feedback for one resource is inexpensive, but adds up when there are 1000s of objects. Expanse has a configurable time limit for the amount of feedback resolved each frame. Feedback-enabled shaders are only used for a subset of resources such that the amount of feedback produced can be resolved within the time limit. You can find the time limit estimation, the eviction optimization, and the request to gather sampler feedback by searching [Scene.cpp](src/Scene.cpp) for the following:
 
-As an optimization, Expanse tells streaming resources to evict all tiles if they are behind the camera. This could potentially be improved to include any object not in the view frustum.
-
-You can find the time limit estimation, the eviction optimization, and the request to gather sampler feedback by searching [Scene.cpp](src/Scene.cpp) for the following:
-
-- **DetermineMaxNumFeedbackResolves** determines how many resources to gather feedback for
-- **QueueEviction** tell runtime to evict tiles for this resource (as soon as possible)
-- **SetFeedbackEnabled** results in 2 actions:
-    1. tell the runtime to collect feedback for this object via TileUpdateManager::QueueFeedback(), which results in clearing and resolving the feedback resource for this resource for this frame
+- SFSManager **GetGpuTexelsPerMs()** provides a metric to help the application decide how many resources to request feedback from, based on the resource dimensions
+- SFSResource **QueueEviction** tells the runtime to evict all tiles for this resource, e.g. if the object is outside the view frustum or far enough away as to not need higher resolution texture data (determined with an estimate of on-screen area)
+- SceneObject **SetFeedbackEnabled** results in 2 actions:
+    1. tell the runtime to collect feedback for this object via SFSResource::QueueFeedback()
     2. use the feedback-enabled pixel shader for this object
 
 ## 5. Determine Which Tiles to Load & Evict
 The resolved Min mip feedback tells us the minimum mip tile that should be loaded. The min mip feedback is traversed, updating an internal reference count for each tile. If a tile previously was unused (ref count = 0), it is queued for loading from the bottom (highest mip) up. If a tile is not needed for a particular region, its ref count is decreased (from the top down). When its ref count reaches 0, it might be ready to evict.
 
-Data structures for tracking reference count, residency state, and heap usage can be found in [StreamingResource.cpp](TileUpdateManager/StreamingResource.cpp) and [StreamingResource.h](TileUpdateManager/StreamingResource.h), look for TileMappingState. This class also has methods for interpreting the feedback buffer (ProcessFeedback) and updating the residency map (UpdateMinMipMap), which execute concurrently in separate CPU threads.
-
-```cpp
-class TileMappingState
-{
-public:
-    // see file for method declarations
-private:
-    TileLayer<BYTE> m_resident;
-    TileLayer<UINT32> m_refcounts;
-    TileLayer<UINT32> m_heapIndices;
-};
-TileMappingState m_tileMappingState;
-```
+Data structures for tracking reference count, residency state, and heap usage can be found in [ResourceBase.cpp](SFS/ResourceBase.cpp) and [ResourceBase.h](SFS/ResourceBase.h), look for TileMappingState. This class also has methods for interpreting the feedback buffer (ProcessFeedback) and updating the residency map (UpdateMinMipMap), which execute concurrently in separate CPU threads.
 
 Tiles can only be evicted if there are no lower-mip-level tiles that depend on them, e.g. a mip 1 tile may have four mip 0 tiles "above" it in the mip hierarchy, and may only be evicted if all 4 of those tiles have also been evicted. The ref count helps us determine this dependency.
 
 A tile also cannot be evicted if it is being used by an outstanding draw command. We prevent this by  delaying evictions a frame or two depending on swap chain buffer count (i.e. double or triple buffering). If a tile is needed before the eviction delay completes, the tile is simply rescued from the pending eviction data structure instead of being re-loaded.
 
-The mechanics of loading, mapping, and unmapping tiles is all contained within the DataUploader class, which depends on a [FileStreamer](TileUpdateManager/FileStreamer.h) class to do the actual tile loads. The latter implementation ([FileStreamerReference](TileUpdateManager/FileStreamerReference.h)) can easily be exchanged with DirectStorage for Windows.
+The mechanics of loading, mapping, and unmapping tiles is all contained within the DataUploader class, which depends on a [FileStreamer](SFS/FileStreamer.h) class to do the actual tile loads.
 
 ### 6. Update Residency Map
 
 Because textures are only partially resident, we only want the pixel shader to sample resident portions. Sampling texels that are not physically mapped that returns 0s, resulting in undesirable visual artifacts. To prevent this, we clamp all sampling operations based on a **residency map**. The residency map is relatively tiny: for a 16k x 16k BC7 texture, which would take 350MB of GPU memory, we only need a 4KB residency map. Note that the lowest-resolution "packed" mips are loaded for all objects, so there is always something available to sample. See also [GetResourceTiling](https://docs.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-getresourcetiling).
 
-When a texture tile has been loaded or evicted by TileUpdateManager, it updates the corresponding residency map. The residency map is an application-generated representation of the minimum mip available for each region in the texture, and is described in the [Sample Feedback spec](https://microsoft.github.io/DirectX-Specs/d3d/SamplerFeedback.html) as follows:
+When a texture tile has been loaded or evicted by SFSManager, it updates the corresponding residency map. The residency map is an application-generated representation of the minimum mip available for each region in the texture, and is described in the [Sample Feedback spec](https://microsoft.github.io/DirectX-Specs/d3d/SamplerFeedback.html) as follows:
 
 ```
 The MinMip map represents per-region mip level clamping values for the tiled texture; it represents what is actually loaded.
 ```
 
-Below, the Visualization mode was set to "Color = Mip" and labels were added. TileUpdateManager processes the Min Mip Feedback (left window in top right), uploads and evicts tiles to form a Residency map, which is a proper min-mip-map (right window in top right). The contents of memory can be seen in the partially resident mips along the bottom (black is not resident). The last 3 mip levels are never evicted because they are packed mips (all fit within a 64KB tile). In this visualization mode, the colors of the texture on the bottom correspond to the colors of the visualization windows in the top right. Notice how the resident tiles do not exactly match what feedback says is required.
+Below, the Visualization mode was set to "Color = Mip" and labels were added. SFSManager processes the Min Mip Feedback (left window in top right), uploads and evicts tiles to form a Residency map, which is a proper min-mip-map (right window in top right). The contents of memory can be seen in the partially resident mips along the bottom (black is not resident). The last 3 mip levels are never evicted because they are packed mips (all fit within a 64KB tile). In this visualization mode, the colors of the texture on the bottom correspond to the colors of the visualization windows in the top right. Notice how the resident tiles do not exactly match what feedback says is required.
 ![Expanse UI showing feedback and residency maps](./readme-images/labels.jpg "Expanse UI showing Min Mip Feedback, Residency Map, and Texture Mips (labels added)")
 
 To reduce GPU memory, a single combined buffer contains all the residency maps for all the resources. The pixel shader samples the corresponding residency map to clamp the sampling function to the minimum available texture data available, thereby avoiding sampling tiles that have not been mapped.
@@ -286,17 +271,17 @@ The sampling operation is clamped to the minimum mip resident (mipLevel).
 
 ## 7. Putting it all Together
 
-There is some work that needs to be done before drawing objects that use feedback (clearing feedback resources), and some work that needs to be done after (resolving feedback resources). TileUpdateManager creates theses commands, but does not execute them. Each frame, these command lists must be built and submitted with application draw commands, which you can find just before the call to Present() in [Scene.cpp](src/Scene.cpp) as follows:
+There is some work that needs to be done before drawing objects that use feedback (clearing feedback resources), and some work that needs to be done after (resolving feedback resources). SFSManager creates these commands, but does not execute them. Each frame, a command list must be built and submitted with the application draw commands, which you can find just before the call to Present() in [Scene.cpp](src/Scene.cpp) as follows:
 
 ```cpp
-auto commandLists = m_pTileUpdateManager->EndFrame();
+auto pCommandList = m_pSFSManager->EndFrame(minmipmapDescriptor);
 
-ID3D12CommandList* pCommandLists[] = { commandLists.m_beforeDrawCommands, m_commandList.Get(), commandLists.m_afterDrawCommands };
-        m_commandQueue->ExecuteCommandLists(_countof(pCommandLists), pCommandLists);
+ID3D12CommandList* pCommandLists[] = { m_commandList.Get(), pCommandList };
+
+m_commandQueue->ExecuteCommandLists(_countof(pCommandLists), pCommandLists);
 ```
 
 # Known issues
-* GPU feedback time does not appear correct on AMD 780M (and others?) - compare to disabling updates in the UI.
 * On some architectures (AMD 780M) GPU feedback is not stable frame-to-frame when there is no motion.
 * full-screen with multi-gpu or remote desktop is not borderless
 * entering full screen in a multi-gpu system moves the window to a monitor attached to the GPU by design. However, if the window starts on a different monitor, it "disappears" on the first maximization. Hit *escape* then maximize again, and it should work fine.
