@@ -84,7 +84,7 @@ void SFS::ProcessFeedbackThread::Start()
             UINT signalCounter = 0;
 
             // limit the number of DS Enqueues (==tiles) between signals
-            constexpr UINT uploadsRequestedMax2 = 192;
+            constexpr UINT uploadsRequestedMax = 192;
 
             while (m_threadRunning)
             {
