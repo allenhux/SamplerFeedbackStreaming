@@ -11,9 +11,12 @@
 #include "FileStreamerReference.h"
 #include "FileStreamerDS.h"
 #include "SFSHeap.h"
-#include "ProcessFeedbackThread.h"
-#include "ManagerBase.h"
 #include "ProcessFeedbackThread.h" // for GroupFlushResources
+#include "ManagerBase.h"
+
+// set to enable unmapping of evicted tiles.
+// reduces bandwidth 25-30% (bad), can decreases or increase latency (+10% to -30%)
+#define ENABLE_UNMAP 0
 
 //=============================================================================
 // severely limited SFSManager interface
@@ -279,6 +282,7 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
     // fenceMonitorThread will wait for the copy fence to become valid before progressing state
     in_updateList.m_executionState = UpdateList::State::STATE_SUBMITTED;
 
+#if (0 == ENABLE_UNMAP)
     // FIXME NOTE: if not unmapping evictions, then bypass the mapping thread for evict-only updatelists
     if ((0 == in_updateList.GetNumStandardUpdates()) && (0 != in_updateList.GetNumEvictions()))
     {
@@ -286,8 +290,10 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
         in_updateList.m_mappingFenceValid = true;
         in_updateList.m_executionState = UpdateList::State::STATE_MAP_PENDING;
     }
-    else // add to mapping thread before starting the copy (because DS::Submit can block)
+    else
+#endif
     {
+        // add to mapping thread before starting the copy (because DS::Submit can block)
         m_mappingTasks.GetWriteableValue() = &in_updateList;
         m_mappingTasks.Commit();
         m_mappingFlag.Set();
@@ -380,7 +386,7 @@ void SFS::DataUploader::FenceMonitorThread()
                 (m_mappingFence->GetCompletedValue() >= updateList.m_mappingFenceValue))
             {
 #if 0
-                // NOTE: dead code. currently not un-mapping tiles
+                // NOTE: dead code. all eviction work is done before unmapping7
 
                 // notify evictions
                 if (updateList.GetNumEvictions())
@@ -515,21 +521,43 @@ void SFS::DataUploader::MappingThread()
         updateList.m_mappingFenceValue = m_mappingFenceValue;
         updateList.m_mappingFenceValid = true;
 
-#if 0
-        // NOTE: dead code. currently not un-mapping tiles
+#if ENABLE_UNMAP
+        UINT bits{ 0 };
+        if (updateList.GetNumStandardUpdates()) { bits |= 1; }
+        if (updateList.GetNumEvictions()) { bits |= 2; }
 
-        // unmap tiles that are being evicted
-        if (updateList.GetNumEvictions())
+        switch(bits)
         {
-            m_mappingUpdater.UnMap(GetMappingQueue(), updateList.m_pResource->GetTiledResource(), updateList.m_evictCoords);
-
+        case 1: // only mapping
+            m_mappingUpdater.Map(GetMappingQueue(),
+                updateList.m_pResource->GetTiledResource(),
+                updateList.m_pResource->GetHeap()->GetHeap(),
+                updateList.m_coords, updateList.m_heapIndices);
+            break;
+        case 2: // only unmapping
+            m_mappingUpdater.UnMap(GetMappingQueue(),
+                updateList.m_pResource->GetTiledResource(),
+                updateList.m_evictCoords);
             // skip the uploading state if no uploads
             if (0 == updateList.GetNumStandardUpdates())
             {
                 updateList.m_executionState = UpdateList::State::STATE_MAP_PENDING;
             }
+            break;
+        case 3: // both mapping and unmapping
+            m_mappingUpdater.Both(GetMappingQueue(),
+                updateList.m_pResource->GetTiledResource(),
+                updateList.m_pResource->GetHeap()->GetHeap(),
+                updateList.m_coords,
+                updateList.m_evictCoords,
+                updateList.m_heapIndices);
+            break;
+        case 0: // upload packed mips (no mapping)
+        default:
+            updateList.m_pResource->MapPackedMips(GetMappingQueue());
+            updateList.m_executionState = UpdateList::State::STATE_PACKED_MAPPING;
         }
-#endif
+#else
 
         // map standard tiles
         // can upload and evict in a single UpdateList
@@ -545,7 +573,6 @@ void SFS::DataUploader::MappingThread()
         {
             ASSERT(0);
         }
-
         // no uploads or evictions? must be mapping packed mips
         else if (0 == updateList.GetNumEvictions())
         {
@@ -553,7 +580,7 @@ void SFS::DataUploader::MappingThread()
 
             updateList.m_executionState = UpdateList::State::STATE_PACKED_MAPPING;
         }
-
+#endif
         if (mapLimit <= numMaps)
         {
             numMaps = 0;

@@ -28,6 +28,11 @@ namespace SFS
         void UnMap(ID3D12CommandQueue* in_pCommandQueue, ID3D12Resource* in_pResource,
             const std::vector<D3D12_TILED_RESOURCE_COORDINATE>& in_coords);
 
+        void Both(ID3D12CommandQueue* in_pCommandQueue, ID3D12Resource* in_pResource, ID3D12Heap* in_pHeap,
+            const std::vector<D3D12_TILED_RESOURCE_COORDINATE>& in_map,
+            const std::vector<D3D12_TILED_RESOURCE_COORDINATE>& in_unmap,
+            const std::vector<UINT>& in_indices);
+
         UINT GetMaxTileMappingUpdatesPerApiCall() const { return m_maxTileMappingUpdatesPerApiCall; }
     private:
         const UINT m_maxTileMappingUpdatesPerApiCall;
