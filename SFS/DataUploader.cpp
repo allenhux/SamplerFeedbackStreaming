@@ -15,7 +15,7 @@
 #include "ManagerBase.h"
 
 // set to enable unmapping of evicted tiles.
-// reduces bandwidth 25-30% (bad), can decreases or increase latency (+10% to -30%)
+// reduces bandwidth 25-30% (bad), can decrease or increase latency (+10% to -30%)
 #define ENABLE_UNMAP 0
 
 //=============================================================================
@@ -538,11 +538,9 @@ void SFS::DataUploader::MappingThread()
             m_mappingUpdater.UnMap(GetMappingQueue(),
                 updateList.m_pResource->GetTiledResource(),
                 updateList.m_evictCoords);
-            // skip the uploading state if no uploads
-            if (0 == updateList.GetNumStandardUpdates())
-            {
-                updateList.m_executionState = UpdateList::State::STATE_MAP_PENDING;
-            }
+            updateList.m_mappingFenceValue--; // set to previously signaled state
+            // skip the uploading state when no uploads
+            updateList.m_executionState = UpdateList::State::STATE_MAP_PENDING;
             break;
         case 3: // both mapping and unmapping
             m_mappingUpdater.Both(GetMappingQueue(),

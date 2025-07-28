@@ -118,6 +118,12 @@ namespace SFS
         // return true if residency changed
         bool ProcessFeedback(UINT64 in_frameFenceCompletedValue);
 
+        // returns true if evictall was set, and does the eviction
+        // in this case, no feedback to process
+        bool EvictAll();
+
+        void StepDelayed() { return m_delayedEvictions.NextFrame(); }
+
         // try to load/evict tiles.
         // returns # tiles requested for upload
         // re-uses or allocates updatelist
@@ -291,6 +297,7 @@ namespace SFS
             bool Rescue(const TileMappingState& in_tileMappingState);
 
             // total # tiles being tracked
+            // FIXME: would like this to be O(1)
             bool HasDelayedWork() const
             {
                 ASSERT(m_mappings.size());

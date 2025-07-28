@@ -49,14 +49,7 @@ SFS::ProcessFeedbackThread::ProcessFeedbackThread(ManagerPFT* in_pSFSManager,
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 SFS::ProcessFeedbackThread::~ProcessFeedbackThread()
-{
-    // delete resources that were in the progress of deletion when the thread was stopped
-    for (auto p : m_flushResources.Acquire())
-    {
-        delete p;
-    }
-    m_flushResources.Release();
-}
+{}
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -88,41 +81,14 @@ void SFS::ProcessFeedbackThread::Start()
 
             while (m_threadRunning)
             {
-                bool newFrame = false;
                 UINT64 frameFenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
 
                 // only look for new or to-delete resources once per frame
                 if (previousFrameFenceValue != frameFenceValue)
                 {
                     previousFrameFenceValue = frameFenceValue;
-                    newFrame = true;
 
-                    // check for new resources, which probably need to load pack mips
-                    if (m_newResourcesStaging.Size())
-                    {
-                        // grab them and release the lock quickly
-                        std::vector<ResourceBase*> tmpResources;
-                        m_newResourcesStaging.Swap(tmpResources);
-                        // accumulate because maybe hasn't been emptied from last time
-                        m_newResources.insert(m_newResources.end(), tmpResources.begin(), tmpResources.end());
-                    }
-
-                    // check for resources where the application has called QueueFeedback() or QueueEviction()
-                    if (m_pendingResourceStaging.Size())
-                    {
-                        // grab them and release the lock quickly
-                        std::set<ResourceBase*> tmpResources;
-                        m_pendingResourceStaging.Swap(tmpResources);
-                        // accumulate because maybe hasn't been emptied from last time
-                        m_delayedResources.insert(m_delayedResources.end(), tmpResources.begin(), tmpResources.end());
-                    }
-
-                    // compare active resources to resources that are to be removed
-                    // NOTE: doing this before InitPackedMips and sharing with ResidencyThread
-                    //       as m_newResources may contain resources that have not been
-                    //       propagated to residency thread
-                    CheckFlushResources();
-
+                    auto feedbackTime = m_cpuTimer.GetTicks();
                     signalCounter = 0;
 
                     // flush uploads from last frame
@@ -132,7 +98,98 @@ void SFS::ProcessFeedbackThread::Start()
                         uploadsRequested = 0;
                         signalCounter++; // prevents "storms" of submits
                     }
-                }
+
+                    // check for new resources, which probably need to load pack mips
+                    if (m_newResourcesStaging.Size())
+                    {
+                        // grab them and release the lock quickly
+                        std::vector<ResourceBase*> tmpResources;
+                        m_newResourcesStaging.Swap(tmpResources);
+
+                        if (m_newResources.empty())
+                        {
+                            m_newResources.swap(tmpResources);
+                        }
+                        else // accumulate when non-empty
+                        {
+                            m_newResources.insert(m_newResources.end(), tmpResources.begin(), tmpResources.end());
+                        }                        
+                    }
+
+                    // compare active resources to resources that are to be removed
+                    // NOTE: doing this before InitPackedMips and sharing with ResidencyThread
+                    //       as m_newResources may contain resources that have not been
+                    //       propagated to residency thread
+                    CheckFlushResources();
+
+                    // any evicted tile immediately removed residency map asap
+                    // FIXME: would like to not change residency until later
+                    std::set<ResourceBase*> residencyChanged;
+
+                    // handle delayed evictions
+                    for (auto i = m_delayedResources.begin(); i != m_delayedResources.end();)
+                    {
+                        auto pResource = *i;
+
+                        pResource->StepDelayed();
+
+                        if (pResource->HasPendingWork())
+                        {
+                            m_pendingResources.insert(pResource);
+                        }
+
+                        if (pResource->HasDelayedWork())
+                        {
+                            i++;
+                        }
+                        else
+                        {
+                            i = m_delayedResources.erase(i);
+                        }
+                    }
+
+                    // check for resources where the application has called QueueFeedback() or QueueEviction()
+                    if (m_queuedResourceStaging.Size())
+                    {
+                        // grab them and release the lock quickly
+                        std::set<ResourceBase*> tmpResources;
+                        m_queuedResourceStaging.Swap(tmpResources);
+
+                        // bucket these into pending or delayed
+                        for (auto pResource : tmpResources)
+                        {
+                            if (pResource->EvictAll())
+                            {
+                                m_delayedResources.insert(pResource);
+                                residencyChanged.insert(pResource);
+                            }
+                            else
+                            {
+                                // possible for frame to change while processing feedback
+                                if (pResource->ProcessFeedback(m_pSFSManager->GetFrameFenceCompletedValue()))
+                                {
+                                    residencyChanged.insert(pResource);
+                                }
+
+                                // resource may have loads or evictions to process asap
+                                if (pResource->HasPendingWork())
+                                {
+                                    m_pendingResources.insert(pResource);
+                                }
+
+                                // does the resource have evictions scheduled for the future?
+                                if (pResource->HasDelayedWork())
+                                {
+                                    m_delayedResources.insert(pResource);
+                                }
+                            }
+                        } // end loop over queued resources
+                    } // end if queued resources
+
+                    m_dataUploader.AddResidencyChanged(std::move(residencyChanged));
+
+                    m_processFeedbackTime += (m_cpuTimer.GetTicks() - feedbackTime);
+                } // end new frame
 
                 // prioritize loading packed mips, as objects shouldn't be displayed until packed mips load                
                 // InitPackedMips() must be called on every resource that needs to load packed mips
@@ -159,79 +216,38 @@ void SFS::ProcessFeedbackThread::Start()
                     m_newResources.resize(num);
                 } // end loop over new resources
 
-                if (newFrame)
-                {
-                    // Once per frame: process feedback buffers
-                    std::set<ResourceBase*> residencyChanged;
-
-                    auto feedbackTime = m_cpuTimer.GetTicks();
-
-                    for (auto i = m_delayedResources.begin(); i != m_delayedResources.end();)
-                    {
-                        auto pResource = *i;
-
-                        // fairly frequent, in practice, for frame to change while processing feedback
-                        if (pResource->ProcessFeedback(m_pSFSManager->GetFrameFenceCompletedValue()))
-                        {
-                            residencyChanged.insert(pResource);
-                        }
-
-                        // resource may now have loads to process asap and evictions scheduled for now or the future
-
-                        if (pResource->HasPendingWork())
-                        {
-                            m_pendingResources.insert(pResource);
-                        }
-
-                        if (pResource->HasDelayedWork())
-                        {
-                            i++;
-                        }
-                        else
-                        {
-                            i = m_delayedResources.erase(i);
-                        }
-                    } // end loop over active resources
-
-                    m_dataUploader.AddResidencyChanged(std::move(residencyChanged));
-
-                    m_processFeedbackTime += (m_cpuTimer.GetTicks() - feedbackTime);
-                } // end if new frame
-
                 // push uploads and evictions for stale resources
                 if (m_pendingResources.size())
                 {
+                    auto processingTime = m_cpuTimer.GetTicks();
+
                     for (auto i = m_pendingResources.begin(); i != m_pendingResources.end();)
                     {
+                        if (!(m_dataUploader.GetNumUpdateListsAvailable() && m_threadRunning))
+                        {
+                            break;
+                        }
+
                         ResourceBase* pResource = *i;
 
-                        if (m_dataUploader.GetNumUpdateListsAvailable() && m_threadRunning) // don't add work while exiting
+                        UpdateList* pUpdateList = nullptr;
+
+                        // tiles that are "loading" can't be evicted until loads complete
+                        pResource->QueuePendingTileEvictions(pUpdateList);
+
+                        uploadsRequested += pResource->QueuePendingTileLoads(pUpdateList);
+
+                        if (pUpdateList)
                         {
-                            auto processingTime = m_cpuTimer.GetTicks();
+                            m_pSFSManager->SubmitUpdateList(*pUpdateList);
+                        }
 
-                            UpdateList* pUpdateList = nullptr;
-
-                            // tiles that are "loading" can't be evicted. as soon as they arrive, they can be.
-                            pResource->QueuePendingTileEvictions(pUpdateList);
-
-                            if (0 == m_newResources.size()) // load packed mips before loading other tiles
-                            {
-                                uploadsRequested += pResource->QueuePendingTileLoads(pUpdateList);
-                            }
-
-                            if (pUpdateList)
-                            {
-                                m_pSFSManager->SubmitUpdateList(*pUpdateList);
-                            }
-
-                            // Limit the # of DS Enqueues (== # tiles) between signals
-                            if ((uploadsRequested > uploadsRequestedMax) && (signalCounter < signalCounterMax))
-                            {
-                                SignalFileStreamer();
-                                uploadsRequested = 0;
-                                signalCounter++; // prevents "storms" of submits
-                            }
-                            m_processFeedbackTime += (m_cpuTimer.GetTicks() - processingTime);
+                        // Limit the # of DS Enqueues (== # tiles) between signals
+                        if ((uploadsRequested > uploadsRequestedMax) && (signalCounter < signalCounterMax))
+                        {
+                            SignalFileStreamer();
+                            uploadsRequested = 0;
+                            signalCounter++; // prevents "storms" of submits
                         }
 
                         if (pResource->HasPendingWork()) // still have work to do?
@@ -240,14 +256,12 @@ void SFS::ProcessFeedbackThread::Start()
                         }
                         else
                         {
-                            // NOTE: resource removed from pending, but may have updatelists depending on it or
-                            //       have a change in residency state. Residency thread will hold on to these
-                            //       resources, which were shared with it above, but may not be shared next frame
-
+                            // NOTE: resource removed from pending, but may have updatelists in flight
                             i = m_pendingResources.erase(i);
                         }
-                    }
-                } // end loop over pending resources
+                    } // end loop over pending resources
+                    m_processFeedbackTime += (m_cpuTimer.GetTicks() - processingTime);
+                } // end if pending resources
 
                 // nothing to do? wait for next frame
                 // also, can't do work without updatelists. might get one before end of frame, though
@@ -310,7 +324,7 @@ void SFS::ProcessFeedbackThread::SharePendingResources(std::set<ResourceBase*> i
 {
     // ideally, pending resources from SFSManager gets passed by value directly to ProcessFeedbackThread
     // otherwise, accumulate with prior resources
-    auto& v = m_pendingResourceStaging.Acquire();
+    auto& v = m_queuedResourceStaging.Acquire();
     if (0 == v.size())
     {
         v.swap(in_resources);
@@ -319,7 +333,7 @@ void SFS::ProcessFeedbackThread::SharePendingResources(std::set<ResourceBase*> i
     {
         v.insert(in_resources.begin(), in_resources.end());
     }
-    m_pendingResourceStaging.Release();
+    m_queuedResourceStaging.Release();
 }
 
 //-----------------------------------------------------------------------------
@@ -378,6 +392,7 @@ void SFS::ProcessFeedbackThread::CheckFlushResources()
         // remove from my vectors
         ContainerRemove(m_delayedResources, flushResources);
         ContainerRemove(m_pendingResources, flushResources);
+        ContainerRemove(m_queuedResourceStaging.Acquire(), flushResources); m_queuedResourceStaging.Release();
 
         // tell residency thread there's work to do
         m_flushResources.SetFlag(GroupFlushResources::Flags::ResidencyThread);

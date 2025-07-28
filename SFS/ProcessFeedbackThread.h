@@ -87,7 +87,7 @@ namespace SFS
         std::vector<ResourceBase*> m_newResources;
 
         // resources with any pending work, including evictions scheduled multiple frames later
-        std::list<ResourceBase*> m_delayedResources;
+        std::set<ResourceBase*> m_delayedResources;
 
         // resources that need tiles loaded/evicted asap
         std::set<ResourceBase*> m_pendingResources;
@@ -96,7 +96,7 @@ namespace SFS
         LockedContainer<std::vector<ResourceBase*>> m_newResourcesStaging;
 
         // resources that have feedback queued
-        LockedContainer<std::set<ResourceBase*>> m_pendingResourceStaging;
+        LockedContainer<std::set<ResourceBase*>> m_queuedResourceStaging;
 
         // Resources to delete. Verify other threads (Residency, DataUploader) aren't using them first.
         // this is shared with ResidencyThread

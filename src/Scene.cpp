@@ -1934,11 +1934,18 @@ bool Scene::Draw()
     Resize();
 
 #if 0
-    m_args.m_cameraAnimationRate = .1f;
-    // TEST: creation/deletion and thread safety
-    if (m_frameNumber < 1000)
-    m_args.m_numObjects = 2 + (rand() * (m_args.m_maxNumObjects-2)) / RAND_MAX;
-    //m_args.m_numObjects = 1 + (m_frameNumber & 1);
+    {
+        static UINT c = 0;
+        if ((LoadingThread::Idle == m_loadingThreadState) && (c < 100))
+        {
+            c++;
+            m_args.m_cameraAnimationRate = .1f;
+            // TEST: creation/deletion and thread safety
+            m_args.m_numObjects = 2 + (rand() * (m_args.m_maxNumObjects - 2)) / RAND_MAX;
+            //m_args.m_numObjects = 1 + (m_frameNumber & 1);
+
+        }
+    }
 #endif
 
     // load more spheres?
