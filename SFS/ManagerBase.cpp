@@ -87,11 +87,20 @@ SFS::ManagerBase::~ManagerBase()
             delete p;
         }
     }
-
-    for (auto p : m_streamingHeaps)
+    for (auto p : m_streamingHeaps.Acquire())
     {
         delete p;
     }
+    m_streamingHeaps.Release();
+}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void SFS::ManagerBase::RemoveHeap(Heap* in_pHeap)
+{
+    auto& v = m_streamingHeaps.Acquire();
+    std::erase(v, in_pHeap);
+    m_streamingHeaps.Release();
 }
 
 //-----------------------------------------------------------------------------
@@ -258,29 +267,6 @@ void SFS::ManagerBase::FlushResourcesInternal()
 
         ContainerRemove(m_pendingResources, removeResources);
         ContainerRemove(m_packedMipTransitionResources, removeResources);
-    }
-}
-
-//-----------------------------------------------------------------------------
-// destroy heaps that are no longer depended upon
-// FIXME: Heaps need refcounting so they aren't destroyed when objects don't have packed mips
-// FIXME: test this?
-//-----------------------------------------------------------------------------
-void SFS::ManagerBase::RemoveHeaps()
-{
-    for (UINT i = 0; i < m_streamingHeaps.size();)
-    {
-        auto p = m_streamingHeaps[i];
-        if (p->GetDestroyable() && (0 == p->GetAllocator().GetAllocated()))
-        {
-            delete p;
-            m_streamingHeaps[i] = m_streamingHeaps.back();
-            m_streamingHeaps.pop_back();
-        }
-        else
-        {
-            i++;
-        }
     }
 }
 

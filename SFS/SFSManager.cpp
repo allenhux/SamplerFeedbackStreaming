@@ -111,7 +111,10 @@ void SFS::Manager::Destroy()
 SFSHeap* SFS::Manager::CreateHeap(UINT in_sizeInMB)
 {
     auto pStreamingHeap = new SFS::Heap(this, m_dataUploader.GetMappingQueue(), in_sizeInMB);
-    m_streamingHeaps.push_back(pStreamingHeap);
+
+    m_streamingHeaps.Acquire().push_back(pStreamingHeap);
+    m_streamingHeaps.Release();
+
     return (SFSHeap*)pStreamingHeap;
 }
 
@@ -307,8 +310,6 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
     // stop tracking resources that have been Destroy()ed
     // must remove resources before calling AllocateSharedResidencyMap()
     RemoveResources();
-    // delete heaps that have been requested via SFSHeap::Destroy() and are no longer in use
-    RemoveHeaps();
 
     // if new StreamingResources have been created...
     if (m_newResources.Size())

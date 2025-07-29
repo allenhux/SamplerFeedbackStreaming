@@ -46,9 +46,10 @@ namespace SFS
         // used by ~ManagerBase(), UseDirectStorage(), and SetVisualizationMode()
         void Finish();
 
+        void RemoveHeap(Heap* in_pHeap);
+
         ManagerBase(const struct SFSManagerDesc& in_desc, ID3D12Device8* in_pDevice);
         virtual ~ManagerBase();
-
     protected:
         ComPtr<ID3D12Device8> m_device;
 
@@ -69,7 +70,7 @@ namespace SFS
 
         // track the heaps resources depend on
         // even after a call to Destroy, keep alive until dependent resources are deleted
-        std::vector<Heap*> m_streamingHeaps;
+        LockedContainer<std::vector<Heap*>> m_streamingHeaps;
 
         SFS::DataUploader m_dataUploader;
 
@@ -141,8 +142,7 @@ namespace SFS
         void FlushResourcesInternal();
         // remove resources from m_streamingResources after call to Destroy()
         void RemoveResources();
-        // delete heaps that have been requested via Destroy()
-        void RemoveHeaps();
+
         //-------------------------------------------
         // statistics
         //-------------------------------------------

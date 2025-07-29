@@ -19,7 +19,6 @@
 void SFS::Heap::Destroy()
 {
     m_destroy = true;
-    // FIXME: tell sfsmanager this can be destroyed
 }
 
 //-----------------------------------------------------------------------------
@@ -149,6 +148,9 @@ SFS::Heap::Heap(SFS::ManagerBase* in_pSfsManager,
 
 SFS::Heap::~Heap()
 {
+    ASSERT(0 == m_refCount);
+
+    m_pSfsManager->RemoveHeap(this);
     for (auto p : m_atlases)
     {
         delete p;

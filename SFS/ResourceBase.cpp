@@ -48,6 +48,8 @@ SFS::ResourceBase::ResourceBase(
     // there had better be standard mips, otherwise, why stream?
     ASSERT(m_maxMip);
 
+    m_pHeap->AddRef();
+
     // with m_maxMip and m_minMipMap, SFSManager will be able allocate/init the shared residency map
     UINT alignedMask = RESIDENCY_MAP_ALIGNMENT - 1;
     UINT alignedSize = (GetMinMipMapSize() + alignedMask) & ~alignedMask;
@@ -81,6 +83,7 @@ SFS::ResourceBase::~ResourceBase()
     {
         m_pHeap->GetAllocator().Free(m_packedMipHeapIndices);
     }
+    m_pHeap->DecRef();
 }
 
 //-----------------------------------------------------------------------------

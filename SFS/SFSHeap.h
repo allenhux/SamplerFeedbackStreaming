@@ -73,20 +73,27 @@ namespace SFS
         //-----------------------------------------------------------------
 
         Heap(class ManagerBase* in_pSFS, ID3D12CommandQueue* in_pQueue, UINT in_sizeInMB);
-        virtual ~Heap();
 
         // allocate atlases for a format. does nothing if format already has an atlas
         Atlas* AllocateAtlas(ID3D12CommandQueue* in_pQueue, const DXGI_FORMAT in_format);
 
         ID3D12Heap* GetHeap() const { return m_tileHeap.Get(); }
         SimpleAllocator& GetAllocator() { return m_heapAllocator; }
+
         bool GetDestroyable() const { return m_destroy; }
+        void AddRef() { m_refCount++; }
+        void DecRef() { m_refCount--; if (m_destroy && (0 == m_refCount)) { delete this; } }
     private:
+        friend ManagerBase;
+        virtual ~Heap();
+
+        std::atomic<UINT> m_refCount{ 0 }; // delete only after all dependent resources deleted
+
         SimpleAllocator m_heapAllocator;
 
         std::vector<SFS::Atlas*> m_atlases;
         ComPtr<ID3D12Heap> m_tileHeap; // heap to hold tiles resident in GPU memory
-        class ManagerBase* const m_pSfsManager{nullptr}; // used in debug mode to validate allocator
+        class ManagerBase* const m_pSfsManager{nullptr}; // used for lifetime allocation management
         bool m_destroy{ false }; // if true, can be deleted when allocator GetAllocated() == 0 
     };
 }
