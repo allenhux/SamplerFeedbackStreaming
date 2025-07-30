@@ -17,6 +17,7 @@ Base class for SFSResource
 
 #include "SamplerFeedbackStreaming.h"
 #include "InternalResources.h"
+#include "EvictionDelay.h"
 
 namespace SFS
 {
@@ -116,13 +117,7 @@ namespace SFS
         // call once per frame (as indicated e.g. by advancement of frame fence)
         // if a feedback buffer is ready, process it to generate lists of tiles to load/evict
         // return true if residency changed
-        bool ProcessFeedback(UINT64 in_frameFenceCompletedValue);
-
-        // returns true if evictall was set, and does the eviction
-        // in this case, no feedback to process
-        bool EvictAll();
-
-        void StepDelayed() { return m_delayedEvictions.NextFrame(); }
+        bool ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool& out_hasFutureFeedback);
 
         // try to load/evict tiles.
         // returns # tiles requested for upload
@@ -144,6 +139,8 @@ namespace SFS
         }
 
         bool InitPackedMips();
+
+        UINT32 GetRefCount(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) const { return m_tileMappingState.GetRefCount(in_coord); }
 
 #ifdef _DEBUG
         bool GetInitialized() { return (m_packedMipStatus >= PackedMipStatus::REQUESTED); }
@@ -244,7 +241,7 @@ namespace SFS
 
             std::vector<UINT32>& GetRefLayer(UINT s) { return m_refcounts[s].m_tiles; }
 
-            static const UINT InvalidIndex{ UINT(-1) };
+            static constexpr UINT InvalidIndex{ UINT(-1) };
         private:
             template<typename T> struct Layer
             {
@@ -271,48 +268,8 @@ namespace SFS
     private:
         // only using double-buffering for feedback history
         static constexpr UINT QUEUED_FEEDBACK_FRAMES = 2;
+        static constexpr UINT InvalidIndex{ UINT(-1) };
 
-        // do not immediately decmap:
-        // need to withhold until in-flight command buffers have completed
-        class EvictionDelay
-        {
-        public:
-            using Coords = std::vector<D3D12_TILED_RESOURCE_COORDINATE>;
-
-            EvictionDelay(UINT in_numSwapBuffers);
-
-            void Append(D3D12_TILED_RESOURCE_COORDINATE in_coord) { m_mappings.front().push_back(in_coord); }
-
-            Coords& GetReadyToEvict() { return m_mappings.back(); }
-
-            // FIXME: this is aspirational. it would also be cool if it looked later, to end() - swapchaincount.
-            bool GetResidencyChangeNeeded() const { return !m_mappings.front().empty(); }
-
-            void NextFrame();
-            void Clear();
-            void MoveAllToPending();
-
-            // drop pending evictions for tiles that now have non-zero refcount
-            // return true if tiles were rescued
-            bool Rescue(const TileMappingState& in_tileMappingState);
-
-            // total # tiles being tracked
-            // FIXME: would like this to be O(1)
-            bool HasDelayedWork() const
-            {
-                ASSERT(m_mappings.size());
-
-                auto end = std::prev(m_mappings.end());
-                for (auto i = m_mappings.begin(); i != end; i++)
-                {
-                    if (i->size()) { return true; }
-                }
-
-                return false;
-            }
-        private:
-            std::list<Coords> m_mappings;
-        };
         EvictionDelay m_delayedEvictions;
 
         std::vector<D3D12_TILED_RESOURCE_COORDINATE> m_pendingTileLoads;
@@ -353,6 +310,11 @@ namespace SFS
         // index to next min-mip feedback resolve target
         UINT m_readbackIndex{ 0 };
 
-        UINT m_residencyMapOffsetBase{ UINT(-1) };
+        UINT m_residencyMapOffsetBase{ InvalidIndex };
+
+        // returns true if evictall was set, and does the eviction
+        // in this case, no feedback to process
+        bool HandleEvictAll(UINT64 in_frameFenceCompletedValue);
+        UINT GetBestFeedbackIndex(UINT64 in_frameFenceCompletedValue, bool& out_hasFutureFeedback);
     };
 }

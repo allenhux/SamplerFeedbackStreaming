@@ -14,10 +14,6 @@
 #include "ProcessFeedbackThread.h" // for GroupFlushResources
 #include "ManagerBase.h"
 
-// set to enable unmapping of evicted tiles.
-// reduces bandwidth 25-30% (bad), can decrease or increase latency (+10% to -30%)
-#define ENABLE_UNMAP 0
-
 //=============================================================================
 // severely limited SFSManager interface
 //=============================================================================
@@ -283,6 +279,9 @@ void SFS::DataUploader::SubmitUpdateList(SFS::UpdateList& in_updateList)
     in_updateList.m_executionState = UpdateList::State::STATE_SUBMITTED;
 
 #if (0 == ENABLE_UNMAP)
+    ASSERT(0 == in_updateList.GetNumEvictions());
+#endif
+#if 0
     // FIXME NOTE: if not unmapping evictions, then bypass the mapping thread for evict-only updatelists
     if ((0 == in_updateList.GetNumStandardUpdates()) && (0 != in_updateList.GetNumEvictions()))
     {

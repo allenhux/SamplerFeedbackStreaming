@@ -122,71 +122,56 @@ void SFS::ProcessFeedbackThread::Start()
                     //       propagated to residency thread
                     CheckFlushResources();
 
-                    // any evicted tile immediately removed residency map asap
-                    // FIXME: would like to not change residency until later
-                    std::set<ResourceBase*> residencyChanged;
-
-                    // handle delayed evictions
-                    for (auto i = m_delayedResources.begin(); i != m_delayedResources.end();)
-                    {
-                        auto pResource = *i;
-
-                        pResource->StepDelayed();
-
-                        if (pResource->HasPendingWork())
-                        {
-                            m_pendingResources.insert(pResource);
-                        }
-
-                        if (pResource->HasDelayedWork())
-                        {
-                            i++;
-                        }
-                        else
-                        {
-                            i = m_delayedResources.erase(i);
-                        }
-                    }
-
                     // check for resources where the application has called QueueFeedback() or QueueEviction()
                     if (m_queuedResourceStaging.Size())
                     {
                         // grab them and release the lock quickly
-                        std::set<ResourceBase*> tmpResources;
-                        m_queuedResourceStaging.Swap(tmpResources);
-
-                        // bucket these into pending or delayed
-                        for (auto pResource : tmpResources)
+                        if (0 == m_delayedResources.size())
                         {
-                            if (pResource->EvictAll())
+                            m_queuedResourceStaging.Swap(m_delayedResources);
+                        }
+                        else
+                        {
+                            std::set<ResourceBase*> tmpResources;
+                            m_queuedResourceStaging.Swap(tmpResources);
+                            m_delayedResources.insert(tmpResources.begin(), tmpResources.end());
+                        }
+                    }
+
+                    if (m_delayedResources.size())
+                    {
+                        // any evicted tile immediately removed from residency map asap
+                        // FIXME: would like to not change residency until later
+                        std::set<ResourceBase*> residencyChanged;
+
+                        for (auto i = m_delayedResources.begin(); i != m_delayedResources.end();)
+                        {
+                            auto pResource = *i;
+                            bool hasFutureFeedback = false;
+                            auto fenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
+                            bool changed = pResource->ProcessFeedback(fenceValue, hasFutureFeedback);
+                            if (changed)
                             {
-                                m_delayedResources.insert(pResource);
                                 residencyChanged.insert(pResource);
                             }
-                            else
+                            if (pResource->HasPendingWork())
                             {
-                                // possible for frame to change while processing feedback
-                                if (pResource->ProcessFeedback(m_pSFSManager->GetFrameFenceCompletedValue()))
-                                {
-                                    residencyChanged.insert(pResource);
-                                }
-
-                                // resource may have loads or evictions to process asap
-                                if (pResource->HasPendingWork())
-                                {
-                                    m_pendingResources.insert(pResource);
-                                }
-
-                                // does the resource have evictions scheduled for the future?
-                                if (pResource->HasDelayedWork())
-                                {
-                                    m_delayedResources.insert(pResource);
-                                }
+                                m_pendingResources.insert(pResource);
                             }
-                        } // end loop over queued resources
-                    } // end if queued resources
-
-                    m_dataUploader.AddResidencyChanged(std::move(residencyChanged));
+                            if (hasFutureFeedback || pResource->HasDelayedWork())
+                            {
+                                i++; // check this resource again later
+                            }
+                            else // no future work for this resource
+                            {
+                                i = m_delayedResources.erase(i);
+                            }
+                        }
+                        if (residencyChanged.size())
+                        {
+                            m_dataUploader.AddResidencyChanged(std::move(residencyChanged));
+                        }
+                    } // end if queued or delayed work
 
                     m_processFeedbackTime += (m_cpuTimer.GetTicks() - feedbackTime);
                 } // end new frame

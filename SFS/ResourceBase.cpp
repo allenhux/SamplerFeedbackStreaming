@@ -237,68 +237,97 @@ bool SFS::ResourceBase::TileMappingState::GetAnyRefCount() const
 // idea of evictall is that the application knows the object is no longer visible (e.g. offscreen),
 // so no reason to draw it then read and process feedback to tell it what it already knows 
 //-----------------------------------------------------------------------------
-bool SFS::ResourceBase::EvictAll()
+bool SFS::ResourceBase::HandleEvictAll(UINT64 in_frameFenceCompletedValue)
 {
-    if (m_evictAll)
+    ASSERT(m_evictAll);
+    m_evictAll = false;
+
+    // has this resource already been zeroed? don't clear again, early exit
+    // future processing of feedback will set this to false if "changed"
+    if (m_refCountsZero)
     {
-        m_evictAll = false;
+        return false; // residency already maxMip
+    }
+    m_refCountsZero = true;
 
-        // has this resource already been zeroed? don't clear again, early exit
-        // future processing of feedback will set this to false if "changed"
-        if (m_refCountsZero)
-        {
-            return false; // residency already maxMip
-        }
-        m_refCountsZero = true;
-
-        // all prior feedback is irrelevant
-        for (auto& f : m_queuedFeedback)
+    // all /prior/ feedback is irrelevant
+    for (auto& f : m_queuedFeedback)
+    {
+        if (f.m_renderFenceForFeedback <= in_frameFenceCompletedValue)
         {
             f.m_feedbackQueued = false;
         }
-
-        // since we're evicting everything, don't need to loop over the reference count structure
-        // just set it all to max mip, then schedule eviction for any tiles that have refcounts
-
-        // set everything to max mip
-        memset(m_tileReferences.data(), m_maxMip, m_tileReferences.size());
-
-        // queue all resident tiles for eviction
-        for (INT s = m_maxMip - 1; s >= 0; s--)
-        {
-            bool layerChanged = false;
-
-            auto& l = m_tileMappingState.GetRefLayer(s); // directly access data for performance
-            UINT width = m_tileMappingState.GetWidth(s);
-
-            for (UINT i = 0; i < (UINT)l.size(); i++)
-            {
-                auto& refCount = l[i];
-                if (refCount)
-                {
-                    layerChanged = true;
-                    refCount = 0;
-                    m_delayedEvictions.Append(D3D12_TILED_RESOURCE_COORDINATE{ i % width, i / width, 0, (UINT)s });
-                }
-            }
-
-            // if no tiles had refcounts (to change to 0) on this mip layer, won't be any tiles on higher-res mip layers
-            if (!layerChanged)
-            {
-                break; // if refcount of all tiles on this layer = 0, early out
-            }
-        } // end loop over layers
-
-        // this would bypass the usual delay
-        // m_delayedEvictions.MoveAllToPending();
-
-        // abandon all pending loads - all refcounts are 0
-        m_pendingTileLoads.clear();
-
-        // FIXME? could reset the min mip map now, avoiding updateminmipmap via setresidencychanged. any chance of a race?
-        return true;
     }
-    return false;
+
+    // since we're evicting everything, don't need to loop over the reference count structure
+    // just set it all to max mip, then schedule eviction for any tiles that have refcounts
+
+    // set everything to max mip
+    memset(m_tileReferences.data(), m_maxMip, m_tileReferences.size());
+
+    // queue all resident tiles for eviction
+    for (INT s = m_maxMip - 1; s >= 0; s--)
+    {
+        bool layerChanged = false;
+
+        auto& l = m_tileMappingState.GetRefLayer(s); // directly access data for performance
+        UINT width = m_tileMappingState.GetWidth(s);
+
+        for (UINT i = 0; i < (UINT)l.size(); i++)
+        {
+            auto& refCount = l[i];
+            if (refCount)
+            {
+                layerChanged = true;
+                refCount = 0;
+                m_delayedEvictions.Append(D3D12_TILED_RESOURCE_COORDINATE{ i % width, i / width, 0, (UINT)s });
+            }
+        }
+
+        // if no tiles had refcounts (to change to 0) on this mip layer, won't be any tiles on higher-res mip layers
+        if (!layerChanged)
+        {
+            break; // if refcount of all tiles on this layer = 0, early out
+        }
+    } // end loop over layers
+
+    // abandon all pending loads - all refcounts are 0
+    m_pendingTileLoads.clear();
+
+    // FIXME? could reset the min mip map now, avoiding updateminmipmap via setresidencychanged. any chance of a race?
+    return true;
+}
+
+//------------------------------------------------------------------
+// determine if there is feedback to process
+// if there is more than one feedback ready to process (unlikely), only use the most recent one
+//------------------------------------------------------------------
+UINT SFS::ResourceBase::GetBestFeedbackIndex(UINT64 in_frameFenceCompletedValue, bool& out_hasFutureFeedback)
+{
+    UINT64 feedbackFence = 0;
+    UINT feedbackIndex = InvalidIndex;
+    for (UINT i = 0; i < (UINT)m_queuedFeedback.size(); i++)
+    {
+        auto& q = m_queuedFeedback[i];
+        if (q.m_feedbackQueued)
+        {
+            if (q.m_renderFenceForFeedback <= in_frameFenceCompletedValue)
+            {
+                if ((InvalidIndex == feedbackIndex) || (q.m_renderFenceForFeedback >= feedbackFence))
+                {
+                    feedbackFence = q.m_renderFenceForFeedback;
+                    feedbackIndex = i;
+                }
+                // this feedback is consumed, even if not ultimately used
+                q.m_feedbackQueued = false;
+            }
+            else
+            {
+                out_hasFutureFeedback = true;
+            }
+        }
+    }
+    return feedbackIndex;
 }
 
 //-----------------------------------------------------------------------------
@@ -309,36 +338,24 @@ bool SFS::ResourceBase::EvictAll()
 //            loads lower mip dependencies first
 // e.g. if we need tile 0,0,0 then 0,0,1 must have previously been loaded
 //-----------------------------------------------------------------------------
-bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
+bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool& out_hasFutureFeedback)
 {
-    // handle (some) pending evictions
+    // step delayed evictions forward in time
+    // FIXME: would like delayed evictions to return true swapchaincount frames before the end
     m_delayedEvictions.NextFrame();
 
-    bool residencyChanged = false;
+    // even if just working on delayed evictions, QueueFeedback() may have been called
+    UINT feedbackIndex = GetBestFeedbackIndex(in_frameFenceCompletedValue, out_hasFutureFeedback);
 
-    //------------------------------------------------------------------
-    // determine if there is feedback to process
-    // if there is more than one feedback ready to process (unlikely), only use the most recent one
-    //------------------------------------------------------------------
-    QueuedFeedback* pQueuedFeedback = nullptr;
-    UINT feedbackIndex = 0;
-    for (UINT i = 0; i < (UINT)m_queuedFeedback.size(); i++)
+    // FIXME? is it possible to have evictall for frame n, and feedback for frame n+1,
+    // but we didn't get around to evicting until frame n+1 or later, so missed feedback?
+    if (m_evictAll)
     {
-        auto& q = m_queuedFeedback[i];
-        if (q.m_feedbackQueued && (q.m_renderFenceForFeedback <= in_frameFenceCompletedValue))
-        {
-            // return the newest set first
-            if ((nullptr == pQueuedFeedback) || (pQueuedFeedback->m_renderFenceForFeedback > q.m_renderFenceForFeedback))
-            {
-                pQueuedFeedback = &q;
-                feedbackIndex = i;
-            }
-            q.m_feedbackQueued = false;
-        }
+        return HandleEvictAll(in_frameFenceCompletedValue);
     }
 
     // no feedback? huh.
-    if (nullptr == pQueuedFeedback)
+    if (InvalidIndex == feedbackIndex)
     {
         return false;
     }
@@ -346,6 +363,8 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
     //------------------------------------------------------------------
     // update the refcount of each tile based on feedback
     //------------------------------------------------------------------
+    bool residencyChanged = false;
+
     // any change, but not necessarily something requiring a residency change:
     bool changed = false;
     {
@@ -403,7 +422,7 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue)
         if (m_tileMappingState.GetAnyRefCount())
         {
             m_refCountsZero = false;
-            bool rescue = m_delayedEvictions.Rescue(m_tileMappingState);
+            bool rescue = m_delayedEvictions.Rescue(this);
             residencyChanged = residencyChanged || rescue;
         }
         else
@@ -487,7 +506,7 @@ Note that the multi-frame delay for evictions prevents allocation of an index th
 // note there are only tiles to evict after processing feedback, but it's possible
 // there was no UpdateList available at the time, so they haven't been evicted yet.
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::QueuePendingTileEvictions(UpdateList*& out_pUpdateList)
+void SFS::ResourceBase::QueuePendingTileEvictions([[maybe_unused]] UpdateList*& out_pUpdateList)
 {
     if (0 == m_delayedEvictions.GetReadyToEvict().size()) { return; }
 
@@ -538,13 +557,14 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UpdateList*& out_pUpdateList)
 
     // narrow the ready evictions to just the delayed evictions.
     pendingEvictions.resize(numDelayed);
-
+#if ENABLE_UNMAP
     if (evictions.size())
     {
         out_pUpdateList = m_pSFSManager->AllocateUpdateList(this);
         ASSERT(out_pUpdateList);
         out_pUpdateList->m_evictCoords.swap(evictions);
     }
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -693,87 +713,6 @@ bool SFS::ResourceBase::UpdateMinMipMap()
     }
 
     return changed;
-}
-
-//=============================================================================
-// class used to delay decmaps by a number of frames = # swap buffers
-// easy way to prevent decmapping an in-flight tile
-//=============================================================================
-SFS::ResourceBase::EvictionDelay::EvictionDelay(UINT in_numSwapBuffers)
-{
-    m_mappings.resize(in_numSwapBuffers);
-}
-
-//-----------------------------------------------------------------------------
-// step pending evictions once per frame
-//-----------------------------------------------------------------------------
-void SFS::ResourceBase::EvictionDelay::NextFrame()
-{
-    // move next-to-last vector to front of the list
-    m_mappings.splice(m_mappings.begin(), m_mappings, --m_mappings.end());
-    // append elements of first vector to end of last vector
-    m_mappings.back().insert(m_mappings.back().end(), m_mappings.front().begin(), m_mappings.front().end());
-    // clear first vector
-    m_mappings.front().clear();
-}
-
-//-----------------------------------------------------------------------------
-// dump all pending evictions. return heap indices to heap
-//-----------------------------------------------------------------------------
-void SFS::ResourceBase::EvictionDelay::Clear()
-{
-    for (auto& i : m_mappings)
-    {
-        i.clear();
-    }
-}
-
-void SFS::ResourceBase::EvictionDelay::MoveAllToPending()
-{
-    auto end = --m_mappings.end();
-    for (auto i = m_mappings.begin(); i != end; i++)
-    {
-        m_mappings.back().insert(m_mappings.back().end(), i->begin(), i->end());
-        i->clear();
-    }
-}
-
-//-----------------------------------------------------------------------------
-// drop pending evictions for tiles that now have non-zero refcount
-//-----------------------------------------------------------------------------
-bool SFS::ResourceBase::EvictionDelay::Rescue(const SFS::ResourceBase::TileMappingState& in_tileMappingState)
-{
-    bool rescued = false;
-
-    // note: it is possible even for the most recent evictions to have refcount > 0
-    // because a tile can be evicted then loaded again within a single ProcessFeedback() call
-    for (auto& evictions : m_mappings)
-    {
-        UINT numPending = (UINT)evictions.size();
-        if (numPending)
-        {
-            for (UINT i = 0; i < numPending;)
-            {
-                auto& c = evictions[i];
-                // on rescue, swap a later tile in and re-try the check
-                // this re-orders the queue, but we can tolerate that
-                // because the residency map is built bottom-up
-                if (in_tileMappingState.GetRefCount(c))
-                {
-                    numPending--;
-                    c = evictions[numPending];
-                }
-                else // refcount still 0, this tile may still be evicted
-                {
-                    i++;
-                }
-            }
-            if (numPending != evictions.size()) { rescued = true; }
-            evictions.resize(numPending);
-        }
-    }
-
-    return rescued;
 }
 
 //-----------------------------------------------------------------------------

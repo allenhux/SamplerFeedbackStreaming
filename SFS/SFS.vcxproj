@@ -85,6 +85,7 @@
   <ItemGroup>
     <ClInclude Include="BitVector.h" />
     <ClInclude Include="DataUploader.h" />
+    <ClInclude Include="EvictionDelay.h" />
     <ClInclude Include="FileStreamer.h" />
     <ClInclude Include="FileStreamerDS.h" />
     <ClInclude Include="FileStreamerReference.h" />
@@ -107,6 +108,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DataUploader.cpp" />
+    <ClCompile Include="EvictionDelay.cpp" />
     <ClCompile Include="FileStreamer.cpp" />
     <ClCompile Include="FileStreamerDS.cpp" />
     <ClCompile Include="FileStreamerReference.cpp" />

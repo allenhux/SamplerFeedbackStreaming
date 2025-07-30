@@ -6,6 +6,10 @@
 
 #pragma once
 
+// set to enable unmapping of evicted tiles.
+// reduces bandwidth 25-30% (bad), can decrease or increase latency (+10% to -30%)
+#define ENABLE_UNMAP 0
+
 #include <dstorage.h> // single creation point for factory. internal q for packed mips.
 
 #include "UpdateList.h"
