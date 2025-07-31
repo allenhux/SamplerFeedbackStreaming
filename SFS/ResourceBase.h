@@ -140,7 +140,7 @@ namespace SFS
 
         bool InitPackedMips();
 
-        UINT32 GetRefCount(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) const { return m_tileMappingState.GetRefCount(in_coord); }
+        UINT32 GetRefCount(UINT x, UINT y, UINT s) const { return m_tileMappingState.GetRefCount(x, y, s); }
 
 #ifdef _DEBUG
         bool GetInitialized() { return (m_packedMipStatus >= PackedMipStatus::REQUESTED); }
@@ -222,9 +222,10 @@ namespace SFS
             void SetResidency(UINT x, UINT y, UINT s, Residency in_residency) { m_resident[s](x, y, GetWidth(s)) = (BYTE)in_residency; }
             BYTE GetResidency(UINT x, UINT y, UINT s) const { return m_resident[s](x, y, GetWidth(s)); }
             UINT32& GetRefCount(UINT x, UINT y, UINT s) { return m_refcounts[s](x, y, GetWidth(s)); }
+            UINT32 GetRefCount(UINT x, UINT y, UINT s) const { return m_refcounts[s](x, y, GetWidth(s)); }
 
             void SetResidency(const D3D12_TILED_RESOURCE_COORDINATE& in_coord, Residency in_residency) { SetResidency(in_coord.X, in_coord.Y, in_coord.Subresource, in_residency); }
-            BYTE GetResidency(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) { return GetResidency(in_coord.X, in_coord.Y, in_coord.Subresource); }
+            BYTE GetResidency(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) const { return GetResidency(in_coord.X, in_coord.Y, in_coord.Subresource); }
             UINT32 GetRefCount(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) const { return m_refcounts[in_coord.Subresource](in_coord.X, in_coord.Y, GetWidth(in_coord.Subresource)); }
 
             UINT32& GetHeapIndex(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) { return m_heapIndices[in_coord.Subresource](in_coord.X, in_coord.Y, GetWidth(in_coord.Subresource)); }

@@ -53,7 +53,7 @@ bool SFS::EvictionDelay::Rescue(const SFS::ResourceBase* in_pResource)
                 // on rescue, swap a later tile in and re-try the check
                 // this re-orders the queue, but we can tolerate that
                 // because the residency map is built bottom-up
-                if (in_pResource->GetRefCount(c))
+                if (in_pResource->GetRefCount(c.x, c.y, c.s))
                 {
                     numPending--;
                     c = evictions[numPending];

@@ -50,7 +50,7 @@ namespace SFS
             return m_dataUploader.AllocateUpdateList((SFS::ResourceDU*)in_pStreamingResource);
         }
 
-        // called exclusively within ProcessFeedback
+        // called exclusively by InitPackedMips within ProcessFeedback
         void SubmitUpdateList(SFS::UpdateList& in_updateList)
         {
             m_dataUploader.SubmitUpdateList(in_updateList);
@@ -75,5 +75,9 @@ namespace SFS
             m_processFeedbackThread.ShareNewResources(std::move(v));
             m_packedMipTransitionResources.push_back(in_pResource);
         }
+
+#if (0 == ENABLE_UNMAP)
+        void AddEvictions(UINT n) { m_numTotalEvictions.fetch_add(n, std::memory_order_relaxed); }
+#endif
     };
 }

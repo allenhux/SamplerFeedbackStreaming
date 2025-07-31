@@ -18,11 +18,18 @@ namespace SFS
     class EvictionDelay
     {
     public:
-        using Coords = std::vector<D3D12_TILED_RESOURCE_COORDINATE>;
+        struct Coord
+        {
+            UINT x : 13;
+            UINT y : 13;
+            UINT s : 6;
+            operator D3D12_TILED_RESOURCE_COORDINATE() const { return {x, y, 0, s}; }
+        };
+        using Coords = std::vector<Coord>;
 
         EvictionDelay(UINT in_numSwapBuffers);
 
-        void Append(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) { m_mappings.front().push_back(in_coord); }
+        void Append(UINT x, UINT y, UINT s) { m_mappings.front().emplace_back(x, y, s); }
 
         Coords& GetReadyToEvict() { return m_mappings.back(); }
 

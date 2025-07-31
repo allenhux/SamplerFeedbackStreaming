@@ -144,7 +144,7 @@ void SFS::ResourceBase::AddTileRef(UINT in_x, UINT in_y, UINT in_s)
     // need to allocate?
     if (0 == refCount)
     {
-        m_pendingTileLoads.push_back(D3D12_TILED_RESOURCE_COORDINATE{ in_x, in_y, 0, in_s });
+        m_pendingTileLoads.emplace_back(in_x, in_y, 0, in_s);
     }
     refCount++;
 }
@@ -162,8 +162,8 @@ void SFS::ResourceBase::DecTileRef(UINT in_x, UINT in_y, UINT in_s)
     // last reference? try to evict
     if (1 == refCount)
     {
-        // queue up a decmapping request that will release the heap index after mapping and clear the resident flag
-        m_delayedEvictions.Append(D3D12_TILED_RESOURCE_COORDINATE{ in_x, in_y, 0, in_s });
+        // delay freeing from heap
+        m_delayedEvictions.Append(in_x, in_y, in_s);
     }
     refCount--;
 }
@@ -280,7 +280,7 @@ bool SFS::ResourceBase::HandleEvictAll(UINT64 in_frameFenceCompletedValue)
             {
                 layerChanged = true;
                 refCount = 0;
-                m_delayedEvictions.Append(D3D12_TILED_RESOURCE_COORDINATE{ i % width, i / width, 0, (UINT)s });
+                m_delayedEvictions.Append(i % width, i / width, (UINT)s);
             }
         }
 
@@ -371,34 +371,37 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
         const UINT width = GetMinMipMapWidth();
         const UINT height = GetMinMipMapHeight();
 
+        TileReference* pValues = m_tileReferences.data();
+
+#if RESOLVE_TO_TEXTURE
+        // CopyTextureRegion requires pitch multiple of D3D12_TEXTURE_DATA_PITCH_ALIGNMENT = 256
+        // note: it is possible to have a pitch greater than 256
+        constexpr UINT alignmentMask = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1;
+        UINT pitch = (width + alignmentMask) & ~alignmentMask;
+        pitch -= width;
+#endif
+
         // mapped host feedback buffer
         UINT8* pResolvedData = (UINT8*)m_resources.MapResolvedReadback(feedbackIndex);
-
-        TileReference* pTileRow = m_tileReferences.data();
         for (UINT y = 0; y < height; y++)
         {
             for (UINT x = 0; x < width; x++)
             {
                 // clamp to the maximum we are tracking (not tracking packed mips)
-                UINT8 desired = std::min(pResolvedData[x], m_maxMip);
-                UINT8 currentValue = pTileRow[x];
-                if (desired != currentValue)
+                UINT8 desired = std::min(*pResolvedData, m_maxMip);
+                UINT8 current = *pValues;
+                if (desired != current)
                 {
                     changed = true;
-                    SetMinMip(x, y, currentValue, desired);
-                    pTileRow[x] = desired;
+                    SetMinMip(x, y, current, desired);
+                    *pValues = desired;
                 }
+                pValues++;
+                pResolvedData++;
             } // end loop over x
-            pTileRow += width;
-
 #if RESOLVE_TO_TEXTURE
-            // CopyTextureRegion requires pitch multiple of D3D12_TEXTURE_DATA_PITCH_ALIGNMENT = 256
-            constexpr UINT alignmentMask = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1;
-            pResolvedData += (width + alignmentMask) & ~alignmentMask;
-#else
-            pResolvedData += width;
+            pResolvedData += pitch;
 #endif
-
         } // end loop over y
         m_resources.UnmapResolvedReadback(feedbackIndex);
     }
@@ -539,7 +542,7 @@ void SFS::ResourceBase::QueuePendingTileEvictions([[maybe_unused]] UpdateList*& 
             UINT& heapIndex = m_tileMappingState.GetHeapIndex(coord);
             m_pHeap->GetAllocator().Free(heapIndex);
             heapIndex = TileMappingState::InvalidIndex;
-			evictions.push_back(coord);
+			evictions.emplace_back(coord);
         }
         // valid index but not resident means there is a pending load, do not evict
         // try again later
@@ -564,6 +567,8 @@ void SFS::ResourceBase::QueuePendingTileEvictions([[maybe_unused]] UpdateList*& 
         ASSERT(out_pUpdateList);
         out_pUpdateList->m_evictCoords.swap(evictions);
     }
+#else
+    m_pSFSManager->AddEvictions((UINT)evictions.size());
 #endif
 }
 
