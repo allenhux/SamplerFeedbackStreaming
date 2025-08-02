@@ -421,7 +421,11 @@ void SFS::ProcessFeedbackThread::CheckFlushResources()
         // eject all heap indices
         for (auto r : flushResources)
         {
-            if (!remaining.contains(r))
+            if (!r->Drawable())
+            {
+                remaining.insert(r);
+            }
+            else if (!remaining.contains(r))
             {
                 r->Reset();
             }
