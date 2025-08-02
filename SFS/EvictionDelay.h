@@ -13,8 +13,7 @@ namespace SFS
 {
     class ResourceBase;
 
-    // do not immediately decmap:
-    // need to withhold until in-flight command buffers have completed
+    // delay heap free and unmap (if enabled) for n frames (at least swapchain count)
     class EvictionDelay
     {
     public:
@@ -27,37 +26,40 @@ namespace SFS
         };
         using Coords = std::vector<Coord>;
 
-        EvictionDelay(UINT in_numSwapBuffers);
+        EvictionDelay(UINT in_delay);
 
-        void Append(UINT x, UINT y, UINT s) { m_mappings.front().emplace_back(x, y, s); }
+        void Append(UINT64 in_fenceValue, Coords& in_coords)
+        {
+            m_futureEvictions.emplace_back(in_fenceValue + m_delay);
+            m_futureEvictions.back().swap(in_coords);
+        }
 
-        Coords& GetReadyToEvict() { return m_mappings.back(); }
+        // are there delayed evictions ready to process?
+        bool HasPendingWork(const UINT64 in_fenceValue) const { return m_futureEvictions.size() && m_futureEvictions.front().m_fenceValue <= in_fenceValue; }
+        // return evictions to process
+        Coords* GetReadyToEvict(const UINT64 in_fenceValue);
+        // if pending coords were fully consumed, remove them
+        void Pop() { m_futureEvictions.pop_front(); }
 
-        // FIXME: this is aspirational. it would also be cool if it looked later, to end() - swapchaincount.
-        bool GetResidencyChangeNeeded() const { return !m_mappings.front().empty(); }
-
-        void NextFrame();
-        void Clear();
+        // dump all pending evictions
+        void Clear() { m_futureEvictions.clear(); }
 
         // drop pending evictions for tiles that now have non-zero refcount
         // return true if tiles were rescued
         bool Rescue(const ResourceBase* in_pResource);
 
-        // total # tiles being tracked
-        // FIXME: would like this to be O(1)
+        // any future evictions?
         bool HasDelayedWork() const
         {
-            ASSERT(m_mappings.size());
-
-            auto end = std::prev(m_mappings.end());
-            for (auto i = m_mappings.begin(); i != end; i++)
-            {
-                if (i->size()) { return true; }
-            }
-
-            return false;
+            return !m_futureEvictions.empty();
         }
     private:
-        std::list<Coords> m_mappings;
+        struct Evictions : public Coords
+        {
+            Evictions(UINT64 in_fenceValue) : m_fenceValue(in_fenceValue) {}
+            const UINT64 m_fenceValue{ 0 };
+        };
+        std::list<Evictions> m_futureEvictions;
+        const UINT m_delay;
     };
 };

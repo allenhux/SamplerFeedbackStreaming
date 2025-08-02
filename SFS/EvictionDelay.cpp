@@ -4,33 +4,8 @@
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-SFS::EvictionDelay::EvictionDelay(UINT in_numSwapBuffers)
+SFS::EvictionDelay::EvictionDelay(UINT in_delay) : m_delay(in_delay)
 {
-    m_mappings.resize(in_numSwapBuffers);
-}
-
-//-----------------------------------------------------------------------------
-// step pending evictions once per frame
-//-----------------------------------------------------------------------------
-void SFS::EvictionDelay::NextFrame()
-{
-    // move next-to-last vector to front of the list
-    m_mappings.splice(m_mappings.begin(), m_mappings, --m_mappings.end());
-    // append elements of first vector to end of last vector
-    m_mappings.back().insert(m_mappings.back().end(), m_mappings.front().begin(), m_mappings.front().end());
-    // clear first vector
-    m_mappings.front().clear();
-}
-
-//-----------------------------------------------------------------------------
-// dump all pending evictions
-//-----------------------------------------------------------------------------
-void SFS::EvictionDelay::Clear()
-{
-    for (auto& i : m_mappings)
-    {
-        i.clear();
-    }
 }
 
 //-----------------------------------------------------------------------------
@@ -42,8 +17,9 @@ bool SFS::EvictionDelay::Rescue(const SFS::ResourceBase* in_pResource)
 
     // note: it is possible even for the most recent evictions to have refcount > 0
     // because a tile can be evicted then loaded again within a single ProcessFeedback() call
-    for (auto& evictions : m_mappings)
+    for (auto fi = m_futureEvictions.begin(); fi != m_futureEvictions.end();)
     {
+        auto& evictions = *fi;
         UINT numPending = (UINT)evictions.size();
         if (numPending)
         {
@@ -64,9 +40,50 @@ bool SFS::EvictionDelay::Rescue(const SFS::ResourceBase* in_pResource)
                 }
             }
             if (numPending != evictions.size()) { rescued = true; }
-            evictions.resize(numPending);
+            if (numPending)
+            {
+                evictions.resize(numPending);
+                fi++;
+            }
+            else
+            {
+                fi = m_futureEvictions.erase(fi);
+            }
         }
     }
 
     return rescued;
+}
+
+//-----------------------------------------------------------------------------
+// return a pointer to the first set of coords if it satisfies the given fence
+// coalesce if more than one set qualifies
+//-----------------------------------------------------------------------------
+SFS::EvictionDelay::Coords* SFS::EvictionDelay::GetReadyToEvict(const UINT64 in_fence)
+{
+    Coords* pCoords = nullptr;
+    for (auto i = m_futureEvictions.begin(); i != m_futureEvictions.end();)
+    {
+        if (i->empty())
+        {
+            i = m_futureEvictions.erase(i);
+            continue;
+        }
+        if (in_fence >= i->m_fenceValue)
+        {
+            auto& v = *i;
+            if (nullptr == pCoords) { pCoords = &v; i++; }
+            else
+            {
+                pCoords->insert(pCoords->end(), v.begin(), v.end());
+                i = m_futureEvictions.erase(i);
+            }
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    return pCoords;
 }

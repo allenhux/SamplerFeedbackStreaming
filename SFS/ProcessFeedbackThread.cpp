@@ -148,13 +148,12 @@ void SFS::ProcessFeedbackThread::Start()
                         {
                             auto pResource = *i;
                             bool hasFutureFeedback = false;
-                            auto fenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
-                            bool changed = pResource->ProcessFeedback(fenceValue, hasFutureFeedback);
+                            bool changed = pResource->ProcessFeedback(frameFenceValue, hasFutureFeedback);
                             if (changed)
                             {
                                 residencyChanged.insert(pResource);
                             }
-                            if (pResource->HasPendingWork())
+                            if (pResource->HasPendingWork(frameFenceValue))
                             {
                                 m_pendingResources.insert(pResource);
                             }
@@ -218,7 +217,7 @@ void SFS::ProcessFeedbackThread::Start()
                         UpdateList* pUpdateList = nullptr;
 
                         // tiles that are "loading" can't be evicted until loads complete
-                        pResource->QueuePendingTileEvictions(pUpdateList);
+                        pResource->QueuePendingTileEvictions(frameFenceValue, pUpdateList);
 
                         uploadsRequested += pResource->QueuePendingTileLoads(pUpdateList);
 
@@ -235,7 +234,7 @@ void SFS::ProcessFeedbackThread::Start()
                             signalCounter++; // prevents "storms" of submits
                         }
 
-                        if (pResource->HasPendingWork()) // still have work to do?
+                        if (pResource->HasPendingWork(frameFenceValue)) // still have work to do?
                         {
                             i++;
                         }

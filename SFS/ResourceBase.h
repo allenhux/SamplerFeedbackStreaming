@@ -126,16 +126,16 @@ namespace SFS
 
         // returns # tiles evicted
 		// allocates updatelist if necessary
-        void QueuePendingTileEvictions(UpdateList*& out_pUpdateList);
+        void QueuePendingTileEvictions(UINT64 in_fenceValue, UpdateList*& out_pUpdateList);
 
         bool HasDelayedWork() // tiles to load / evict now or later
         {
             return m_delayedEvictions.HasDelayedWork();
         }
 
-        bool HasPendingWork() // wants to load / evict tiles this frame
+        bool HasPendingWork(const UINT64 in_fenceValue) // wants to load / evict tiles this frame
         {
-            return (m_pendingTileLoads.size() || m_delayedEvictions.GetReadyToEvict().size());
+            return (m_pendingTileLoads.size() || m_delayedEvictions.HasPendingWork(in_fenceValue));
         }
 
         bool InitPackedMips();
@@ -300,13 +300,13 @@ namespace SFS
         std::array<QueuedFeedback, QUEUED_FEEDBACK_FRAMES> m_queuedFeedback;
 
         // update internal refcounts based on the incoming minimum mip
-        void SetMinMip(UINT in_x, UINT in_y, UINT in_current, UINT in_desired);
+        void SetMinMip(UINT in_x, UINT in_y, UINT in_current, UINT in_desired, EvictionDelay::Coords& out_evictions);
 
         // AddRef, which requires allocation, might fail
         void AddTileRef(UINT in_x, UINT in_y, UINT in_s);
 
         // DecRef may decline
-        void DecTileRef(UINT in_x, UINT in_y, UINT in_s);
+        void DecTileRef(UINT in_x, UINT in_y, UINT in_s, EvictionDelay::Coords& out_evictions);
 
         // index to next min-mip feedback resolve target
         UINT m_readbackIndex{ 0 };

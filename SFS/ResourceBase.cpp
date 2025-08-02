@@ -109,7 +109,8 @@ void SFS::ResourceBase::SetResidencyMapOffset(UINT in_residencyMapOffsetBase)
 // 1 0 0 0 |
 // 0 0 0 0 |
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::SetMinMip(UINT in_x, UINT in_y, UINT s, UINT in_desired)
+void SFS::ResourceBase::SetMinMip(UINT in_x, UINT in_y, UINT s, UINT in_desired,
+    EvictionDelay::Coords& out_evictions)
 {
     // s is the mip level is currently referenced at this tile
 
@@ -125,7 +126,7 @@ void SFS::ResourceBase::SetMinMip(UINT in_x, UINT in_y, UINT s, UINT in_desired)
     // DecRef()s are ordered from top mip to bottom (evict lower resolution tiles after all higher resolution ones)
     while (s < in_desired)
     {
-        DecTileRef(in_x >> s, in_y >> s, s);
+        DecTileRef(in_x >> s, in_y >> s, s, out_evictions);
         s++;
     }
 }
@@ -153,7 +154,7 @@ void SFS::ResourceBase::AddTileRef(UINT in_x, UINT in_y, UINT in_s)
 // reduce ref count
 // if 0, add tile to list of pending evictions
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::DecTileRef(UINT in_x, UINT in_y, UINT in_s)
+void SFS::ResourceBase::DecTileRef(UINT in_x, UINT in_y, UINT in_s, EvictionDelay::Coords& out_evictions)
 {
     auto& refCount = m_tileMappingState.GetRefCount(in_x, in_y, in_s);
 
@@ -163,7 +164,7 @@ void SFS::ResourceBase::DecTileRef(UINT in_x, UINT in_y, UINT in_s)
     if (1 == refCount)
     {
         // delay freeing from heap
-        m_delayedEvictions.Append(in_x, in_y, in_s);
+        out_evictions.emplace_back(in_x, in_y, in_s);
     }
     refCount--;
 }
@@ -266,6 +267,7 @@ bool SFS::ResourceBase::HandleEvictAll(UINT64 in_frameFenceCompletedValue)
     memset(m_tileReferences.data(), m_maxMip, m_tileReferences.size());
 
     // queue all resident tiles for eviction
+    EvictionDelay::Coords evictions;
     for (INT s = m_maxMip - 1; s >= 0; s--)
     {
         bool layerChanged = false;
@@ -280,7 +282,7 @@ bool SFS::ResourceBase::HandleEvictAll(UINT64 in_frameFenceCompletedValue)
             {
                 layerChanged = true;
                 refCount = 0;
-                m_delayedEvictions.Append(i % width, i / width, (UINT)s);
+                evictions.emplace_back(i % width, i / width, (UINT)s);
             }
         }
 
@@ -290,6 +292,11 @@ bool SFS::ResourceBase::HandleEvictAll(UINT64 in_frameFenceCompletedValue)
             break; // if refcount of all tiles on this layer = 0, early out
         }
     } // end loop over layers
+
+    if (evictions.size())
+    {
+        m_delayedEvictions.Append(in_frameFenceCompletedValue, evictions);
+    }
 
     // abandon all pending loads - all refcounts are 0
     m_pendingTileLoads.clear();
@@ -340,10 +347,6 @@ UINT SFS::ResourceBase::GetBestFeedbackIndex(UINT64 in_frameFenceCompletedValue,
 //-----------------------------------------------------------------------------
 bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool& out_hasFutureFeedback)
 {
-    // step delayed evictions forward in time
-    // FIXME: would like delayed evictions to return true swapchaincount frames before the end
-    m_delayedEvictions.NextFrame();
-
     // even if just working on delayed evictions, QueueFeedback() may have been called
     UINT feedbackIndex = GetBestFeedbackIndex(in_frameFenceCompletedValue, out_hasFutureFeedback);
 
@@ -368,6 +371,8 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
     // any change, but not necessarily something requiring a residency change:
     bool changed = false;
     {
+        EvictionDelay::Coords evictions;
+
         const UINT width = GetMinMipMapWidth();
         const UINT height = GetMinMipMapHeight();
 
@@ -393,7 +398,7 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
                 if (desired != current)
                 {
                     changed = true;
-                    SetMinMip(x, y, current, desired);
+                    SetMinMip(x, y, current, desired, evictions);
                     *pValues = desired;
                 }
                 pValues++;
@@ -404,6 +409,11 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
 #endif
         } // end loop over y
         m_resources.UnmapResolvedReadback(feedbackIndex);
+
+        if (evictions.size())
+        {
+            m_delayedEvictions.Append(in_frameFenceCompletedValue, evictions);
+        }
     }
 
     // any new eviction necessitates removing from residency map
@@ -509,17 +519,16 @@ Note that the multi-frame delay for evictions prevents allocation of an index th
 // note there are only tiles to evict after processing feedback, but it's possible
 // there was no UpdateList available at the time, so they haven't been evicted yet.
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::QueuePendingTileEvictions([[maybe_unused]] UpdateList*& out_pUpdateList)
+void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_unused]] UpdateList*& out_pUpdateList)
 {
-    if (0 == m_delayedEvictions.GetReadyToEvict().size()) { return; }
-
-    auto& pendingEvictions = m_delayedEvictions.GetReadyToEvict();
+    auto pEvictions = m_delayedEvictions.GetReadyToEvict(in_fenceValue);
+    if (nullptr == pEvictions) { return; }
 
 	std::vector<D3D12_TILED_RESOURCE_COORDINATE> evictions;
-	evictions.reserve(pendingEvictions.size());
+	evictions.reserve(pEvictions->size());
 
     UINT numDelayed = 0;
-    for (auto& coord : pendingEvictions)
+    for (auto& coord : *pEvictions)
     {
         // if the heap index is valid, but the tile is not resident, there's a /pending load/
         // a pending load might be streaming OR it might be in the pending list
@@ -548,7 +557,7 @@ void SFS::ResourceBase::QueuePendingTileEvictions([[maybe_unused]] UpdateList*& 
         // try again later
         else if (TileMappingState::Residency::Loading == residency)
         {
-            pendingEvictions[numDelayed] = coord;
+            (*pEvictions)[numDelayed] = coord;
             numDelayed++;
         }
         // if evicting or not resident, drop
@@ -559,7 +568,14 @@ void SFS::ResourceBase::QueuePendingTileEvictions([[maybe_unused]] UpdateList*& 
     // tiles evicted here were identified multiple frames earlier, leaving time for tiles to be Rescue()d.
 
     // narrow the ready evictions to just the delayed evictions.
-    pendingEvictions.resize(numDelayed);
+    if (numDelayed)
+    {
+        pEvictions->resize(numDelayed);
+    }
+    else
+    {
+        m_delayedEvictions.Pop();
+    }
 #if ENABLE_UNMAP
     if (evictions.size())
     {
