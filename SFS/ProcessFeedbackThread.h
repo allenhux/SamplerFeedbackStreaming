@@ -115,6 +115,5 @@ namespace SFS
 
         void SignalFileStreamer();
         void CheckFlushResources();
-        void ProcessFeedback(UINT64 in_frameFenceValue);
     };
 }

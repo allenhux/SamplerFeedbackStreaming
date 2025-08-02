@@ -120,9 +120,8 @@ namespace SFS
         bool ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool& out_hasFutureFeedback);
 
         // try to load/evict tiles.
-        // returns # tiles requested for upload
         // re-uses or allocates updatelist
-        UINT QueuePendingTileLoads(UpdateList*& out_pUpdateList);
+        void QueuePendingTileLoads(UpdateList*& out_pUpdateList);
 
         // returns # tiles evicted
 		// allocates updatelist if necessary

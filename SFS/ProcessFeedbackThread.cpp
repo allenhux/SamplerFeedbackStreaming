@@ -55,8 +55,8 @@ SFS::ProcessFeedbackThread::~ProcessFeedbackThread()
 //-----------------------------------------------------------------------------
 void SFS::ProcessFeedbackThread::SignalFileStreamer()
 {
-    m_dataUploader.SignalFileStreamer();
     m_numTotalSignals.fetch_add(1, std::memory_order_relaxed);
+    m_dataUploader.SignalFileStreamer();
 }
 
 //-----------------------------------------------------------------------------
@@ -73,7 +73,7 @@ void SFS::ProcessFeedbackThread::Start()
             UINT64 previousFrameFenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
 
             // limit the number of signals per frame to prevent "storms"
-            constexpr UINT signalCounterMax = 8;
+            constexpr UINT signalCounterMax = 32;
             UINT signalCounter = 0;
 
             // limit the number of DS Enqueues (==tiles) between signals
@@ -219,19 +219,20 @@ void SFS::ProcessFeedbackThread::Start()
                         // tiles that are "loading" can't be evicted until loads complete
                         pResource->QueuePendingTileEvictions(frameFenceValue, pUpdateList);
 
-                        uploadsRequested += pResource->QueuePendingTileLoads(pUpdateList);
+                        pResource->QueuePendingTileLoads(pUpdateList);
 
                         if (pUpdateList)
                         {
+                            uploadsRequested += (UINT)pUpdateList->GetNumStandardUpdates();
                             m_pSFSManager->SubmitUpdateList(*pUpdateList);
-                        }
 
-                        // Limit the # of DS Enqueues (== # tiles) between signals
-                        if ((uploadsRequested > uploadsRequestedMax) && (signalCounter < signalCounterMax))
-                        {
-                            SignalFileStreamer();
-                            uploadsRequested = 0;
-                            signalCounter++; // prevents "storms" of submits
+                            // Limit the # of DS Enqueues (== # tiles) between signals
+                            if ((uploadsRequested > uploadsRequestedMax) && (signalCounter < signalCounterMax))
+                            {
+                                SignalFileStreamer();
+                                uploadsRequested = 0;
+                                signalCounter++; // prevents "storms" of submits
+                            }
                         }
 
                         if (pResource->HasPendingWork(frameFenceValue)) // still have work to do?

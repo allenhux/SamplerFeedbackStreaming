@@ -66,6 +66,7 @@ SFS::EvictionDelay::Coords* SFS::EvictionDelay::GetReadyToEvict(const UINT64 in_
     {
         if (i->empty())
         {
+            ASSERT(0); // entering here means bad logic somewhere else
             i = m_futureEvictions.erase(i);
             continue;
         }

@@ -591,14 +591,14 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
 //-----------------------------------------------------------------------------
 // queue one UpdateList worth of uploads
 //-----------------------------------------------------------------------------
-UINT SFS::ResourceBase::QueuePendingTileLoads(UpdateList*& out_pUpdateList)
+void SFS::ResourceBase::QueuePendingTileLoads(UpdateList*& out_pUpdateList)
 {
     // clamp to heap availability
     UINT maxCopies = std::min((UINT)m_pendingTileLoads.size(), m_pHeap->GetAllocator().GetAvailable());
 
     if (0 == maxCopies)
     {
-        return 0;
+        return;
     }
 
     std::vector<D3D12_TILED_RESOURCE_COORDINATE> uploads;
@@ -641,9 +641,10 @@ UINT SFS::ResourceBase::QueuePendingTileLoads(UpdateList*& out_pUpdateList)
     // delete consumed tiles, which are in-between the skipped tiles and the still-pending tiles
     m_pendingTileLoads.erase(m_pendingTileLoads.begin() + skippedIndex, m_pendingTileLoads.begin() + numConsumed);
 
-    UINT numUploads = (UINT)uploads.size();
-    if (numUploads)
+    if (uploads.size())
     {
+        UINT numUploads = (UINT)uploads.size();
+
         // calling function checked for availability, so UL allocation must succeed
         if (nullptr == out_pUpdateList)
         {
@@ -661,7 +662,6 @@ UINT SFS::ResourceBase::QueuePendingTileLoads(UpdateList*& out_pUpdateList)
         }
         out_pUpdateList->m_coords.swap(uploads);
     }
-    return numUploads;
 }
 
 //-----------------------------------------------------------------------------
