@@ -11,7 +11,6 @@
 #pragma once
 
 #include "ResourceBase.h"
-#include "UpdateList.h"
 
 namespace SFS
 {

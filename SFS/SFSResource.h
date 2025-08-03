@@ -14,9 +14,7 @@ Implementation of SFS Resource
 #include <d3d12.h>
 #include <string>
 
-#include "SamplerFeedbackStreaming.h"
 #include "ResourceBase.h"
-#include "InternalResources.h"
 
 namespace SFS
 {

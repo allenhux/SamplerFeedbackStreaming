@@ -85,7 +85,6 @@ namespace SFS
         void TraceSubmit();
     private:
         bool m_firstSubmit{ true };
-        JsonParser m_trace; // array of submits, each submit is an array of requests
         // map textures to descriptions so they can be properly re-created during playback
         std::unordered_map<ID3D12Resource*, D3D12_RESOURCE_DESC> m_tracingResources;
         struct Trace

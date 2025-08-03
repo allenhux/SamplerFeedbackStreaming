@@ -76,10 +76,12 @@ SFS::FileStreamer::~FileStreamer()
     // write trace file
     if (m_captureTrace)
     {
+        JsonParser traceFile;
+
         UINT resourceIndex = 0;
         for (const auto& d : m_tracingResources)
         {
-            auto& r = m_trace.GetRoot()["resources"][resourceIndex];
+            auto& r = traceFile.GetRoot()["resources"][resourceIndex];
             r["rsrc"] = (UINT64)d.first;
             const D3D12_RESOURCE_DESC& desc = d.second;
             r["fmt"] = (UINT32)desc.Format;
@@ -95,7 +97,7 @@ SFS::FileStreamer::~FileStreamer()
             UINT traceIndex = 0;
             for (const auto& t : l)
             {
-                auto& r = m_trace.GetRoot()["submits"][submitIndex][traceIndex++];
+                auto& r = traceFile.GetRoot()["submits"][submitIndex][traceIndex++];
                 r["rsrc"] = (UINT64)t.m_pDstResource;
                 r["coord"][0] = t.m_coord.X;
                 r["coord"][1] = t.m_coord.Y;
@@ -115,7 +117,7 @@ SFS::FileStreamer::~FileStreamer()
             if (!std::filesystem::exists(unique))
             {
                 std::ofstream ofs(unique, std::ios::out);
-                m_trace.Write(ofs);
+                traceFile.Write(ofs);
                 break;
             }
         }

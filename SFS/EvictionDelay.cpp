@@ -54,37 +54,3 @@ bool SFS::EvictionDelay::Rescue(const SFS::ResourceBase* in_pResource)
 
     return rescued;
 }
-
-//-----------------------------------------------------------------------------
-// return a pointer to the first set of coords if it satisfies the given fence
-// coalesce if more than one set qualifies
-//-----------------------------------------------------------------------------
-SFS::EvictionDelay::Coords* SFS::EvictionDelay::GetReadyToEvict(const UINT64 in_fence)
-{
-    Coords* pCoords = nullptr;
-    for (auto i = m_futureEvictions.begin(); i != m_futureEvictions.end();)
-    {
-        if (i->empty())
-        {
-            ASSERT(0); // entering here means bad logic somewhere else
-            i = m_futureEvictions.erase(i);
-            continue;
-        }
-        if (in_fence >= i->m_fenceValue)
-        {
-            auto& v = *i;
-            if (nullptr == pCoords) { pCoords = &v; i++; }
-            else
-            {
-                pCoords->insert(pCoords->end(), v.begin(), v.end());
-                i = m_futureEvictions.erase(i);
-            }
-        }
-        else
-        {
-            break;
-        }
-    }
-
-    return pCoords;
-}

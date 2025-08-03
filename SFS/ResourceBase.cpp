@@ -514,68 +514,81 @@ Note that the multi-frame delay for evictions prevents allocation of an index th
 
 //-----------------------------------------------------------------------------
 // evict unused tiles
-// this is after a multi-frame delay and avoiding potential race conditions to avoid visual artifacts
+// this is after a multi-frame delay to avoid visual artifacts
+// internally avoids potential race conditions 
 //
 // note there are only tiles to evict after processing feedback, but it's possible
 // there was no UpdateList available at the time, so they haven't been evicted yet.
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_unused]] UpdateList*& out_pUpdateList)
 {
-    auto pEvictions = m_delayedEvictions.GetReadyToEvict(in_fenceValue);
-    if (nullptr == pEvictions) { return; }
-
-	std::vector<D3D12_TILED_RESOURCE_COORDINATE> evictions;
-	evictions.reserve(pEvictions->size());
-
-    UINT numDelayed = 0;
-    for (auto& coord : *pEvictions)
+#if ENABLE_UNMAP
+    std::vector<D3D12_TILED_RESOURCE_COORDINATE> evictions;
+#endif
+    // search for evictions that were scheduled to happen
+    for (auto pEvictions = m_delayedEvictions.begin(); pEvictions != m_delayedEvictions.end();)
     {
-        // if the heap index is valid, but the tile is not resident, there's a /pending load/
-        // a pending load might be streaming OR it might be in the pending list
-        // if in the pending list, we will observe if the refcount is 0 and abandon the load
+        // evictions are sorted by increasing fence value, so exit if no match
+        if (in_fenceValue < pEvictions->m_fenceValue) { break; }
 
-        // NOTE! assumes refcount is 0
-        // ProcessFeedback() clears all pending evictions with refcount > 0
-        // Hence, ProcessFeedback() must be called before this function
-        ASSERT(0 == m_tileMappingState.GetRefCount(coord));
+        // empty container means bad logic somewhere else
+        // however, it should be properly removed by the logic below
+        ASSERT(!pEvictions->empty());
 
-        auto residency = m_tileMappingState.GetResidency(coord);
-        if (TileMappingState::Residency::Resident == residency)
+        UINT numDelayed = 0;
+        for (auto& coord : *pEvictions)
         {
-            // NOTE: effectively removed "Evicting." Now remove tiles from data structure, not from memory mapping.
-            // result is improved perf from fewer UpdateTileMappings() calls.
-            // existing artifacts (cracks when sampler crosses tile boundaries) are "no worse"
-            // to put it back: set residency to evicting and add tiles to updatelist for eviction
+            // if the heap index is valid, but the tile is not resident, there's a /pending load/
+            // a pending load might be streaming OR it might be in the pending list
+            // if in the pending list, we will observe if the refcount is 0 and abandon the load
 
-            m_tileMappingState.SetResidency(coord, TileMappingState::Residency::NotResident);
-            UINT& heapIndex = m_tileMappingState.GetHeapIndex(coord);
-            m_pHeap->GetAllocator().Free(heapIndex);
-            heapIndex = TileMappingState::InvalidIndex;
-			evictions.emplace_back(coord);
+            // NOTE! assumes refcount is 0
+            // ProcessFeedback() clears all pending evictions with refcount > 0
+            // Hence, ProcessFeedback() must be called before this function
+            ASSERT(0 == m_tileMappingState.GetRefCount(coord));
+
+            auto residency = m_tileMappingState.GetResidency(coord);
+            if (TileMappingState::Residency::Resident == residency)
+            {
+                // NOTE: effectively removed "Evicting." Now remove tiles from data structure, not from memory mapping.
+                // result is improved perf from fewer UpdateTileMappings() calls.
+                // existing artifacts (cracks when sampler crosses tile boundaries) are "no worse"
+                // to put it back: set residency to evicting and add tiles to updatelist for eviction
+
+                m_tileMappingState.SetResidency(coord, TileMappingState::Residency::NotResident);
+                UINT& heapIndex = m_tileMappingState.GetHeapIndex(coord);
+                m_pHeap->GetAllocator().Free(heapIndex);
+                heapIndex = TileMappingState::InvalidIndex;
+#if ENABLE_UNMAP
+                evictions.emplace_back(coord);
+#endif
+            }
+            // valid index but not resident means there is a pending load, do not evict
+            // try again later
+            else if (TileMappingState::Residency::Loading == residency)
+            {
+                (*pEvictions)[numDelayed] = coord;
+                numDelayed++;
+            }
+            // if evicting or not resident, drop
+
+            // else: refcount positive or eviction already in progress? rescue this eviction (by not adding to pending evictions)
         }
-        // valid index but not resident means there is a pending load, do not evict
-        // try again later
-        else if (TileMappingState::Residency::Loading == residency)
+#if (0 == ENABLE_UNMAP)
+        m_pSFSManager->TallyEvictions((UINT)pEvictions->size() - numDelayed);
+#endif
+        // narrow the ready evictions to just the delayed evictions.
+        if (numDelayed)
         {
-            (*pEvictions)[numDelayed] = coord;
-            numDelayed++;
+            pEvictions->resize(numDelayed);
+            pEvictions++;
         }
-        // if evicting or not resident, drop
-
-        // else: refcount positive or eviction already in progress? rescue this eviction (by not adding to pending evictions)
-    }
-
-    // tiles evicted here were identified multiple frames earlier, leaving time for tiles to be Rescue()d.
-
-    // narrow the ready evictions to just the delayed evictions.
-    if (numDelayed)
-    {
-        pEvictions->resize(numDelayed);
-    }
-    else
-    {
-        m_delayedEvictions.Pop();
-    }
+        else
+        {
+            m_delayedEvictions.Pop();
+            pEvictions = m_delayedEvictions.begin();
+        }
+    } // end loop over delayed evictions
 #if ENABLE_UNMAP
     if (evictions.size())
     {
@@ -583,8 +596,6 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
         ASSERT(out_pUpdateList);
         out_pUpdateList->m_evictCoords.swap(evictions);
     }
-#else
-    m_pSFSManager->AddEvictions((UINT)evictions.size());
 #endif
 }
 

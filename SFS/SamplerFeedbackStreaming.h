@@ -27,7 +27,7 @@ Draw loop:
 
 #pragma once
 
-// FIXME: resolve to buffer only supported in Win11 and some insider versions of Win10
+// FIXME? resolve to cpu buffer may not be supported on some platforms?
 // When resolving to texture, must copy to cpu-readable buffer from gpu texture (which cannot be in the readback heap)
 // Setting this to 0 resolves directly to cpu-readable buffer
 #define RESOLVE_TO_TEXTURE 0

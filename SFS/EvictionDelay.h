@@ -37,8 +37,9 @@ namespace SFS
         // are there delayed evictions ready to process?
         bool HasPendingWork(const UINT64 in_fenceValue) const { return m_futureEvictions.size() && m_futureEvictions.front().m_fenceValue <= in_fenceValue; }
         // return evictions to process
-        Coords* GetReadyToEvict(const UINT64 in_fenceValue);
-        // if pending coords were fully consumed, remove them
+
+        auto begin() { return m_futureEvictions.begin(); }
+        auto end() { return m_futureEvictions.end(); }
         void Pop() { m_futureEvictions.pop_front(); }
 
         // dump all pending evictions

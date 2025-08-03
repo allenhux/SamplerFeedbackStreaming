@@ -77,7 +77,7 @@ namespace SFS
         }
 
 #if (0 == ENABLE_UNMAP)
-        void AddEvictions(UINT n) { m_numTotalEvictions.fetch_add(n, std::memory_order_relaxed); }
+        void TallyEvictions(UINT n) { m_numTotalEvictions.fetch_add(n, std::memory_order_relaxed); }
 #endif
     };
 }
