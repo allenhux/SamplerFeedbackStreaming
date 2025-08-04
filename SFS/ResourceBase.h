@@ -228,6 +228,7 @@ namespace SFS
             UINT32 GetRefCount(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) const { return m_refcounts[in_coord.Subresource](in_coord.X, in_coord.Y, GetWidth(in_coord.Subresource)); }
 
             UINT32& GetHeapIndex(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) { return m_heapIndices[in_coord.Subresource](in_coord.X, in_coord.Y, GetWidth(in_coord.Subresource)); }
+            UINT32 GetHeapIndex(UINT x, UINT y, UINT s) const { return m_heapIndices[s](x, y, GetWidth(s)); }
 
             // searches refcount of bottom-most non-packed tile(s). If none are in use, we know nothing is resident.
             // used in both UpdateMinMipMap() and ProcessFeedback()

@@ -145,7 +145,19 @@ void SFS::ResourceBase::AddTileRef(UINT in_x, UINT in_y, UINT in_s)
     // need to allocate?
     if (0 == refCount)
     {
-        m_pendingTileLoads.emplace_back(in_x, in_y, 0, in_s);
+        if (InvalidIndex == m_tileMappingState.GetHeapIndex(in_x, in_y, in_s))
+        {
+            m_pendingTileLoads.emplace_back(in_x, in_y, 0, in_s);
+        }
+#ifdef _DEBUG
+        else
+        {
+            // note: be sure to updateminmipmap
+            auto r = m_tileMappingState.GetResidency(in_x, in_y, in_s);
+            ASSERT((TileMappingState::Residency::Resident == r) ||
+                (TileMappingState::Residency::Loading == r));
+        }
+#endif
     }
     refCount++;
 }
@@ -366,8 +378,6 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
     //------------------------------------------------------------------
     // update the refcount of each tile based on feedback
     //------------------------------------------------------------------
-    bool residencyChanged = false;
-
     // any change, but not necessarily something requiring a residency change:
     bool changed = false;
     {
@@ -418,39 +428,22 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
 
     // any new eviction necessitates removing from residency map
     // some loads can be immediately serviced (refcount changed to > 0 and resident = 1)
-    // FIXME: would be cool if tiles stayed in the map until they /had/ to be removed,
-    //        specifically, swap chain count frames from the end of the delay.
-    // FIXME: wanted to m_delayedEvictions.GetResidencyChangeNeeded(), but this didn't catch some evictions
-    residencyChanged = changed;
+    // FIXME? it's possible that we only generated loads that have yet to be submitted,
+    //        in which case there's no residency change yet.
 
     // if refcount changed, there's a new pending upload or eviction
-    // take time to rescue and abandon pending actions due to new refcounts
-    // only need to SetResidencyChanged() on rescue
     if (changed)
     {
         // abandon pending loads that are no longer relevant
         AbandonPendingLoads();
-
-        // clear pending evictions that are no longer relevant
-        if (m_tileMappingState.GetAnyRefCount())
-        {
-            m_refCountsZero = false;
-            bool rescue = m_delayedEvictions.Rescue(this);
-            residencyChanged = residencyChanged || rescue;
-        }
-        else
-        {
-            m_refCountsZero = true;
-        }
+        m_refCountsZero = m_tileMappingState.GetAnyRefCount();
     } // end if changed
 
     // notes:
     // if refcount -> 0, treat as though evicted even though resident. memory not recycled until later.
     // if refcount -> 1+ and resident, treat as though loaded immediately. memory was never released.
 
-    // NOTE: it is possible for there to be pending loads and return false for residencyChanged. correct behavior.
-    // if there are evictions or if tiles were rescued, residencyChanged should be true.
-    return residencyChanged;
+    return changed;
 }
 
 //-----------------------------------------------------------------------------
@@ -542,10 +535,8 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
             // a pending load might be streaming OR it might be in the pending list
             // if in the pending list, we will observe if the refcount is 0 and abandon the load
 
-            // NOTE! assumes refcount is 0
-            // ProcessFeedback() clears all pending evictions with refcount > 0
-            // Hence, ProcessFeedback() must be called before this function
-            ASSERT(0 == m_tileMappingState.GetRefCount(coord));
+            // if refcount > 0, it has been rescued since it was queued for eviction
+            if (m_tileMappingState.GetRefCount(coord)) { continue; }
 
             auto residency = m_tileMappingState.GetResidency(coord);
             if (TileMappingState::Residency::Resident == residency)
