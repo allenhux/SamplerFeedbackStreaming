@@ -538,9 +538,9 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
             // if in the pending list, we will observe if the refcount is 0 and abandon the load
 
             // if refcount > 0, it has been rescued since it was queued for eviction
-            if (m_tileMappingState.GetRefCount(coord.x, coord.y, coord.s)) { continue; }
+            if (m_tileMappingState.GetRefCount(coord)) { continue; }
 
-            auto residency = m_tileMappingState.GetResidency(coord.x, coord.y, coord.s);
+            auto residency = m_tileMappingState.GetResidency(coord);
             if (TileMappingState::Residency::Resident == residency)
             {
                 // NOTE: effectively removed "Evicting." Now remove tiles from data structure, not from memory mapping.
@@ -553,7 +553,7 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
                 m_pHeap->GetAllocator().Free(heapIndex);
                 heapIndex = TileMappingState::InvalidIndex;
 #if ENABLE_UNMAP
-                evictions.emplace_back(coord);
+                evictions.emplace_back(coord.x, coord.y, 0, coord.s);
 #else
 				numEvictions++;
 #endif

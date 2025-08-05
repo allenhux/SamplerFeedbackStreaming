@@ -220,12 +220,8 @@ namespace SFS
 
             void SetResidency(UINT x, UINT y, UINT s, Residency in_residency) { m_resident[s](x, y, GetWidth(s)) = (BYTE)in_residency; }
             BYTE GetResidency(UINT x, UINT y, UINT s) const { return m_resident[s](x, y, GetWidth(s)); }
-
             UINT32& GetRefCount(UINT x, UINT y, UINT s) { return m_refcounts[s](x, y, GetWidth(s)); }
             UINT32 GetRefCount(UINT x, UINT y, UINT s) const { return m_refcounts[s](x, y, GetWidth(s)); }
-            UINT32& GetHeapIndex(UINT x, UINT y, UINT s) { return m_heapIndices[s](x, y, GetWidth(s)); }
-            UINT32 GetHeapIndex(UINT x, UINT y, UINT s) const { return m_heapIndices[s](x, y, GetWidth(s)); }
-
             UINT32& GetHeapIndex(UINT x, UINT y, UINT s) { return m_heapIndices[s](x, y, GetWidth(s)); }
             UINT32 GetHeapIndex(UINT x, UINT y, UINT s) const { return m_heapIndices[s](x, y, GetWidth(s)); }
 
@@ -236,6 +232,7 @@ namespace SFS
             void SetResidency(const Coord& c, Residency in_residency) { SetResidency(c.x, c.y, c.s, in_residency); }
             BYTE GetResidency(const Coord& c) const { return GetResidency(c.x, c.y, c.s); }
             UINT32 GetRefCount(const Coord& c) const { return GetRefCount(c.x, c.y, c.s); }
+            UINT32& GetHeapIndex(const Coord& c) { return GetHeapIndex(c.x, c.y, c.s); }
 
             // searches refcount of bottom-most non-packed tile(s). If none are in use, we know nothing is resident.
             // used in both UpdateMinMipMap() and ProcessFeedback()
