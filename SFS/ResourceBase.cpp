@@ -517,6 +517,8 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
 {
 #if ENABLE_UNMAP
     std::vector<D3D12_TILED_RESOURCE_COORDINATE> evictions;
+#else
+	UINT numEvictions = 0;
 #endif
     // search for evictions that were scheduled to happen
     for (auto pEvictions = m_delayedEvictions.begin(); pEvictions != m_delayedEvictions.end();)
@@ -552,6 +554,8 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
                 heapIndex = TileMappingState::InvalidIndex;
 #if ENABLE_UNMAP
                 evictions.emplace_back(coord);
+#else
+				numEvictions++;
 #endif
             }
             // valid index but not resident means there is a pending load, do not evict
@@ -565,9 +569,6 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
 
             // else: refcount positive or eviction already in progress? rescue this eviction (by not adding to pending evictions)
         }
-#if (0 == ENABLE_UNMAP)
-        m_pSFSManager->TallyEvictions((UINT)pEvictions->size() - numDelayed);
-#endif
         // narrow the ready evictions to just the delayed evictions.
         if (numDelayed)
         {
@@ -587,6 +588,9 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
         ASSERT(out_pUpdateList);
         out_pUpdateList->m_evictCoords.swap(evictions);
     }
+#else
+    // counted here because evictions aren't passed along into an updatelist
+    m_pSFSManager->TallyEvictions(numEvictions);
 #endif
 }
 
