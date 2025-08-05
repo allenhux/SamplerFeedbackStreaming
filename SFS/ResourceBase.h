@@ -220,8 +220,12 @@ namespace SFS
 
             void SetResidency(UINT x, UINT y, UINT s, Residency in_residency) { m_resident[s](x, y, GetWidth(s)) = (BYTE)in_residency; }
             BYTE GetResidency(UINT x, UINT y, UINT s) const { return m_resident[s](x, y, GetWidth(s)); }
+
             UINT32& GetRefCount(UINT x, UINT y, UINT s) { return m_refcounts[s](x, y, GetWidth(s)); }
             UINT32 GetRefCount(UINT x, UINT y, UINT s) const { return m_refcounts[s](x, y, GetWidth(s)); }
+            UINT32& GetHeapIndex(UINT x, UINT y, UINT s) { return m_heapIndices[s](x, y, GetWidth(s)); }
+            UINT32 GetHeapIndex(UINT x, UINT y, UINT s) const { return m_heapIndices[s](x, y, GetWidth(s)); }
+
             UINT32& GetHeapIndex(UINT x, UINT y, UINT s) { return m_heapIndices[s](x, y, GetWidth(s)); }
             UINT32 GetHeapIndex(UINT x, UINT y, UINT s) const { return m_heapIndices[s](x, y, GetWidth(s)); }
 
