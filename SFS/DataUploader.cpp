@@ -88,7 +88,7 @@ SFS::DataUploader::~DataUploader()
 {
     // stop updating. all StreamingResources must have been destroyed already, presumably.
     StopThreads();
-    for (UINT i = 0; i < sizeof(m_fenceEvents) / sizeof(m_fenceEvents[0]); i++)
+    for (UINT i = 0; i < _countof(m_fenceEvents); i++)
     {
         ::CloseHandle(m_fenceEvents[i]);
     }
@@ -448,7 +448,7 @@ void SFS::DataUploader::FenceMonitorThread()
     {
         std::set<ResourceBase*> residencyChanged;
         m_residencyChangedStaging.Swap(residencyChanged);
-        notifiedResources.insert(residencyChanged.begin(), residencyChanged.end());
+        notifiedResources.merge(residencyChanged);
     }
 
     // add resources that had notifications
@@ -484,7 +484,7 @@ void SFS::DataUploader::FenceMonitorThread()
         (m_mappingFence->GetCompletedValue() == mappingFenceValue) &&
         (m_pFileStreamer->GetCompletedValue() == copyFenceValue))
     {
-        ThrowIfFailed(m_mappingFence->SetEventOnCompletion(mappingFenceValue + 1, m_fenceEvents[0]));
+        m_mappingFence->SetEventOnCompletion(mappingFenceValue + 1, m_fenceEvents[0]);
         m_pFileStreamer->SetEventOnCompletion(copyFenceValue + 1, m_fenceEvents[1]);
         // wait for a bit. expect signal soon.
         WaitForMultipleObjects(2, m_fenceEvents, FALSE, 180);

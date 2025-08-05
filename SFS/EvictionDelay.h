@@ -11,27 +11,24 @@
 
 namespace SFS
 {
-    class ResourceBase;
+    // supports 8k x 8k /tiles/ and 64 mip levels.
+    struct Coord
+    {
+        UINT x : 13;
+        UINT y : 13;
+        UINT s : 6;
+    };
+    using Coords = std::vector<Coord>;
 
     // delay heap free and unmap (if enabled) for n frames (at least swapchain count)
     class EvictionDelay
     {
     public:
-        struct Coord
-        {
-            UINT x : 13;
-            UINT y : 13;
-            UINT s : 6;
-            operator D3D12_TILED_RESOURCE_COORDINATE() const { return {x, y, 0, s}; }
-        };
-        using Coords = std::vector<Coord>;
-
         EvictionDelay(UINT in_delay) : m_delay(in_delay) {}
 
         void Append(UINT64 in_fenceValue, Coords& in_coords)
         {
-            m_futureEvictions.emplace_back(in_fenceValue + m_delay);
-            m_futureEvictions.back().swap(in_coords);
+            m_futureEvictions.emplace_back(in_fenceValue + m_delay).swap(in_coords);
         }
 
         // are there delayed evictions ready to process?

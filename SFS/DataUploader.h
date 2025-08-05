@@ -81,7 +81,7 @@ namespace SFS
             }
             else
             {
-                m_residencyChangedStaging.Acquire().insert(in_resources.begin(), in_resources.end());
+                m_residencyChangedStaging.Acquire().merge(in_resources);
                 m_residencyChangedStaging.Release();
             }
             m_fenceMonitorFlag.Set();

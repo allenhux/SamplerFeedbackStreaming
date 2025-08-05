@@ -222,13 +222,16 @@ namespace SFS
             BYTE GetResidency(UINT x, UINT y, UINT s) const { return m_resident[s](x, y, GetWidth(s)); }
             UINT32& GetRefCount(UINT x, UINT y, UINT s) { return m_refcounts[s](x, y, GetWidth(s)); }
             UINT32 GetRefCount(UINT x, UINT y, UINT s) const { return m_refcounts[s](x, y, GetWidth(s)); }
+            UINT32& GetHeapIndex(UINT x, UINT y, UINT s) { return m_heapIndices[s](x, y, GetWidth(s)); }
+            UINT32 GetHeapIndex(UINT x, UINT y, UINT s) const { return m_heapIndices[s](x, y, GetWidth(s)); }
 
             void SetResidency(const D3D12_TILED_RESOURCE_COORDINATE& in_coord, Residency in_residency) { SetResidency(in_coord.X, in_coord.Y, in_coord.Subresource, in_residency); }
             BYTE GetResidency(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) const { return GetResidency(in_coord.X, in_coord.Y, in_coord.Subresource); }
-            UINT32 GetRefCount(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) const { return m_refcounts[in_coord.Subresource](in_coord.X, in_coord.Y, GetWidth(in_coord.Subresource)); }
+            UINT32& GetHeapIndex(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) { return GetHeapIndex(in_coord.X, in_coord.Y, in_coord.Subresource); }
 
-            UINT32& GetHeapIndex(const D3D12_TILED_RESOURCE_COORDINATE& in_coord) { return m_heapIndices[in_coord.Subresource](in_coord.X, in_coord.Y, GetWidth(in_coord.Subresource)); }
-            UINT32 GetHeapIndex(UINT x, UINT y, UINT s) const { return m_heapIndices[s](x, y, GetWidth(s)); }
+            void SetResidency(const Coord& c, Residency in_residency) { SetResidency(c.x, c.y, c.s, in_residency); }
+            BYTE GetResidency(const Coord& c) const { return GetResidency(c.x, c.y, c.s); }
+            UINT32 GetRefCount(const Coord& c) const { return GetRefCount(c.x, c.y, c.s); }
 
             // searches refcount of bottom-most non-packed tile(s). If none are in use, we know nothing is resident.
             // used in both UpdateMinMipMap() and ProcessFeedback()
@@ -273,7 +276,7 @@ namespace SFS
 
         EvictionDelay m_delayedEvictions;
 
-        std::vector<D3D12_TILED_RESOURCE_COORDINATE> m_pendingTileLoads;
+        Coords m_pendingTileLoads;
 
         //--------------------------------------------------------
         // for public interface
@@ -300,13 +303,13 @@ namespace SFS
         std::array<QueuedFeedback, QUEUED_FEEDBACK_FRAMES> m_queuedFeedback;
 
         // update internal refcounts based on the incoming minimum mip
-        void SetMinMip(UINT in_x, UINT in_y, UINT in_current, UINT in_desired, EvictionDelay::Coords& out_evictions);
+        void SetMinMip(UINT in_x, UINT in_y, UINT in_current, UINT in_desired, Coords& out_evictions);
 
         // AddRef, which requires allocation, might fail
         void AddTileRef(UINT in_x, UINT in_y, UINT in_s);
 
         // DecRef may decline
-        void DecTileRef(UINT in_x, UINT in_y, UINT in_s, EvictionDelay::Coords& out_evictions);
+        void DecTileRef(UINT in_x, UINT in_y, UINT in_s, Coords& out_evictions);
 
         // index to next min-mip feedback resolve target
         UINT m_readbackIndex{ 0 };

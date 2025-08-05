@@ -59,10 +59,10 @@ void SFS::ResourceDU::MapPackedMips(ID3D12CommandQueue* in_pCommandQueue)
 //-----------------------------------------------------------------------------
 void SFS::ResourceDU::NotifyCopyComplete(const std::vector<D3D12_TILED_RESOURCE_COORDINATE>& in_coords)
 {
-    for (const auto& t : in_coords)
+    for (const auto& c : in_coords)
     {
-        ASSERT(TileMappingState::Residency::Loading == m_tileMappingState.GetResidency(t));
-        m_tileMappingState.SetResidency(t, TileMappingState::Residency::Resident);
+        ASSERT(TileMappingState::Residency::Loading == m_tileMappingState.GetResidency(c));
+        m_tileMappingState.SetResidency(c, TileMappingState::Residency::Resident);
     }
 }
 #if 0

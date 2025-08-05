@@ -110,7 +110,7 @@ void SFS::ResourceBase::SetResidencyMapOffset(UINT in_residencyMapOffsetBase)
 // 0 0 0 0 |
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::SetMinMip(UINT in_x, UINT in_y, UINT s, UINT in_desired,
-    EvictionDelay::Coords& out_evictions)
+    Coords& out_evictions)
 {
     // s is the mip level is currently referenced at this tile
 
@@ -147,7 +147,7 @@ void SFS::ResourceBase::AddTileRef(UINT in_x, UINT in_y, UINT in_s)
     {
         if (InvalidIndex == m_tileMappingState.GetHeapIndex(in_x, in_y, in_s))
         {
-            m_pendingTileLoads.emplace_back(in_x, in_y, 0, in_s);
+            m_pendingTileLoads.emplace_back(in_x, in_y, in_s);
         }
 #ifdef _DEBUG
         else
@@ -166,7 +166,7 @@ void SFS::ResourceBase::AddTileRef(UINT in_x, UINT in_y, UINT in_s)
 // reduce ref count
 // if 0, add tile to list of pending evictions
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::DecTileRef(UINT in_x, UINT in_y, UINT in_s, EvictionDelay::Coords& out_evictions)
+void SFS::ResourceBase::DecTileRef(UINT in_x, UINT in_y, UINT in_s, Coords& out_evictions)
 {
     auto& refCount = m_tileMappingState.GetRefCount(in_x, in_y, in_s);
 
@@ -279,7 +279,7 @@ bool SFS::ResourceBase::HandleEvictAll(UINT64 in_frameFenceCompletedValue)
     memset(m_tileReferences.data(), m_maxMip, m_tileReferences.size());
 
     // queue all resident tiles for eviction
-    EvictionDelay::Coords evictions;
+    Coords evictions;
     for (INT s = m_maxMip - 1; s >= 0; s--)
     {
         bool layerChanged = false;
@@ -381,7 +381,7 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
     // any change, but not necessarily something requiring a residency change:
     bool changed = false;
     {
-        EvictionDelay::Coords evictions;
+        Coords evictions;
 
         const UINT width = GetMinMipMapWidth();
         const UINT height = GetMinMipMapHeight();
@@ -531,7 +531,7 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
         ASSERT(!pEvictions->empty());
 
         UINT numDelayed = 0;
-        for (auto& coord : *pEvictions)
+        for (const auto coord : *pEvictions)
         {
             // if the heap index is valid, but the tile is not resident, there's a /pending load/
             // a pending load might be streaming OR it might be in the pending list
@@ -549,11 +549,11 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
                 // to put it back: set residency to evicting and add tiles to updatelist for eviction
 
                 m_tileMappingState.SetResidency(coord, TileMappingState::Residency::NotResident);
-                UINT& heapIndex = m_tileMappingState.GetHeapIndex(coord);
+                UINT& heapIndex = m_tileMappingState.GetHeapIndex(coord.x, coord.y, coord.s);
                 m_pHeap->GetAllocator().Free(heapIndex);
                 heapIndex = TileMappingState::InvalidIndex;
 #if ENABLE_UNMAP
-                evictions.emplace_back(coord);
+                evictions.emplace_back(coord.x, coord.y, 0, coord.s);
 #else
 				numEvictions++;
 #endif
@@ -569,14 +569,17 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
 
             // else: refcount positive or eviction already in progress? rescue this eviction (by not adding to pending evictions)
         }
-        // narrow the ready evictions to just the delayed evictions.
+
         if (numDelayed)
         {
+            // narrow the ready evictions to just the delayed evictions
+            // delay evicting tiles with in-flight loads from previous feedback
             pEvictions->resize(numDelayed);
             pEvictions++;
         }
         else
         {
+            // remove now-empty set of delayed evictions
             m_delayedEvictions.Pop();
             pEvictions = m_delayedEvictions.begin();
         }
@@ -612,7 +615,7 @@ void SFS::ResourceBase::QueuePendingTileLoads(UpdateList*& out_pUpdateList)
 
     UINT skippedIndex = 0;
     UINT numConsumed = 0;
-    for (const auto& coord : m_pendingTileLoads)
+    for (const auto coord : m_pendingTileLoads)
     {
         numConsumed++;
 
@@ -625,7 +628,7 @@ void SFS::ResourceBase::QueuePendingTileLoads(UpdateList*& out_pUpdateList)
         if (TileMappingState::Residency::NotResident == residency)
         {
             m_tileMappingState.SetResidency(coord, TileMappingState::Residency::Loading);
-            uploads.push_back(coord);
+            uploads.emplace_back(coord.x, coord.y, 0, coord.s);
 
             maxCopies--;
             if (0 == maxCopies)
