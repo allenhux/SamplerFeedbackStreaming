@@ -17,6 +17,8 @@ namespace SFS
         UINT x : 13;
         UINT y : 13;
         UINT s : 6;
+        // std::set<> requires operator<
+        constexpr bool operator< (const Coord& o) const { return (UINT&)(*this) < (UINT&)o; }
     };
     using Coords = std::vector<Coord>;
 

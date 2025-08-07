@@ -271,8 +271,8 @@ namespace SFS
         };
         TileMappingState m_tileMappingState;
     private:
-        // only using double-buffering for feedback history
-        static constexpr UINT QUEUED_FEEDBACK_FRAMES = 2;
+        // triple-buffering for feedback history improved stability on some devices
+        static constexpr UINT QUEUED_FEEDBACK_FRAMES = 3;
         static constexpr UINT InvalidIndex{ UINT(-1) };
 
         EvictionDelay m_delayedEvictions;
@@ -285,8 +285,7 @@ namespace SFS
         // minimum mip level referred to by this tile
         // this tile "holds references" to this mip level and all mips greater than this value
         // with a 16kx16k limit, DX will never see 255 mip levels. but, we want a byte so we can modify cache-coherently
-        using TileReference = UINT8;
-        std::vector<TileReference> m_tileReferences;
+        std::vector<UINT8> m_tileReferences;
 
         static constexpr UINT RESIDENCY_MAP_ALIGNMENT = 64;
         std::vector<BYTE, SFS::AlignedAllocator<BYTE, RESIDENCY_MAP_ALIGNMENT>> m_minMipMap; // local version of min mip map, rectified in UpdateMinMipMap()

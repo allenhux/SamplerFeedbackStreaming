@@ -101,7 +101,6 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, const SFSReso
         m_readback->Map(0, nullptr, (void**)&m_readbackCpuAddress);
 #else
         m_readback.resize(in_numQueuedFeedback);
-        m_readbackCpuAddress.resize(in_numQueuedFeedback);
 
         //-----------------------------------
         //
@@ -115,7 +114,6 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, const SFSReso
         // "applications may choose to decode to a buffer if direct CPU readback is desired."
         // 
         //-----------------------------------
-
         for (UINT i = 0; i < m_readback.size(); i++)
         {
             ThrowIfFailed(in_pDevice->CreateCommittedResource(
@@ -124,7 +122,6 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, const SFSReso
                 &rd, D3D12_RESOURCE_STATE_RESOLVE_DEST,
                 nullptr,
                 IID_PPV_ARGS(&m_readback[i])));
-            m_readback[i]->Map(0, nullptr, (void**)&m_readbackCpuAddress[i]);
             m_readback[i]->SetName(AutoString(L"ResolveDest_", i).str().c_str());
         }
 #endif
@@ -192,20 +189,3 @@ void SFS::InternalResources::ReadbackFeedback(ID3D12GraphicsCommandList* out_pCm
         &sourceRegion);
 }
 #endif
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-void* SFS::InternalResources::MapResolvedReadback(UINT in_index) const
-{
-#if RESOLVE_TO_TEXTURE
-    return &m_readbackCpuAddress[in_index * m_readbackStride];
-#else
-    return m_readbackCpuAddress[in_index];
-#endif
-}
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-void SFS::InternalResources::UnmapResolvedReadback(UINT) const
-{
-}

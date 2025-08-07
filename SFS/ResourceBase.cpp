@@ -380,51 +380,49 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
     //------------------------------------------------------------------
     // any change, but not necessarily something requiring a residency change:
     bool changed = false;
+    Coords evictions;
+
+    const UINT width = GetMinMipMapWidth();
+    const UINT height = GetMinMipMapHeight();
+
+    // we're going to copy out the feedback data as fast as possible into this temporary buffer:
+    std::vector<UINT8> feedback(width * height);
     {
-        Coords evictions;
-
-        const UINT width = GetMinMipMapWidth();
-        const UINT height = GetMinMipMapHeight();
-
-        TileReference* pValues = m_tileReferences.data();
-
 #if RESOLVE_TO_TEXTURE
         // CopyTextureRegion requires pitch multiple of D3D12_TEXTURE_DATA_PITCH_ALIGNMENT = 256
         // note: it is possible to have a pitch greater than 256
         constexpr UINT alignmentMask = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1;
         UINT pitch = (width + alignmentMask) & ~alignmentMask;
-        pitch -= width;
-#endif
 
-        // mapped host feedback buffer
-        UINT8* pResolvedData = (UINT8*)m_resources.MapResolvedReadback(feedbackIndex);
-        for (UINT y = 0; y < height; y++)
+        UINT8* pData = (UINT8*)m_resources.GetResolvedReadback(feedbackIndex);
+        for (UINT h = 0; h < height; h++)
         {
-            for (UINT x = 0; x < width; x++)
-            {
-                // clamp to the maximum we are tracking (not tracking packed mips)
-                UINT8 desired = std::min(*pResolvedData, m_maxMip);
-                UINT8 current = *pValues;
-                if (desired != current)
-                {
-                    changed = true;
-                    SetMinMip(x, y, current, desired, evictions);
-                    *pValues = desired;
-                }
-                pValues++;
-                pResolvedData++;
-            } // end loop over x
-#if RESOLVE_TO_TEXTURE
-            pResolvedData += pitch;
-#endif
-        } // end loop over y
-        m_resources.UnmapResolvedReadback(feedbackIndex);
-
-        if (evictions.size())
-        {
-            m_delayedEvictions.Append(in_frameFenceCompletedValue, evictions);
+            memcpy(feedback.data() + (h * width), pData + (h * pitch), width);
         }
+#else
+        void* pData = (UINT8*)m_resources.MapResolvedReadback(feedbackIndex);
+        memcpy(feedback.data(), pData, feedback.size());
+        m_resources.UnmapResolvedReadback(feedbackIndex);
+#endif
     }
+
+    UINT8* pDesired = feedback.data();
+    UINT8* pCurrent = m_tileReferences.data();
+    for (UINT y = 0; y < height; y++)
+    {
+        for (UINT x = 0; x < width; x++)
+        {
+            // clamp to the maximum we are tracking (not tracking packed mips)
+            *pDesired = std::min(*pDesired, m_maxMip);
+            if (*pDesired != *pCurrent)
+            {
+                changed = true;
+                SetMinMip(x, y, *pCurrent, *pDesired, evictions);
+            }
+            pCurrent++;
+            pDesired++;
+        } // end loop over x
+    } // end loop over y
 
     // any new eviction necessitates removing from residency map
     // some loads can be immediately serviced (refcount changed to > 0 and resident = 1)
@@ -434,6 +432,15 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
     // if refcount changed, there's a new pending upload or eviction
     if (changed)
     {
+        // try to land all the changes together
+        // can't vector::swap because another thread is accessing this
+        memcpy(m_tileReferences.data(), feedback.data(), feedback.size());
+
+        if (evictions.size())
+        {
+            m_delayedEvictions.Append(in_frameFenceCompletedValue, evictions);
+        }
+
         // abandon pending loads that are no longer relevant
         AbandonPendingLoads();
         m_refCountsZero = m_tileMappingState.GetAnyRefCount();
@@ -550,6 +557,7 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
 
                 m_tileMappingState.SetResidency(coord, TileMappingState::Residency::NotResident);
                 UINT& heapIndex = m_tileMappingState.GetHeapIndex(coord);
+                ASSERT(TileMappingState::InvalidIndex != heapIndex);
                 m_pHeap->GetAllocator().Free(heapIndex);
                 heapIndex = TileMappingState::InvalidIndex;
 #if ENABLE_UNMAP
