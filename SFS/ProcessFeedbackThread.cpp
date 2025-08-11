@@ -148,6 +148,7 @@ void SFS::ProcessFeedbackThread::Start()
                         {
                             auto pResource = *i;
                             bool hasFutureFeedback = false;
+                            frameFenceValue = m_pSFSManager->GetFrameFenceCompletedValue();
                             bool changed = pResource->ProcessFeedback(frameFenceValue, hasFutureFeedback);
                             if (changed)
                             {
