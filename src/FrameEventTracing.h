@@ -46,14 +46,14 @@ public:
         const UpdateEventList& in_updateList,
         UINT in_numUploads, UINT in_numEvictions,
         float in_cpuProcessFeedbackTimeMs,
-        float in_gpuProcessFeedbackTime,
+        float in_gpuProcessFeedbackTimeMs,
         UINT in_numFeedbackResolves, UINT in_numSubmits, UINT in_numSignals)
     {
         m_events.push_back({
             in_renderList.GetLatest(),
             in_updateList.GetLatest(),
             in_numUploads, in_numEvictions,
-            in_cpuProcessFeedbackTimeMs, in_gpuProcessFeedbackTime,
+            in_cpuProcessFeedbackTimeMs, in_gpuProcessFeedbackTimeMs,
             in_numFeedbackResolves, in_numSubmits, in_numSignals });
     }
 
@@ -69,7 +69,7 @@ private:
         UINT m_numTileCopiesQueued;
         UINT m_numTilesEvicted;
         float m_cpuFeedbackTimeMs;
-        float m_gpuFeedbackTime;
+        float m_gpuFeedbackTimeMs;
         UINT m_numGpuFeedbackResolves;
         UINT m_numSubmits;
         UINT m_numSignals;
@@ -136,7 +136,7 @@ inline void FrameEventTracing::WriteEvents(HWND in_hWnd, const CommandLineArgs& 
             << "," << e.m_numTileCopiesQueued  // tile virtual->physical removed
 
             << "," << e.m_cpuFeedbackTimeMs
-            << "," << e.m_gpuFeedbackTime * 1000
+            << "," << e.m_gpuFeedbackTimeMs
             << "," << e.m_numGpuFeedbackResolves
             << "," << e.m_numSubmits
             << "," << e.m_numSignals

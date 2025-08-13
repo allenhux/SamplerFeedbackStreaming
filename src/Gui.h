@@ -22,8 +22,8 @@ public:
 
     struct DrawParams
     {
-        float m_gpuDrawTime;       // time to draw the objects
-        float m_gpuFeedbackTime;   // time to clear & resolve feedback and upload residency maps
+        float m_gpuDrawTime;         // time to draw the objects
+        float m_gpuFeedbackTimeMs;   // time to clear & resolve feedback and upload residency maps
         float m_cpuDrawTimeMs;       // time cpu is submitting draw calls (render thread)
         float m_cpuFeedbackTimeMs;   // time cpu is working on feedback & related datastructures (update thread)
         int m_scrollMipDim;

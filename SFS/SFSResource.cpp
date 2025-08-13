@@ -78,6 +78,7 @@ bool SFS::Resource::Drawable()
 //-----------------------------------------------------------------------------
 void SFS::Resource::QueueFeedback()
 {
+    m_evictAll = false;
     m_pSFSManager->QueueFeedback(this);
     // requesting feedback means this resource will be stale
     m_pSFSManager->SetPending(this);

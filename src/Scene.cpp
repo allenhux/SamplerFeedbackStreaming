@@ -1484,7 +1484,7 @@ void Scene::GatherStatistics()
             m_numUploadsPreviousFrame, m_numEvictionsPreviousFrame,
             // Note: these may be off by 1 frame, but probably good enough
             m_pSFSManager->GetCpuProcessFeedbackTimeMs(),
-            m_gpuProcessFeedbackTime, m_numFeedbackObjects,
+            m_gpuProcessFeedbackTimeMs, m_numFeedbackObjects,
             numSubmitsPreviousFrame, numSignalsPreviousFrame);
 
         if (m_frameNumber >= m_args.m_timingStopFrame)
@@ -1792,7 +1792,7 @@ void Scene::DrawUI()
 
         Gui::DrawParams guiDrawParams;
         guiDrawParams.m_gpuDrawTime = m_gpuTimer->GetTimeSeconds(0);
-        guiDrawParams.m_gpuFeedbackTime = m_gpuProcessFeedbackTime;
+        guiDrawParams.m_gpuFeedbackTimeMs = m_gpuProcessFeedbackTimeMs;
         {
             // pass in raw cpu frame time and raw # uploads. GUI will keep a running average of bandwidth
             auto a = m_renderThreadTimes.GetLatest();
@@ -1962,7 +1962,7 @@ bool Scene::Draw()
     m_renderThreadTimes.Set(RenderEvents::PreBeginFrame);
 
     // get the total time the GPU spent processing feedback during the previous frame (by calling before SFSM::BeginFrame)
-    m_gpuProcessFeedbackTime = m_pSFSManager->GetGpuTime();
+    m_gpuProcessFeedbackTimeMs = m_pSFSManager->GetGpuTimeMs();
 
     // prepare to update Feedback & stream textures
     m_pSFSManager->BeginFrame();

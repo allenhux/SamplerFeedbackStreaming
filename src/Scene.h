@@ -263,7 +263,7 @@ private:
     FrameEventTracing::UpdateEventList m_updateFeedbackTimes;
     std::unique_ptr<class D3D12GpuTimer> m_gpuTimer;
     std::unique_ptr<FrameEventTracing> m_csvFile{ nullptr };
-    float m_gpuProcessFeedbackTime{ 0 };
+    float m_gpuProcessFeedbackTimeMs{ 0 };
 
     UINT m_numEvictionsPreviousFrame{ 0 };
     UINT m_numUploadsPreviousFrame{ 0 };

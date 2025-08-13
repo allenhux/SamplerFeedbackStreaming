@@ -103,17 +103,25 @@ void SFS::ProcessFeedbackThread::Start()
                     if (m_newResourcesStaging.Size())
                     {
                         // grab them and release the lock quickly
-                        std::vector<ResourceBase*> tmpResources;
-                        m_newResourcesStaging.Swap(tmpResources);
-
                         if (m_newResources.empty())
                         {
-                            m_newResources.swap(tmpResources);
+                            m_newResourcesStaging.Swap(m_newResources);
                         }
                         else // accumulate when non-empty
                         {
+                            std::vector<ResourceBase*> tmpResources;
+                            m_newResourcesStaging.Swap(tmpResources);
                             m_newResources.insert(m_newResources.end(), tmpResources.begin(), tmpResources.end());
-                        }                        
+                        }
+                    }
+
+                    // check for resources where the application has called QueueFeedback() or QueueEviction()
+                    if (m_queuedResourceStaging.Size())
+                    {
+                        // grab them and release the lock quickly
+                        std::set<ResourceBase*> tmpResources;
+                        m_queuedResourceStaging.Swap(tmpResources);
+                        m_feedbacks.merge(tmpResources);
                     }
 
                     // compare active resources to resources that are to be removed
@@ -122,29 +130,12 @@ void SFS::ProcessFeedbackThread::Start()
                     //       propagated to residency thread
                     CheckFlushResources();
 
-                    // check for resources where the application has called QueueFeedback() or QueueEviction()
-                    if (m_queuedResourceStaging.Size())
+                    if (m_feedbacks.size())
                     {
-                        // grab them and release the lock quickly
-                        if (0 == m_delayedResources.size())
-                        {
-                            m_queuedResourceStaging.Swap(m_delayedResources);
-                        }
-                        else
-                        {
-                            std::set<ResourceBase*> tmpResources;
-                            m_queuedResourceStaging.Swap(tmpResources);
-                            m_delayedResources.insert(tmpResources.begin(), tmpResources.end());
-                        }
-                    }
-
-                    if (m_delayedResources.size())
-                    {
-                        // any evicted tile immediately removed from residency map asap
-                        // FIXME: would like to not change residency until later
+                        // evicted tiles are removed from residency map asap
                         std::set<ResourceBase*> residencyChanged;
 
-                        for (auto i = m_delayedResources.begin(); i != m_delayedResources.end();)
+                        for (auto i = m_feedbacks.begin(); i != m_feedbacks.end();)
                         {
                             auto pResource = *i;
                             bool hasFutureFeedback = false;
@@ -154,24 +145,57 @@ void SFS::ProcessFeedbackThread::Start()
                             {
                                 residencyChanged.insert(pResource);
                             }
-                            if (pResource->HasPendingWork(frameFenceValue))
+                            if (pResource->HasPendingLoads())
                             {
                                 m_pendingResources.insert(pResource);
                             }
-                            if (hasFutureFeedback || pResource->HasDelayedWork())
+                            if (pResource->HasDelayedEvictions())
+                            {
+                                m_evictions.insert(pResource);
+                            }
+                            if (hasFutureFeedback)
                             {
                                 i++; // check this resource again later
                             }
                             else // no future work for this resource
                             {
-                                i = m_delayedResources.erase(i);
+                                i = m_feedbacks.erase(i);
                             }
                         }
+                        // send resources that need residency map update
                         if (residencyChanged.size())
                         {
-                            m_dataUploader.AddResidencyChanged(std::move(residencyChanged));
+                            m_dataUploader.AddResidencyChanged(residencyChanged);
                         }
-                    } // end if queued or delayed work
+                    } // end if queued feedback
+
+                    // handle delayed evictions after processing feedback to allow for rescues
+                    if (m_evictions.size())
+                    {
+                        for (auto i = m_evictions.begin(); i != m_evictions.end();)
+                        {
+                            ResourceBase* pResource = *i;
+
+                            // tiles that are "loading" can't be evicted until loads complete
+#if ENABLE_UNMAP
+                            // sanest way to deal with unmapping evictions is to punt to pending set
+                            if (pResource->HasPendingEvictions(frameFenceValue))
+                            {
+                                m_pendingResources.insert(pResource);
+                            }
+#else
+                            pResource->QueuePendingTileEvictions(frameFenceValue);
+#endif
+                            if (pResource->HasDelayedEvictions())
+                            {
+                                i++;
+                            }
+                            else
+                            {
+                                i = m_evictions.erase(i);
+                            }
+                        }
+                    } // end if delayed evictions
 
                     m_processFeedbackTime += (m_cpuTimer.GetTicks() - feedbackTime);
                 } // end new frame
@@ -215,13 +239,18 @@ void SFS::ProcessFeedbackThread::Start()
 
                         ResourceBase* pResource = *i;
 
-                        UpdateList* pUpdateList = nullptr;
-
-                        // tiles that are "loading" can't be evicted until loads complete
-                        pResource->QueuePendingTileEvictions(frameFenceValue, pUpdateList);
-
-                        pResource->QueuePendingTileLoads(pUpdateList);
-
+                        auto pUpdateList = pResource->QueuePendingTileLoads();
+#if ENABLE_UNMAP
+                        pResource->QueuePendingTileEvictions(frameFenceValue);
+                        if (pResource->GetPendingEvictions().size())
+                        {
+                            if (nullptr == pUpdateList)
+                            {
+                                pUpdateList = m_dataUploader.AllocateUpdateList((ResourceDU*)pResource);
+                            }
+                            pUpdateList->m_evictCoords.swap(pResource->GetPendingEvictions());
+                        }
+#endif
                         if (pUpdateList)
                         {
                             uploadsRequested += (UINT)pUpdateList->GetNumStandardUpdates();
@@ -236,7 +265,7 @@ void SFS::ProcessFeedbackThread::Start()
                             }
                         }
 
-                        if (pResource->HasPendingWork(frameFenceValue)) // still have work to do?
+                        if (pResource->HasPendingLoads()) // still have work to do?
                         {
                             i++;
                         }
@@ -376,9 +405,10 @@ void SFS::ProcessFeedbackThread::CheckFlushResources()
         m_flushResources.ClearFlag(GroupFlushResources::Flags::Initialize);
 
         // remove from my vectors
-        ContainerRemove(m_delayedResources, flushResources);
+        ContainerRemove(m_feedbacks, flushResources);
+        ContainerRemove(m_evictions, flushResources);
         ContainerRemove(m_pendingResources, flushResources);
-        ContainerRemove(m_queuedResourceStaging.Acquire(), flushResources); m_queuedResourceStaging.Release();
+        ContainerRemove(m_newResources, flushResources);
 
         // tell residency thread there's work to do
         m_flushResources.SetFlag(GroupFlushResources::Flags::ResidencyThread);

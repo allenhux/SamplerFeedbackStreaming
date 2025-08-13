@@ -120,22 +120,23 @@ namespace SFS
         bool ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool& out_hasFutureFeedback);
 
         // try to load/evict tiles.
-        // re-uses or allocates updatelist
-        void QueuePendingTileLoads(UpdateList*& out_pUpdateList);
+        // allocates updatelist if necessary
+        UpdateList* QueuePendingTileLoads();
+        // wants to load tiles this frame
+        bool HasPendingLoads() const { return m_pendingTileLoads.size(); }
 
-        // returns # tiles evicted
-		// allocates updatelist if necessary
-        void QueuePendingTileEvictions(UINT64 in_fenceValue, UpdateList*& out_pUpdateList);
+        void QueuePendingTileEvictions(UINT64 in_fenceValue);
 
-        bool HasDelayedWork() // tiles to load / evict now or later
+        // tiles to load / evict now or later
+        bool HasDelayedEvictions() const { return m_delayedEvictions.HasDelayedWork(); }
+        bool HasPendingEvictions(UINT64 in_fenceValue) const
         {
-            return m_delayedEvictions.HasDelayedWork();
+            return m_delayedEvictions.HasPendingWork(in_fenceValue);
         }
+        // wants to load tiles this frame
+        // only valid after QueuePendingTileEvictions, only used if ENABE_UNMAP != 0
+        auto& GetPendingEvictions() { return m_pendingTileEvictions; }
 
-        bool HasPendingWork(const UINT64 in_fenceValue) // wants to load / evict tiles this frame
-        {
-            return (m_pendingTileLoads.size() || m_delayedEvictions.HasPendingWork(in_fenceValue));
-        }
 
         bool InitPackedMips();
 
@@ -278,6 +279,9 @@ namespace SFS
         EvictionDelay m_delayedEvictions;
 
         Coords m_pendingTileLoads;
+
+        // evictions that /MUST/ be unmapped asap. only populated with ENABLE_UMMAP != 0
+        std::vector<D3D12_TILED_RESOURCE_COORDINATE> m_pendingTileEvictions;
 
         //--------------------------------------------------------
         // for public interface

@@ -33,11 +33,17 @@ namespace SFS
             m_futureEvictions.emplace_back(in_fenceValue + m_delay).swap(in_coords);
         }
 
-        // are there delayed evictions ready to process?
-        bool HasPendingWork(const UINT64 in_fenceValue) const { return m_futureEvictions.size() && m_futureEvictions.front().m_fenceValue <= in_fenceValue; }
-
         // any future evictions?
-        bool HasDelayedWork() const { return !m_futureEvictions.empty(); }
+        bool HasDelayedWork() const
+        {
+            return m_futureEvictions.size();
+        }
+
+        // has work that can be done right now?
+        bool HasPendingWork(UINT64 in_fenceValue) const
+        {
+            return HasDelayedWork() && (m_futureEvictions.front().m_fenceValue <= in_fenceValue);
+        }
 
         // return evictions to process
         auto begin() { return m_futureEvictions.begin(); }

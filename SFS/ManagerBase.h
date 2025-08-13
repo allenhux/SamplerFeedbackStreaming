@@ -105,7 +105,7 @@ namespace SFS
         ComPtr<ID3D12CommandQueue> m_directCommandQueue;
 
         std::set<ResourceBase*> m_feedbackReadbacks;
-        float m_numTexelsQueued{ 0 }; // for computing texels/ms
+        UINT m_numTexelsQueued{ 0 }; // for computing texels/ms
 
 #if RESOLVE_TO_TEXTURE
         // NOTE: this heap and array of resources is allocated in SFSManager.cpp

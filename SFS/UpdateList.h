@@ -27,6 +27,7 @@ namespace SFS
 
             STATE_UPLOADING,             // make sure the copy fence is valid, since copying and mapping can be concurrent
             STATE_MAP_PENDING,           // check for mapping complete
+            STATE_FREE_UPDATELIST,       // bypass checks, just free the updatelist
 
             STATE_PACKED_MAPPING,        // wait for packed mips to be mapped before uploading
             STATE_PACKED_COPY_PENDING    // wait for upload of packed mips to complete

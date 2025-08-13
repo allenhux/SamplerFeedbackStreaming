@@ -21,6 +21,8 @@
 SFS::Manager::Manager(const struct SFSManagerDesc& in_desc, ID3D12Device8* in_pDevice)
     : ManagerBase(in_desc, in_pDevice)
     , m_gpuTimerResolve(in_pDevice, in_desc.m_swapChainBufferCount, D3D12GpuTimer::TimerType::Direct)
+    , m_numTexels(m_feedbackTimingFrequency, 200)
+    , m_gpuFeedbackTimes(m_feedbackTimingFrequency, 1.f)
 {
     m_commandListEndFrame.Allocate(m_device.Get(), m_numSwapBuffers, L"SFS::ManagerBase::m_commandListEndFrame");
 
@@ -184,7 +186,7 @@ void SFS::ManagerBase::UseDirectStorage(bool in_useDS)
 //-----------------------------------------------------------------------------
 float SFS::Manager::GetGpuTexelsPerMs() const { return m_texelsPerMs; }
 UINT SFS::Manager::GetMaxNumFeedbacksPerFrame() const { return m_maxNumResolvesPerFrame; }
-float SFS::Manager::GetGpuTime() const { return m_gpuFrameTime; }
+float SFS::Manager::GetGpuTimeMs() const { return m_gpuProcessFeedbackFrameTimeMs; }
 float SFS::Manager::GetCpuProcessFeedbackTimeMs() { return m_cpuProcessFeedbackFrameTimeMs; }
 UINT SFS::Manager::GetTotalNumUploads() const { return m_numTotalUploads; }
 UINT SFS::Manager::GetTotalNumEvictions() const { return m_numTotalEvictions; }
@@ -245,14 +247,6 @@ void SFS::Manager::BeginFrame()
 
     // every frame, process feedback (also steps eviction history from prior frames)
     m_processFeedbackThread.Wake();
-#if 0
-    // capture cpu time spent processing feedback
-    {
-        INT64 processFeedbackTime = m_processFeedbackThread.GetTotalProcessTime(); // snapshot of live counter
-        m_cpuProcessFeedbackFrameTime = m_processFeedbackThread.GetSecondsFromDelta(processFeedbackTime - m_previousFeedbackTime);
-        m_previousFeedbackTime = processFeedbackTime; // remember current time for next call
-    }
-#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -442,26 +436,39 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
 
         // there was feedback this frame, so include it when measuring texels/ms
         m_numFeedbackTimingFrames++;
-    }
+    } // end if feedback readback
 
     pCommandList->Close();
 
     m_withinFrame = false;
 
-    if (m_numFeedbackTimingFrames >= m_feedbackTimingFrequency)
+    // cpu time average of last n frames is updated every frame
     {
-        m_gpuFrameTime = m_gpuFeedbackTime / m_feedbackTimingFrequency;
-
-        m_numFeedbackTimingFrames = 0;
-        m_texelsPerMs = m_numTexelsQueued / (m_gpuFeedbackTime * 1000.f);
-        m_numTexelsQueued = 0;
-        m_gpuFeedbackTime = 0;
-#if 1
         UINT64 processFeedbackTime = m_processFeedbackThread.GetTotalProcessTime(); // snapshot of live counter
-        m_cpuProcessFeedbackFrameTimeMs = m_processFeedbackThread.GetMsFromDelta(processFeedbackTime - m_previousFeedbackTime) / m_feedbackTimingFrequency;
-        m_previousFeedbackTime = processFeedbackTime; // remember current time for next call
-#endif
+        if (0 == m_cpuFeedbackTimes.size())
+        {
+            m_cpuFeedbackTimes.assign(m_feedbackTimingFrequency, processFeedbackTime);
+        }
+
+        UINT timeIndex = m_numFeedbackTimingFrames % m_feedbackTimingFrequency;
+        m_cpuProcessFeedbackFrameTimeMs = m_processFeedbackThread.GetMsFromDelta(processFeedbackTime - m_cpuFeedbackTimes[timeIndex]);
+        m_cpuProcessFeedbackFrameTimeMs /= m_feedbackTimingFrequency;
+        m_cpuFeedbackTimes[timeIndex] = processFeedbackTime; // remember current time for next call
+    }
+
+    // gpu time average of last n frames is updated every frame
+    {
+        UINT timeIndex = m_numFeedbackTimingFrames % m_feedbackTimingFrequency;
+        if (m_numFeedbackTimingFrames >= m_feedbackTimingFrequency)
+        {
+            float t = (m_gpuFeedbackTime - m_gpuFeedbackTimes[timeIndex]) * 1000.f; // s -> ms
+            UINT n = m_numTexelsQueued - m_numTexels[timeIndex];
+            m_texelsPerMs = n / t;
+            m_gpuProcessFeedbackFrameTimeMs = t / m_feedbackTimingFrequency;
+        }
+        m_numTexels[timeIndex] = m_numTexelsQueued;
+        m_gpuFeedbackTimes[timeIndex] = m_gpuFeedbackTime;
     }
 
     return pCommandList;
-}
+} // EndFrame()

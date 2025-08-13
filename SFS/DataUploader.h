@@ -73,17 +73,10 @@ namespace SFS
 		void CheckFlushResources() { m_fenceMonitorFlag.Set(); } // wake the fence monitor thread to check for flushed resources
 
         // ProcessFeedbackThread calls this to notify that a resource's residency has changed
-        void AddResidencyChanged(std::set<ResourceBase*> in_resources)
+        void AddResidencyChanged(std::set<ResourceBase*>& in_resources)
         {
-            if (0 == m_residencyChangedStaging.Size())
-            {
-                m_residencyChangedStaging.Swap(in_resources);
-            }
-            else
-            {
-                m_residencyChangedStaging.Acquire().merge(in_resources);
-                m_residencyChangedStaging.Release();
-            }
+            m_residencyChangedStaging.Acquire().merge(in_resources);
+            m_residencyChangedStaging.Release();
             m_fenceMonitorFlag.Set();
         }
 

@@ -406,7 +406,11 @@ void SFS::DataUploader::FenceMonitorThread()
                 freeUpdateList = true;
             }
             break;
-
+#if ENABLE_UNMAP
+        case UpdateList::State::STATE_FREE_UPDATELIST:
+            freeUpdateList = true;
+            break;
+#endif
         default:
             break;
         }
@@ -428,20 +432,6 @@ void SFS::DataUploader::FenceMonitorThread()
         m_pFileStreamer->Signal();
     }
 
-    // flush resources?
-    // handles the very rare case where a flush occurs after updatelists have been processed
-	// but before notifiedResources have had UpdateMinMipMap() called
-    if (GroupFlushResources::Flags::ResidencyThread & m_flushResources.GetFlags())
-    {
-        // number of resources likely > # to be removed
-        ContainerRemove(notifiedResources, m_flushResources.BypassLockGetValues());
-
-        ContainerRemove(m_residencyChangedStaging.Acquire(), m_flushResources.BypassLockGetValues());
-        m_residencyChangedStaging.Release();
-
-        m_flushResources.ClearFlag(GroupFlushResources::Flags::ResidencyThread);
-    }
-
     // check if ProcessFeedbackThread produced residency changes
     // that did not generate UpdateLists
     if (m_residencyChangedStaging.Size())
@@ -449,6 +439,15 @@ void SFS::DataUploader::FenceMonitorThread()
         std::set<ResourceBase*> residencyChanged;
         m_residencyChangedStaging.Swap(residencyChanged);
         notifiedResources.merge(residencyChanged);
+    }
+
+    // flush resources?
+    // handles the very rare case where a flush occurs after updatelists have been processed
+    // but before notifiedResources have had UpdateMinMipMap() called
+    if (GroupFlushResources::Flags::ResidencyThread & m_flushResources.GetFlags())
+    {
+        ContainerRemove(notifiedResources, m_flushResources.BypassLockGetValues());
+        m_flushResources.ClearFlag(GroupFlushResources::Flags::ResidencyThread);
     }
 
     // add resources that had notifications
@@ -539,7 +538,7 @@ void SFS::DataUploader::MappingThread()
                 updateList.m_evictCoords);
             updateList.m_mappingFenceValue--; // set to previously signaled state
             // skip the uploading state when no uploads
-            updateList.m_executionState = UpdateList::State::STATE_MAP_PENDING;
+            updateList.m_executionState = UpdateList::State::STATE_FREE_UPDATELIST;
             break;
         case 3: // both mapping and unmapping
             m_mappingUpdater.Both(GetMappingQueue(),

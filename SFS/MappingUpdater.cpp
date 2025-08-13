@@ -96,7 +96,7 @@ void SFS::MappingUpdater::Both(ID3D12CommandQueue* in_pCommandQueue,
 
     coords.reserve(in_map.size() + in_unmap.size());
     coords.insert(coords.begin(), in_map.begin(), in_map.end());
-    coords.insert(coords.begin() + in_map.size(), in_unmap.begin(), in_unmap.end());
+    coords.insert(coords.end(), in_unmap.begin(), in_unmap.end());
 
     rangeFlags.resize(in_map.size() + in_unmap.size());
     std::fill(rangeFlags.begin(), rangeFlags.begin() + in_map.size(), D3D12_TILE_RANGE_FLAG_NONE);

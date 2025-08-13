@@ -39,7 +39,7 @@ namespace SFS
         //virtual bool GetWithinFrame() const override;
         virtual float GetGpuTexelsPerMs() const override;
         virtual UINT GetMaxNumFeedbacksPerFrame() const override;
-        virtual float GetGpuTime() const override;
+        virtual float GetGpuTimeMs() const override;
         virtual float GetCpuProcessFeedbackTimeMs() override;
         virtual UINT GetTotalNumUploads() const override;
         virtual UINT GetTotalNumEvictions() const override;
@@ -58,14 +58,17 @@ namespace SFS
         D3D12GpuTimer m_gpuTimerResolve; // time for feedback resolve
         BarrierList m_packedMipTransitionBarriers; // transition packed-mips from common (copy dest)
 
-        UINT64 m_previousFeedbackTime{ 0 }; // m_processFeedbackTime at time of last query
         float m_cpuProcessFeedbackFrameTimeMs{ 0 }; // cpu time spent processing feedback (averaged over m_feedbackTimingFrequency)
-        float m_gpuFrameTime{ 0 };  // gpu render queue time (averaged over m_feedbackTimingFrequency)
+        float m_gpuProcessFeedbackFrameTimeMs{ 0 };  // gpu render queue time (averaged over m_feedbackTimingFrequency)
 
-        // every n frames swap
+        // average over n frames
         UINT m_feedbackTimingFrequency{ 25 };
         UINT m_numFeedbackTimingFrames{ 0 };
-        float m_texelsPerMs{ 50 };
+        std::vector<UINT64> m_cpuFeedbackTimes; // cumulative processor ticks at time of last query
+        std::vector<UINT> m_numTexels;
+        std::vector<float> m_gpuFeedbackTimes;
+
+        float m_texelsPerMs{ 500 };
         float m_gpuFeedbackTime{ 0 };
 
         UINT m_renderFrameIndex{ 0 }; // between 0 and # swap buffers

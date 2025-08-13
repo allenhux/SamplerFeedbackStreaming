@@ -11,6 +11,7 @@
 #include <vector>
 #include <set>
 #include <thread>
+#include <functional>
 
 #include "DebugHelper.h"
 #include "d3dx12.h"
@@ -135,6 +136,14 @@ namespace SFS
         void Release() { m_size = m_values.size(); m_lock.Release(); }
         size_t Size() { return  m_size; }
         void Swap(T& v) { Acquire().swap(v); Release(); }
+        void TryAcquire(std::function<void(T& v)> f)
+        {
+            if (m_lock.TryAcquire())
+            {
+                f(m_values);
+                m_lock.Release();
+            }
+        }
     protected:
         Lock m_lock;
         T m_values;

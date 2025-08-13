@@ -520,11 +520,9 @@ Note that the multi-frame delay for evictions prevents allocation of an index th
 // note there are only tiles to evict after processing feedback, but it's possible
 // there was no UpdateList available at the time, so they haven't been evicted yet.
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_unused]] UpdateList*& out_pUpdateList)
+void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue)
 {
-#if ENABLE_UNMAP
-    std::vector<D3D12_TILED_RESOURCE_COORDINATE> evictions;
-#else
+#if (0 == ENABLE_UNMAP)
 	UINT numEvictions = 0;
 #endif
     // search for evictions that were scheduled to happen
@@ -561,7 +559,7 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
                 m_pHeap->GetAllocator().Free(heapIndex);
                 heapIndex = TileMappingState::InvalidIndex;
 #if ENABLE_UNMAP
-                evictions.emplace_back(coord.x, coord.y, 0, coord.s);
+                m_pendingTileEvictions.emplace_back(coord.x, coord.y, 0, coord.s);
 #else
 				numEvictions++;
 #endif
@@ -592,14 +590,7 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
             pEvictions = m_delayedEvictions.begin();
         }
     } // end loop over delayed evictions
-#if ENABLE_UNMAP
-    if (evictions.size())
-    {
-        out_pUpdateList = m_pSFSManager->AllocateUpdateList(this);
-        ASSERT(out_pUpdateList);
-        out_pUpdateList->m_evictCoords.swap(evictions);
-    }
-#else
+#if (0 == ENABLE_UNMAP)
     // counted here because evictions aren't passed along into an updatelist
     m_pSFSManager->TallyEvictions(numEvictions);
 #endif
@@ -608,14 +599,14 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue, [[maybe_
 //-----------------------------------------------------------------------------
 // queue one UpdateList worth of uploads
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::QueuePendingTileLoads(UpdateList*& out_pUpdateList)
+SFS::UpdateList* SFS::ResourceBase::QueuePendingTileLoads()
 {
     // clamp to heap availability
     UINT maxCopies = std::min((UINT)m_pendingTileLoads.size(), m_pHeap->GetAllocator().GetAvailable());
 
     if (0 == maxCopies)
     {
-        return;
+        return nullptr;
     }
 
     std::vector<D3D12_TILED_RESOURCE_COORDINATE> uploads;
@@ -663,13 +654,10 @@ void SFS::ResourceBase::QueuePendingTileLoads(UpdateList*& out_pUpdateList)
         UINT numUploads = (UINT)uploads.size();
 
         // calling function checked for availability, so UL allocation must succeed
-        if (nullptr == out_pUpdateList)
-        {
-            out_pUpdateList = m_pSFSManager->AllocateUpdateList(this);
-            ASSERT(out_pUpdateList);
-        }
+        auto pUpdateList = m_pSFSManager->AllocateUpdateList(this);
+        ASSERT(pUpdateList);
 
-        auto& heapIndices = out_pUpdateList->m_heapIndices;
+        auto& heapIndices = pUpdateList->m_heapIndices;
         heapIndices.resize(numUploads);
         // uploads was clamped to heap availability, so heap allocate will succeed
         m_pHeap->GetAllocator().Allocate(heapIndices.data(), numUploads);
@@ -677,8 +665,11 @@ void SFS::ResourceBase::QueuePendingTileLoads(UpdateList*& out_pUpdateList)
         {
             m_tileMappingState.GetHeapIndex(uploads[i]) = heapIndices[i];
         }
-        out_pUpdateList->m_coords.swap(uploads);
+        pUpdateList->m_coords.swap(uploads);
+
+        return pUpdateList;
     }
+    return nullptr;
 }
 
 //-----------------------------------------------------------------------------

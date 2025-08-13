@@ -86,8 +86,11 @@ namespace SFS
         // new resources are prioritized until packed mips are in-flight
         std::vector<ResourceBase*> m_newResources;
 
+        // resources with feedback that needs processing
+        std::set<ResourceBase*> m_feedbacks;
+
         // resources with any pending work, including evictions scheduled multiple frames later
-        std::set<ResourceBase*> m_delayedResources;
+        std::set<ResourceBase*> m_evictions;
 
         // resources that need tiles loaded/evicted asap
         std::set<ResourceBase*> m_pendingResources;
