@@ -333,7 +333,7 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
         ImGui::Checkbox("VSync", &in_args.m_vsyncEnabled);
 
         out_buttonChanges.m_frustumToggle = ImGui::Checkbox("Lock Frustum", &in_args.m_visualizeFrustum);
-        ImGui::Checkbox("Uploads Enabled", &in_args.m_enableTileUpdates);
+        ImGui::Checkbox("Streaming Enabled", &in_args.m_enableTileUpdates);
         ImGui::Checkbox("Update Every Object Every Frame", &in_args.m_updateEveryObjectEveryFrame);
         ImGui::Checkbox("Lock \"Up\" Dir", &in_args.m_cameraUpLock);
 

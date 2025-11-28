@@ -35,7 +35,7 @@
 
   "maxFeedbackTime": 2, // target milliseconds for GPU to resolve feedback
   "numHeaps": 1, // number of equal-sized SFSHeaps to create
-  "heapSizeMB": 1536, // 1024GB holds 16384 tiles @ 64KB per tile
+  "heapSizeMB": 2048, // 1024GB holds 16384 tiles @ 64KB per tile
   "addAliasingBarriers": false, //// adds a barrier for each streaming resource: alias(nullptr, pResource)
 
   "adapter": "", // create device on adapter with description containig substring ignoring case e.g. "intel"
