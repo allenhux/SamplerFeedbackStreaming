@@ -307,10 +307,11 @@ namespace SFS
         std::array<QueuedFeedback, QUEUED_FEEDBACK_FRAMES> m_queuedFeedback;
 
         // update internal refcounts based on the incoming minimum mip
-        void SetMinMip(UINT in_x, UINT in_y, UINT in_current, UINT in_desired, Coords& out_evictions);
+        void SetMinMip(UINT in_x, UINT in_y, UINT in_current, UINT in_desired,
+            Coords& out_evictions, std::set<SFS::Coord>& out_loadEvictPending);
 
         // AddRef, which requires allocation, might fail
-        void AddTileRef(UINT in_x, UINT in_y, UINT in_s);
+        void AddTileRef(UINT in_x, UINT in_y, UINT in_s, std::set<SFS::Coord>& out_loadEvictPending);
 
         // DecRef may decline
         void DecTileRef(UINT in_x, UINT in_y, UINT in_s, Coords& out_evictions);

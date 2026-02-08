@@ -110,7 +110,7 @@ void SFS::ResourceBase::SetResidencyMapOffset(UINT in_residencyMapOffsetBase)
 // 0 0 0 0 |
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::SetMinMip(UINT in_x, UINT in_y, UINT s, UINT in_desired,
-    Coords& out_evictions)
+    Coords& out_evictions, std::set<SFS::Coord>& out_loadEvictPending)
 {
     // s is the mip level is currently referenced at this tile
 
@@ -119,7 +119,7 @@ void SFS::ResourceBase::SetMinMip(UINT in_x, UINT in_y, UINT s, UINT in_desired,
     while (s > in_desired)
     {
         s -= 1; // already have "this" tile. e.g. have s == 1, desired in_s == 0, start with 0.
-        AddTileRef(in_x >> s, in_y >> s, s);
+        AddTileRef(in_x >> s, in_y >> s, s, out_loadEvictPending);
     }
 
     // decref mips we don't need
@@ -135,7 +135,8 @@ void SFS::ResourceBase::SetMinMip(UINT in_x, UINT in_y, UINT s, UINT in_desired,
 // add to refcount for a tile
 // if first time, add tile to list of pending loads
 //-----------------------------------------------------------------------------
-void SFS::ResourceBase::AddTileRef(UINT in_x, UINT in_y, UINT in_s)
+void SFS::ResourceBase::AddTileRef(UINT in_x, UINT in_y, UINT in_s,
+    std::set<SFS::Coord>& out_loadEvictPending)
 {
     auto& refCount = m_tileMappingState.GetRefCount(in_x, in_y, in_s);
 
@@ -149,15 +150,18 @@ void SFS::ResourceBase::AddTileRef(UINT in_x, UINT in_y, UINT in_s)
         {
             m_pendingTileLoads.emplace_back(in_x, in_y, in_s);
         }
-#ifdef _DEBUG
         else
         {
+            // refcount 0 but valid index means eviction is pending (but still resident)
+            // must remove the tile from pending evictions
+            out_loadEvictPending.insert({ in_x, in_y, in_s });
+#ifdef _DEBUG
             // note: be sure to updateminmipmap
             auto r = m_tileMappingState.GetResidency(in_x, in_y, in_s);
             ASSERT((TileMappingState::Residency::Resident == r) ||
                 (TileMappingState::Residency::Loading == r));
-        }
 #endif
+        }
     }
     refCount++;
 }
@@ -380,7 +384,6 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
     //------------------------------------------------------------------
     // any change, but not necessarily something requiring a residency change:
     bool changed = false;
-    Coords evictions;
 
     const UINT width = GetMinMipMapWidth();
     const UINT height = GetMinMipMapHeight();
@@ -406,6 +409,13 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
 #endif
     }
 
+    // track tiles that are scheduled for future eviction
+    Coords evictions;
+
+    // track loads of tiles that have a pending evict
+    // these tiles have a valid heap index (and are resident) but have 0 ref count
+    std::set<SFS::Coord> loadEvictPending;
+
     UINT8* pDesired = feedback.data();
     UINT8* pCurrent = m_tileReferences.data();
     for (UINT y = 0; y < height; y++)
@@ -417,7 +427,7 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
             if (*pDesired != *pCurrent)
             {
                 changed = true;
-                SetMinMip(x, y, *pCurrent, *pDesired, evictions);
+                SetMinMip(x, y, *pCurrent, *pDesired, evictions, loadEvictPending);
             }
             pCurrent++;
             pDesired++;
@@ -439,6 +449,46 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
         if (evictions.size())
         {
             m_delayedEvictions.Append(in_frameFenceCompletedValue, evictions);
+        }
+
+        // if a tile was loaded, remove any delayed eviction of that tile
+        if (loadEvictPending.size())
+        {
+            for (auto pEvictions = m_delayedEvictions.begin(); pEvictions != m_delayedEvictions.end();)
+            {
+                // empty container means bad logic somewhere else
+                ASSERT(!pEvictions->empty());
+
+                // loop over eviction arrays. remove them if empty
+                UINT num = (UINT)pEvictions->size();
+				for (UINT i = 0; i < num;)
+                {
+					auto& coord = (*pEvictions)[i];
+                    if (loadEvictPending.contains(coord))
+                    {
+						coord = pEvictions->back();
+                        num--;
+                    }
+                    else
+                    {
+                        i++;
+					}
+                } // end loop over evictions array
+                pEvictions->resize(num);
+
+                // if *pEvictions is non-empty, move on
+                if (num)
+                {
+                    ++pEvictions;
+                }
+                else
+                {
+                    // if array *pEvictions is empty, remove it from the list (m_delayedEvictions)
+                    pEvictions = m_delayedEvictions.erase(pEvictions);
+                }
+            } // end loop over delayed eviction list
+
+            loadEvictPending.clear();
         }
 
         // abandon pending loads that are no longer relevant
