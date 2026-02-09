@@ -466,8 +466,8 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
 					auto& coord = (*pEvictions)[i];
                     if (loadEvictPending.contains(coord))
                     {
-						coord = pEvictions->back();
                         num--;
+                        coord = (*pEvictions)[num];
                     }
                     else
                     {
