@@ -237,9 +237,15 @@ void SFS::ProcessFeedbackThread::Start()
                             break;
                         }
 
+                        // do not try to upload if creating new resources
+                        // NOTE: if not ENABLE_UNMAP, could do this test once before the loop
                         ResourceBase* pResource = *i;
+                        SFS::UpdateList* pUpdateList = nullptr;
+                        if (0 == m_newResources.size())
+                        {
+                            pUpdateList = pResource->QueuePendingTileLoads();
+                        }
 
-                        auto pUpdateList = pResource->QueuePendingTileLoads();
 #if ENABLE_UNMAP
                         pResource->QueuePendingTileEvictions(frameFenceValue);
                         if (pResource->GetPendingEvictions().size())
