@@ -297,6 +297,9 @@ namespace SFS
         // drop pending loads that are no longer relevant
         void AbandonPendingLoads();
 
+        // if a tile was scheduled for eviction but is now needed, rescue it by removing from evictions (its heap index will be valid)
+		void RescuePendingEvictions(std::set<SFS::Coord>& in_rescueSet);
+
         // if feedback is queued, it is ready to use after the render fence has reached this value
         // support having a feedback queued every frame (num swap buffers)
         struct QueuedFeedback

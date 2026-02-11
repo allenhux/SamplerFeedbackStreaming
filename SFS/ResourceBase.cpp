@@ -435,9 +435,9 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
     } // end loop over y
 
     // any new eviction necessitates removing from residency map
-    // some loads can be immediately serviced (refcount changed to > 0 and resident = 1)
-    // FIXME? it's possible that we only generated loads that have yet to be submitted,
-    //        in which case there's no residency change yet.
+    // some loads can be immediately serviced (refcount changed to > 0, but resident was previously 1 and heap index valid)
+    // FIXME? if we only generated loads that have yet to be submitted, then there's no residency change yet (return changed = false?)
+    //        BUT, this results in no updates: if (loadEvictPending.empty() && evictions.empty()) { changed = false; }
 
     // if refcount changed, there's a new pending upload or eviction
     if (changed)
@@ -451,48 +451,12 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
             m_delayedEvictions.Append(in_frameFenceCompletedValue, evictions);
         }
 
-        // if a tile was loaded, remove any delayed eviction of that tile
-        if (loadEvictPending.size())
-        {
-            for (auto pEvictions = m_delayedEvictions.begin(); pEvictions != m_delayedEvictions.end();)
-            {
-                // empty container means bad logic somewhere else
-                ASSERT(!pEvictions->empty());
-
-                // loop over eviction arrays. remove them if empty
-                UINT num = (UINT)pEvictions->size();
-				for (UINT i = 0; i < num;)
-                {
-					auto& coord = (*pEvictions)[i];
-                    if (loadEvictPending.contains(coord))
-                    {
-                        num--;
-                        coord = (*pEvictions)[num];
-                    }
-                    else
-                    {
-                        i++;
-					}
-                } // end loop over evictions array
-                pEvictions->resize(num);
-
-                // if *pEvictions is non-empty, move on
-                if (num)
-                {
-                    ++pEvictions;
-                }
-                else
-                {
-                    // if array *pEvictions is empty, remove it from the list (m_delayedEvictions)
-                    pEvictions = m_delayedEvictions.erase(pEvictions);
-                }
-            } // end loop over delayed eviction list
-
-            loadEvictPending.clear();
-        }
+        // Rescue tiles that were scheduled to be evicted but are now needed
+		RescuePendingEvictions(loadEvictPending);
 
         // abandon pending loads that are no longer relevant
         AbandonPendingLoads();
+
         m_refCountsZero = m_tileMappingState.GetAnyRefCount();
     } // end if changed
 
@@ -501,6 +465,51 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
     // if refcount -> 1+ and resident, treat as though loaded immediately. memory was never released.
 
     return changed;
+}
+
+//-----------------------------------------------------------------------------
+// if a tile was loaded, remove any delayed eviction of that tile
+//-----------------------------------------------------------------------------
+void SFS::ResourceBase::RescuePendingEvictions(std::set<SFS::Coord>& in_rescueSet)
+{
+    if (!in_rescueSet.empty())
+    {
+        for (auto pEvictions = m_delayedEvictions.begin(); pEvictions != m_delayedEvictions.end();)
+        {
+            // empty container means bad logic somewhere else
+            ASSERT(!pEvictions->empty());
+
+            // loop over eviction arrays. remove them if empty
+            UINT num = (UINT)pEvictions->size();
+            for (UINT i = 0; i < num;)
+            {
+                auto& coord = (*pEvictions)[i];
+                if (in_rescueSet.contains(coord))
+                {
+                    num--;
+                    coord = (*pEvictions)[num];
+                }
+                else
+                {
+                    i++;
+                }
+            } // end loop over evictions array
+            pEvictions->resize(num);
+
+            // if *pEvictions is non-empty, move on
+            if (num)
+            {
+                ++pEvictions;
+            }
+            else
+            {
+                // if array *pEvictions is empty, remove it from the list (m_delayedEvictions)
+                pEvictions = m_delayedEvictions.erase(pEvictions);
+            }
+        } // end loop over delayed eviction list
+
+        in_rescueSet.clear();
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -636,7 +645,8 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue)
         else
         {
             // remove now-empty set of delayed evictions
-            m_delayedEvictions.Pop();
+            ASSERT(m_delayedEvictions.begin() == pEvictions);
+            m_delayedEvictions.pop_front();
             pEvictions = m_delayedEvictions.begin();
         }
     } // end loop over delayed evictions
@@ -909,7 +919,7 @@ void SFS::ResourceBase::ClearAllocations()
     m_tileReferences.assign(m_tileReferences.size(), m_maxMip);
     m_minMipMap.assign(m_minMipMap.size(), m_maxMip);
 
-    m_delayedEvictions.Clear();
+    m_delayedEvictions.clear();
     m_pendingTileLoads.clear();
 }
 

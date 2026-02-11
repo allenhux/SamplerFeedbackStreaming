@@ -48,11 +48,11 @@ namespace SFS
         // return evictions to process
         auto begin() { return m_futureEvictions.begin(); }
         auto end() { return m_futureEvictions.end(); }
-        void Pop() { m_futureEvictions.pop_front(); }
+        void pop_front() { m_futureEvictions.pop_front(); }
 		auto erase(auto i) { return m_futureEvictions.erase(i); }
 
         // dump all pending evictions
-        void Clear() { m_futureEvictions.clear(); }
+        void clear() { m_futureEvictions.clear(); }
     private:
         struct Evictions : public Coords
         {
