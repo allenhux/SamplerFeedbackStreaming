@@ -32,8 +32,10 @@ SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_p
 {
     ASSERT(D3D12_COMMAND_LIST_TYPE_DIRECT == m_directCommandQueue->GetDesc().Type);
 
-    ThrowIfFailed(in_pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_frameFence)));
+    ThrowIfFailed(in_pDevice->CreateFence(m_frameFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_frameFence)));
     m_frameFence->SetName(L"SFS::ManagerBase::m_frameFence");
+    // advance frame number to the first frame...
+    m_frameFenceValue++;
 
     // GPU upload heap support?
     {
@@ -43,9 +45,6 @@ SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_p
 
         m_gpuUploadHeapSupported = options.GPUUploadHeapSupported;
     }
-
-    // advance frame number to the first frame...
-    m_frameFenceValue++;
 
     UseDirectStorage(in_desc.m_useDirectStorage);
 

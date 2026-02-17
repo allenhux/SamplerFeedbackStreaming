@@ -550,6 +550,7 @@ void Scene::CreateFence()
         m_renderFenceValue,
         D3D12_FENCE_FLAG_NONE,
         IID_PPV_ARGS(&m_renderFence)));
+    m_renderFenceValue++;
 
     // Create an event handle to use for frame synchronization.
     m_renderFenceEvent = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
