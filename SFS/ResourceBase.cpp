@@ -644,10 +644,8 @@ void SFS::ResourceBase::QueuePendingTileEvictions(UINT64 in_fenceValue)
         }
         else
         {
-            // remove now-empty set of delayed evictions
-            ASSERT(m_delayedEvictions.begin() == pEvictions);
-            m_delayedEvictions.pop_front();
-            pEvictions = m_delayedEvictions.begin();
+            // remove empty array
+			pEvictions = m_delayedEvictions.erase(pEvictions);
         }
     } // end loop over delayed evictions
 #if (0 == ENABLE_UNMAP)
