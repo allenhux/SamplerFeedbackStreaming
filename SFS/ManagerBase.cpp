@@ -128,7 +128,7 @@ void SFS::ManagerBase::Finish()
 }
 
 //-----------------------------------------------------------------------------
-// allocate residency map buffer large enough all SFSResources
+// allocate residency map buffer large enough for all SFSResources
 // assign offsets to new resources and update all resources on resource allocation
 // also allocate shared descriptor heaps for clear UAV
 //-----------------------------------------------------------------------------
@@ -222,7 +222,7 @@ void SFS::ManagerBase::AllocateSharedClearUavHeap(UINT in_numDescriptors)
 
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         ThrowIfFailed(m_device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_sharedClearUavHeapBound)));
-        m_sharedClearUavHeapNotBound->SetName(L"m_sharedClearUavHeapBound");
+        m_sharedClearUavHeapBound->SetName(L"m_sharedClearUavHeapBound");
     }
 }
 
