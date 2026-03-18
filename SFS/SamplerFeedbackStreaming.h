@@ -177,7 +177,7 @@ struct SFSManager
     // Call BeginFrame() first,
     // once for all SFSManagers that share heap/upload buffers
     //--------------------------------------------
-    virtual void BeginFrame() = 0;
+    virtual void BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle) = 0;
 
     //--------------------------------------------
     // Call EndFrame() last, paired with each BeginFrame() and after all draw commands
@@ -192,7 +192,7 @@ struct SFSManager
     //    ID3D12CommandList* pCommandLists[] = { myCommandList, pCommandList };
     //    m_commandQueue->ExecuteCommandLists(_countof(pCommandLists), pCommandLists);
     //--------------------------------------------
-    virtual ID3D12CommandList* EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle) = 0;
+    virtual ID3D12CommandList* EndFrame() = 0;
 
     //--------------------------------------------
     // choose DirectStorage vs. manual tile loading

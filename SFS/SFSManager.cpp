@@ -221,7 +221,7 @@ void SFS::Manager::CaptureTraceFile(bool in_captureTrace)
 // Call this method once for each SFSManager that shares heap/upload buffers
 // expected to be called once per frame, before anything is drawn.
 //-----------------------------------------------------------------------------
-void SFS::Manager::BeginFrame()
+void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle)
 {
     ASSERT(!GetWithinFrame());
     m_withinFrame = true;
@@ -247,6 +247,28 @@ void SFS::Manager::BeginFrame()
 
     // every frame, process feedback (also steps eviction history from prior frames)
     m_processFeedbackThread.Wake();
+
+    // if new StreamingResources have been created, allocate shared resources and not-bound clear heap
+    // do this before the applicaton issues any draw calls: we will be modifying the descriptor heap
+    if (m_newResources.Size())
+    {
+        // grab all the new streaming resources from locked container
+        std::vector<ResourceBase*> newResources;
+        m_newResources.Swap(newResources);
+
+        // outside the lock, add new resources to our container
+        m_streamingResources.insert(m_streamingResources.end(), newResources.begin(), newResources.end());
+
+        AllocateSharedResidencyMap();
+
+        // monitor new resources for when they need packed mip transition barriers
+        m_packedMipTransitionResources.insert(m_packedMipTransitionResources.end(), newResources.begin(), newResources.end());
+
+        // share new resources with PFT
+        m_processFeedbackThread.ShareNewResources(std::move(newResources));
+    }
+    // create a view for shared minmipmap, used by the application's pixel shaders
+    CreateMinMipMapView(out_minmipmapDescriptorHandle);
 }
 
 //-----------------------------------------------------------------------------
@@ -288,7 +310,7 @@ void SFS::Manager::ClearFeedback(ID3D12GraphicsCommandList* in_pCommandList, con
 //    - copy feedback to readback buffers
 //    - clear feedback
 //-----------------------------------------------------------------------------
-ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle)
+ID3D12CommandList* SFS::Manager::EndFrame()
 {
     // NOTE: we are "within frame" until the end of EndFrame()
     ASSERT(GetWithinFrame());
@@ -303,29 +325,11 @@ ID3D12CommandList* SFS::Manager::EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmip
 
     // stop tracking resources that have been Destroy()ed
     // must remove resources before calling AllocateSharedResidencyMap()
+    // FIXME? move to BeginFrame()?
     RemoveResources();
-
-    // if new StreamingResources have been created...
-    if (m_newResources.Size())
-    {
-        std::vector<ResourceBase*> newResources;
-        m_newResources.Swap(newResources);
-
-        m_streamingResources.insert(m_streamingResources.end(), newResources.begin(), newResources.end());
-        AllocateSharedResidencyMap();
-
-        // monitor new resources for when they need packed mip transition barriers
-        m_packedMipTransitionResources.insert(m_packedMipTransitionResources.end(), newResources.begin(), newResources.end());
-
-        // share new resources with PFT
-        m_processFeedbackThread.ShareNewResources(std::move(newResources));
-    }
 
     // handle FlushResources(). note occurs after PFT::ShareNewResources
     FlushResourcesInternal();
-
-    // create a view for shared minmipmap, used by the application's pixel shaders
-    CreateMinMipMapView(out_minmipmapDescriptorHandle);
 
     // transition those new resources that are ready to be drawn (after packed mips have arrived)
     if (m_packedMipTransitionResources.size())

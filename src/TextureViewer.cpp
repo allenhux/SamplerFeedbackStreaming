@@ -45,13 +45,11 @@ inline std::wstring GetAssetFullPath(const std::wstring in_filename)
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 void TextureViewer::CreateResources(
-    ID3D12Resource* in_pResource, D3D12_SHADER_RESOURCE_VIEW_DESC& in_desc,
+    ID3D12Resource* in_pResource,
     const DXGI_FORMAT in_swapChainFormat,
-    ID3D12DescriptorHeap* in_pDescriptorHeap, INT in_descriptorOffset,
     const wchar_t* in_pShaderFileName, const char* in_psEntryPoint)
 {
     in_pResource->GetDevice(IID_PPV_ARGS(&m_device));
-    m_descriptorOffset = in_descriptorOffset;
 
     //-------------------------------------------------------------------------
     // Create root signature
@@ -92,32 +90,6 @@ void TextureViewer::CreateResources(
         ComPtr<ID3DBlob> error;
         ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSignatureDesc, featureData.HighestVersion, &signature, &error));
         ThrowIfFailed(m_device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignature)));
-    }
-
-    //-------------------------------------------------------------------------
-    // Create descriptor heap
-    //-------------------------------------------------------------------------
-    {
-        if (in_pDescriptorHeap)
-        {
-            m_descriptorHeap = in_pDescriptorHeap;
-        }
-        else
-        {
-            // if creating its own descriptor heap, it also creates its own view in the first offset into the heap
-            m_descriptorOffset = 0;
-
-            D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc = { };
-            descriptorHeapDesc.NumDescriptors = 1;
-            descriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-            descriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-            ThrowIfFailed(m_device->CreateDescriptorHeap(&descriptorHeapDesc, IID_PPV_ARGS(&m_descriptorHeap)));
-            m_descriptorHeap->SetName(L"TextureViewer::m_descriptorHeap");
-
-            CD3DX12_CPU_DESCRIPTOR_HANDLE descriptorHandle(m_descriptorHeap->GetCPUDescriptorHandleForHeapStart(), m_descriptorOffset,
-                m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV));
-            m_device->CreateShaderResourceView(in_pResource, &in_desc, descriptorHandle);
-        }
     }
 
     //-------------------------------------------------------------------------
@@ -186,27 +158,15 @@ void TextureViewer::CreateResources(
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-TextureViewer::TextureViewer(
-    ID3D12Resource* in_pResource,
-    const DXGI_FORMAT in_swapChainFormat,
-    ID3D12DescriptorHeap* in_pDescriptorHeap, INT in_descriptorOffset)
+TextureViewer::TextureViewer(ID3D12Resource* in_pResource, const DXGI_FORMAT in_swapChainFormat)
 {
     D3D12_RESOURCE_DESC resourceDesc = in_pResource->GetDesc();
     m_numMips = resourceDesc.MipLevels;
-
-    // create a view of the texture
-    D3D12_SHADER_RESOURCE_VIEW_DESC textureViewDesc{};
-    textureViewDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    textureViewDesc.Format = resourceDesc.Format;
-    textureViewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-    textureViewDesc.Texture2D.MipLevels = resourceDesc.MipLevels;
-
     m_constants.resize(sizeof(ConstantBuffer) / sizeof(UINT32));
 
     CreateResources(
-        in_pResource, textureViewDesc,
+        in_pResource,
         in_swapChainFormat,
-        in_pDescriptorHeap, in_descriptorOffset,
         L"TextureViewer.hlsl");
 }
 
@@ -218,8 +178,9 @@ TextureViewer::~TextureViewer()
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-void TextureViewer::DrawWindows(ID3D12GraphicsCommandList* in_pCL, D3D12_VIEWPORT in_viewPort,
-    UINT in_numWindows)
+void TextureViewer::DrawWindows(ID3D12GraphicsCommandList* in_pCL,
+	D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptorHandle,
+    D3D12_VIEWPORT in_viewPort, UINT in_numWindows)
 {
     in_pCL->RSSetViewports(1, &in_viewPort);
     D3D12_RECT scissorRect =
@@ -233,14 +194,11 @@ void TextureViewer::DrawWindows(ID3D12GraphicsCommandList* in_pCL, D3D12_VIEWPOR
 
     in_pCL->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
-    ID3D12DescriptorHeap* ppHeaps[] = { m_descriptorHeap.Get() };
-    in_pCL->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
-
     in_pCL->IASetIndexBuffer(nullptr);
     in_pCL->IASetVertexBuffers(0, 0, nullptr);
 
     in_pCL->SetGraphicsRoot32BitConstants(ROOT_SIG_CONSTANT_BUFFER, (UINT)m_constants.size(), m_constants.data(), 0);
-    in_pCL->SetGraphicsRootDescriptorTable(ROOT_SIG_SRV_TABLE, (m_descriptorHeap->GetGPUDescriptorHandleForHeapStart()));
+    in_pCL->SetGraphicsRootDescriptorTable(ROOT_SIG_SRV_TABLE, in_gpuDescriptorHandle);
 
     in_pCL->DrawInstanced(4 * in_numWindows, 1, 0, 0);
 }
@@ -249,6 +207,7 @@ void TextureViewer::DrawWindows(ID3D12GraphicsCommandList* in_pCL, D3D12_VIEWPOR
 // draw the rectangle
 //-----------------------------------------------------------------------------
 void TextureViewer::Draw(ID3D12GraphicsCommandList* in_pCL,
+    D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptorHandle,
     DirectX::XMFLOAT2 in_position, DirectX::XMFLOAT2 in_windowDim,
     D3D12_VIEWPORT in_viewPort, int in_visualizationBaseMip, int in_numMips,
     bool in_vertical)
@@ -275,5 +234,5 @@ void TextureViewer::Draw(ID3D12GraphicsCommandList* in_pCL,
     pConstants->visBaseMip = (float)in_visualizationBaseMip;
     pConstants->vertical = in_vertical ? 1 : 0;
 
-    DrawWindows(in_pCL, in_viewPort, in_numMips);
+    DrawWindows(in_pCL, in_gpuDescriptorHandle, in_viewPort, in_numMips);
 }

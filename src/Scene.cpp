@@ -33,10 +33,11 @@ enum class DescriptorHeapOffsets
     FRAME_CBV0,         // b0, one for each swap chain buffer
     FRAME_CBV1,
     FRAME_CBV2,
+    SHARED_MIN_MIP_MAP0, // one shared min mip map for each swap chain buffer
+    SHARED_MIN_MIP_MAP1,
+    SHARED_MIN_MIP_MAP2,
     GUI,
-    SHARED_MIN_MIP_MAP,
-
-    NumEntries
+	OBJECT_DESCRIPTORS_BASE
 };
 
 #define ErrorMessage(...) { MessageBox(0, AutoString(__VA_ARGS__).str().c_str(), L"Error", MB_OK); exit(-1); }
@@ -518,7 +519,7 @@ void Scene::CreateDescriptorHeaps()
 {
     // shader resource view (SRV) heap for e.g. textures
     D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-    srvHeapDesc.NumDescriptors = (UINT)DescriptorHeapOffsets::NumEntries +
+    srvHeapDesc.NumDescriptors = (UINT)DescriptorHeapOffsets::OBJECT_DESCRIPTORS_BASE +
         (m_args.m_maxNumObjects * (UINT)SceneObjects::Descriptors::NumEntries);
     srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
@@ -1295,7 +1296,7 @@ void Scene::DrawObjectSet(ID3D12GraphicsCommandList1* out_pCommandList,
 // 
 // feedback may only written for a subset of resources depending on GPU feedback timeout
 //-----------------------------------------------------------------------------
-void Scene::DrawObjects()
+void Scene::DrawObjects(D3D12_GPU_DESCRIPTOR_HANDLE in_sharedMinMipMap)
 {
     if (0 == m_objects.size())
     {
@@ -1394,16 +1395,16 @@ void Scene::DrawObjects()
     SceneObjects::DrawParams drawParams;
     drawParams.m_view = m_viewMatrix;
     drawParams.m_viewInverse = m_viewMatrixInverse;
-    drawParams.m_sharedMinMipMap = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
+    drawParams.m_sharedMinMipMap = in_sharedMinMipMap;
     drawParams.m_constantBuffers = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), m_frameIndex + (UINT)DescriptorHeapOffsets::FRAME_CBV0, m_srvUavCbvDescriptorSize);
     drawParams.m_samplers = m_samplerHeap->GetGPUDescriptorHandleForHeapStart();
     drawParams.m_srvUavCbvDescriptorSize = m_srvUavCbvDescriptorSize;
     drawParams.m_descriptorHeapBaseGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(
         m_srvHeap->GetGPUDescriptorHandleForHeapStart(),
-        (UINT)DescriptorHeapOffsets::NumEntries, m_srvUavCbvDescriptorSize);
+        (UINT)DescriptorHeapOffsets::OBJECT_DESCRIPTORS_BASE, m_srvUavCbvDescriptorSize);
     drawParams.m_descriptorHeapBaseCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(
         m_srvHeap->GetCPUDescriptorHandleForHeapStart(),
-        (UINT)DescriptorHeapOffsets::NumEntries, m_srvUavCbvDescriptorSize);
+        (UINT)DescriptorHeapOffsets::OBJECT_DESCRIPTORS_BASE, m_srvUavCbvDescriptorSize);
 
     if (skyObjectSet.size())
     {
@@ -1640,15 +1641,10 @@ void Scene::CreateTerrainViewers()
     ASSERT(m_pTerrain);
     if (nullptr == m_pTextureViewer)
     {
-        UINT heapOffset = (UINT)DescriptorHeapOffsets::NumEntries +
-            (m_terrainObjectIndex * (UINT)SceneObjects::Descriptors::NumEntries) +
-            (UINT)SceneObjects::Descriptors::HeapOffsetTexture;
-
         // create viewer for the streaming resource
         m_pTextureViewer = new TextureViewer(
             m_pTerrain->GetStreamingResource()->GetTiledResource(),
-            SharedConstants::SWAP_CHAIN_FORMAT, m_srvHeap.Get(),
-            heapOffset);
+            SharedConstants::SWAP_CHAIN_FORMAT);
 
         m_maxNumTextureViewerWindows = m_pTerrain->GetStreamingResource()->GetNumStandardMips();
     }
@@ -1666,8 +1662,7 @@ void Scene::CreateTerrainViewers()
             m_pTerrain->GetStreamingResource()->GetMinMipMap(),
             feedbackWidth, feedbackHeight, feedbackWidth,
             m_pTerrain->GetStreamingResource()->GetMinMipMapOffset(),
-            SharedConstants::SWAP_CHAIN_FORMAT,
-            m_srvHeap.Get(), (INT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP);
+            SharedConstants::SWAP_CHAIN_FORMAT);
     }
 }
 
@@ -1726,7 +1721,7 @@ void Scene::StartScene()
 
 //-------------------------------------------------------------------------
 //-------------------------------------------------------------------------
-void Scene::DrawUI()
+void Scene::DrawUI(D3D12_GPU_DESCRIPTOR_HANDLE in_sharedMinMipMap)
 {
     //-------------------------------------------
     // Display various textures
@@ -1735,6 +1730,11 @@ void Scene::DrawUI()
     {
         CreateTerrainViewers();
 
+        UINT heapOffset = (UINT)DescriptorHeapOffsets::OBJECT_DESCRIPTORS_BASE +
+            (m_terrainObjectIndex * (UINT)SceneObjects::Descriptors::NumEntries) +
+            (UINT)SceneObjects::Descriptors::HeapOffsetTexture;
+        auto textureDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), heapOffset, m_srvUavCbvDescriptorSize);
+
         const float minDim = std::min(m_viewport.Height, m_viewport.Width) / 5;
         const DirectX::XMFLOAT2 windowSize = DirectX::XMFLOAT2(minDim, minDim);
 
@@ -1742,7 +1742,8 @@ void Scene::DrawUI()
         if (m_args.m_showFeedbackViewer)
         {
             DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(m_viewport.Width - 2 * minDim, m_viewport.Height);
-            m_pMinMipMapViewer->Draw(m_commandList.Get(), windowPos, windowSize, m_viewport);
+            m_pMinMipMapViewer->Draw(m_commandList.Get(), in_sharedMinMipMap,
+                windowPos, windowSize, m_viewport);
         }
 
         // terrain object's texture
@@ -1754,10 +1755,9 @@ void Scene::DrawUI()
 
             if (numMips > 1)
             {
-                //DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(m_viewport.Width - minDim, 0);
                 DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(m_viewport.Width - minDim, m_viewport.Height - minDim);
-                m_pTextureViewer->Draw(m_commandList.Get(), windowPos, windowSize,
-                    m_viewport,
+                m_pTextureViewer->Draw(m_commandList.Get(), textureDescriptor,
+                    windowPos, windowSize, m_viewport,
                     m_args.m_visualizationBaseMip, numMips - 1,
                     m_args.m_showFeedbackMapVertical);
             }
@@ -1768,8 +1768,8 @@ void Scene::DrawUI()
             numMips = std::min(numMips, m_maxNumTextureViewerWindows);
 
             DirectX::XMFLOAT2 windowPos = DirectX::XMFLOAT2(0, 0);
-            m_pTextureViewer->Draw(m_commandList.Get(), windowPos, windowSize,
-                m_viewport,
+            m_pTextureViewer->Draw(m_commandList.Get(), textureDescriptor,
+                windowPos, windowSize, m_viewport,
                 m_args.m_visualizationBaseMip, numMips,
                 m_args.m_showFeedbackMapVertical);
         }
@@ -1935,6 +1935,7 @@ bool Scene::Draw()
     Resize();
 
 #if 0
+    // TEST: allocate/deallocate several times.
     {
         static UINT c = 0;
         if ((LoadingThread::Idle == m_loadingThreadState) && (c < 100))
@@ -1950,12 +1951,11 @@ bool Scene::Draw()
 #endif
 
     // load more spheres?
-    // SceneResource destruction/creation must be done outside of BeginFrame/EndFrame
     LoadSpheres();
 
-    // prepare for new commands (need an open command list for LoadSpheres)
+    // prepare for new commands
     m_commandAllocators[m_frameIndex]->Reset();
-    m_commandList->Reset((ID3D12CommandAllocator*)m_commandAllocators[m_frameIndex].Get(), nullptr);
+    m_commandList->Reset(m_commandAllocators[m_frameIndex].Get(), nullptr);
 
     // check the non-streaming uploader to see if anything needs to be uploaded or any memory can be freed
     m_assetUploader.WaitForUploads(m_commandQueue.Get(), m_commandList.Get());
@@ -1966,7 +1966,10 @@ bool Scene::Draw()
     m_gpuProcessFeedbackTimeMs = m_pSFSManager->GetGpuTimeMs();
 
     // prepare to update Feedback & stream textures
-    m_pSFSManager->BeginFrame();
+	UINT sharedMinMipMapOffset = m_frameIndex + (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP0;
+
+    D3D12_CPU_DESCRIPTOR_HANDLE sharedMinMipMapCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), sharedMinMipMapOffset, m_srvUavCbvDescriptorSize);
+    m_pSFSManager->BeginFrame(sharedMinMipMapCpu);
 
     Animate();
 
@@ -1976,11 +1979,13 @@ bool Scene::Draw()
     {
         GpuScopeTimer gpuScopeTimer(m_gpuTimer.get(), m_commandList.Get(), "GPU Frame Time");
 
+        D3D12_GPU_DESCRIPTOR_HANDLE sharedMinMipMapGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), sharedMinMipMapOffset, m_srvUavCbvDescriptorSize);
+
         // set RTV, DSV, descriptor heap, etc.
         StartScene();
 
         // draw all geometry
-        DrawObjects();
+        DrawObjects(sharedMinMipMapGpu);
 
         if (m_args.m_visualizeFrustum)
         {
@@ -1994,7 +1999,7 @@ bool Scene::Draw()
             MsaaResolve();
         }
 
-        DrawUI();
+        DrawUI(sharedMinMipMapGpu);
 
         D3D12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(),
             D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
@@ -2017,8 +2022,7 @@ bool Scene::Draw()
     // execute command lists
     //-------------------------------------------
     m_renderThreadTimes.Set(RenderEvents::PreEndFrame);
-    D3D12_CPU_DESCRIPTOR_HANDLE minmipmapDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP, m_srvUavCbvDescriptorSize);
-    auto pCommandList = m_pSFSManager->EndFrame(minmipmapDescriptor);
+    auto pCommandList = m_pSFSManager->EndFrame();
     m_renderThreadTimes.Set(RenderEvents::PostEndFrame);
 
     ID3D12CommandList* pCommandLists[] = { m_commandList.Get(), pCommandList };
