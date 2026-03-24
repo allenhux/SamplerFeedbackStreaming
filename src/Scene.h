@@ -202,7 +202,7 @@ private:
     struct SFSManager* m_pSFSManager{ nullptr };
 
     void Animate(); // camera and objects
-    void DrawObjects();   // draw all the objects
+    void DrawObjects(D3D12_GPU_DESCRIPTOR_HANDLE sharedMinMipMap);   // draw all the objects
 
     void CreateTerrainViewers();
     void DeleteTerrainViewers();
@@ -283,7 +283,7 @@ private:
     void HandleUIchanges();
     bool AssetsLoaded(); // returns true if all resources are drawable. used to delay start of gathering statistics
     void StartScene();
-    void DrawUI();
+    void DrawUI(D3D12_GPU_DESCRIPTOR_HANDLE in_sharedMinMipMap);
     void HandleUiToggleFrustum();
 
     void SwapCameraForDemo(bool in_capture);

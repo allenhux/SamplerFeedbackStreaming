@@ -33,8 +33,8 @@ namespace SFS
         virtual SFSResource* CreateResource(const struct SFSResourceDesc& in_desc,
             SFSHeap* in_pHeap, const std::wstring& in_filename) override;
         virtual void FlushResources(const std::vector<SFSResource*>& in_resources, HANDLE in_event) override;
-        virtual void BeginFrame() override;
-        virtual ID3D12CommandList* EndFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle) override;
+        virtual void BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescriptorHandle) override;
+        virtual ID3D12CommandList* EndFrame() override;
         //virtual void UseDirectStorage(bool in_useDS) override;
         //virtual bool GetWithinFrame() const override;
         virtual float GetGpuTexelsPerMs() const override;

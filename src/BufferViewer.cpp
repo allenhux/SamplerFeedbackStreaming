@@ -21,8 +21,7 @@ struct BufferViewerConstantBuffer
 BufferViewer::BufferViewer(
     ID3D12Resource* in_pBuffer,
     UINT in_width, UINT in_height, UINT in_rowPitch, UINT in_offset,
-    const DXGI_FORMAT in_swapChainFormat,
-    ID3D12DescriptorHeap* in_pDescriptorHeap, INT in_descriptorOffset)
+    const DXGI_FORMAT in_swapChainFormat)
 {
     const char* psEntryPoint = "ps";
 
@@ -44,10 +43,7 @@ BufferViewer::BufferViewer(
 
     m_constants.resize(sizeof(BufferViewerConstantBuffer) / sizeof(UINT32));
 
-    CreateResources(
-        in_pBuffer, bufferViewDesc,
-        in_swapChainFormat,
-        in_pDescriptorHeap, in_descriptorOffset,
+    CreateResources(in_pBuffer, in_swapChainFormat,
         L"BufferViewer.hlsl", psEntryPoint);
 
     BufferViewerConstantBuffer* pConstants = (BufferViewerConstantBuffer*)m_constants.data();
@@ -62,6 +58,7 @@ BufferViewer::BufferViewer(
 // note: screen space is -1,-1 to 1,1
 //-----------------------------------------------------------------------------
 void BufferViewer::Draw(ID3D12GraphicsCommandList* in_pCL,
+    D3D12_GPU_DESCRIPTOR_HANDLE in_gpuDescriptorHandle,
     DirectX::XMFLOAT2 in_position, DirectX::XMFLOAT2 in_windowDim,
     D3D12_VIEWPORT in_viewPort)
 {
@@ -77,5 +74,5 @@ void BufferViewer::Draw(ID3D12GraphicsCommandList* in_pCL,
     pConstants->width = in_windowDim.x / in_viewPort.Width;
     pConstants->height = in_windowDim.y / in_viewPort.Height;
 
-    DrawWindows(in_pCL, in_viewPort, 2);
+    DrawWindows(in_pCL, in_gpuDescriptorHandle, in_viewPort, 2);
 }
