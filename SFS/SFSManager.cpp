@@ -248,6 +248,14 @@ void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescripto
     // every frame, process feedback (also steps eviction history from prior frames)
     m_processFeedbackThread.Wake();
 
+    // release old shared residency map
+    // not necessary because they will get released on app exit, but reduces runtime memory
+    {
+        auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
+        m_oldSharedResidencyMaps[i] = nullptr;
+        m_oldSharedClearUavHeaps[i] = nullptr;
+    }
+
     // if new StreamingResources have been created, allocate shared resources and not-bound clear heap
     // do this before the applicaton issues any draw calls: we will be modifying the descriptor heap
     if (m_newResources.Size())
@@ -314,14 +322,6 @@ ID3D12CommandList* SFS::Manager::EndFrame()
 {
     // NOTE: we are "within frame" until the end of EndFrame()
     ASSERT(GetWithinFrame());
-
-    // release old shared residency map
-    // not necessary because they will get released on app exit, but reduces runtime memory
-    {
-        auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
-        m_oldSharedResidencyMaps[i] = nullptr;
-        m_oldSharedClearUavHeaps[i] = nullptr;
-    }
 
     // stop tracking resources that have been Destroy()ed
     // must remove resources before calling AllocateSharedResidencyMap()
