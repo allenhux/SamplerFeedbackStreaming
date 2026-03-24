@@ -102,7 +102,7 @@ private:
     static const UINT m_swapBufferCount{ SharedConstants::SWAP_CHAIN_BUFFER_COUNT };
     static const FLOAT m_clearColor[4];
     ComPtr<IDXGISwapChain3> m_swapChain;
-    UINT m_frameIndex{ 0 }; // comes from swap chain
+    UINT m_swapChainIndex{ 0 }; // used to index into various structures, == m_swapChain->GetCurrentBackBufferIndex()
     UINT64 m_renderFenceValue{ 0 }; // also serves as a frame count
     std::vector<UINT64> m_frameFenceValues;
     ComPtr<ID3D12Fence> m_renderFence;

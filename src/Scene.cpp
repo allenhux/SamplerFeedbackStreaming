@@ -504,7 +504,7 @@ void Scene::Resize()
 
             CreateRenderTargets();
 
-            m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+            m_swapChainIndex = m_swapChain->GetCurrentBackBufferIndex();
 
             // UI uses window dimensions
             m_args.m_windowWidth = width;
@@ -635,7 +635,7 @@ void Scene::CreateSwapChain()
 
     ThrowIfFailed(swapChain.As(&m_swapChain));
 
-    m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+    m_swapChainIndex = m_swapChain->GetCurrentBackBufferIndex();
 }
 
 //-----------------------------------------------------------------------------
@@ -662,19 +662,19 @@ void Scene::InitDebugLayer()
 void Scene::MoveToNextFrame()
 {
     // Assign the current fence value to the current frame.
-    m_frameFenceValues[m_frameIndex] = m_renderFenceValue;
+    m_frameFenceValues[m_swapChainIndex] = m_renderFenceValue;
 
     // Signal and increment the fence value.
     ThrowIfFailed(m_commandQueue->Signal(m_renderFence.Get(), m_renderFenceValue));
     m_renderFenceValue++;
 
     // Update the frame index.
-    m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+    m_swapChainIndex = m_swapChain->GetCurrentBackBufferIndex();
 
     // If the next frame is not ready to be rendered yet, wait until it is ready.
-    if (m_renderFence->GetCompletedValue() < m_frameFenceValues[m_frameIndex])
+    if (m_renderFence->GetCompletedValue() < m_frameFenceValues[m_swapChainIndex])
     {
-        ThrowIfFailed(m_renderFence->SetEventOnCompletion(m_frameFenceValues[m_frameIndex], m_renderFenceEvent));
+        ThrowIfFailed(m_renderFence->SetEventOnCompletion(m_frameFenceValues[m_swapChainIndex], m_renderFenceEvent));
         WaitForSingleObject(m_renderFenceEvent, INFINITE);
     }
 }
@@ -1396,7 +1396,7 @@ void Scene::DrawObjects(D3D12_GPU_DESCRIPTOR_HANDLE in_sharedMinMipMap)
     drawParams.m_view = m_viewMatrix;
     drawParams.m_viewInverse = m_viewMatrixInverse;
     drawParams.m_sharedMinMipMap = in_sharedMinMipMap;
-    drawParams.m_constantBuffers = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), m_frameIndex + (UINT)DescriptorHeapOffsets::FRAME_CBV0, m_srvUavCbvDescriptorSize);
+    drawParams.m_constantBuffers = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), m_swapChainIndex + (UINT)DescriptorHeapOffsets::FRAME_CBV0, m_srvUavCbvDescriptorSize);
     drawParams.m_samplers = m_samplerHeap->GetGPUDescriptorHandleForHeapStart();
     drawParams.m_srvUavCbvDescriptorSize = m_srvUavCbvDescriptorSize;
     drawParams.m_descriptorHeapBaseGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(
@@ -1420,7 +1420,7 @@ void Scene::DrawObjects(D3D12_GPU_DESCRIPTOR_HANDLE in_sharedMinMipMap)
 //-------------------------------------------------------------------------
 void Scene::MsaaResolve()
 {
-    ID3D12Resource* pRenderTarget = m_renderTargets[m_frameIndex].Get();
+    ID3D12Resource* pRenderTarget = m_renderTargets[m_swapChainIndex].Get();
 
     D3D12_RESOURCE_BARRIER barriers[] = {
         CD3DX12_RESOURCE_BARRIER::Transition(m_colorBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_RESOLVE_SOURCE),
@@ -1438,7 +1438,7 @@ void Scene::MsaaResolve()
     m_commandList->ResourceBarrier(_countof(barriers), barriers);
 
     // after resolve, set the swap chain as the render target
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_swapChainIndex, m_rtvDescriptorSize);
     m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
 }
 
@@ -1449,7 +1449,7 @@ void Scene::ScreenShot(std::wstring& in_fileName) const
 {
     std::wstring filename(in_fileName);
     filename += L".png";
-    WindowCapture::CaptureRenderTarget(m_renderTargets[m_frameIndex].Get(), m_commandQueue.Get(), filename);
+    WindowCapture::CaptureRenderTarget(m_renderTargets[m_swapChainIndex].Get(), m_commandQueue.Get(), filename);
 }
 
 //-------------------------------------------------------------------------
@@ -1703,19 +1703,19 @@ void Scene::StartScene()
     m_commandList->RSSetScissorRects(1, &m_scissorRect);
 
     SetSampler();
-    DirectX::XMStoreFloat4(&m_pFrameConstantData[m_frameIndex]->g_eyePos, m_viewMatrixInverse.r[3]);
-    m_pFrameConstantData[m_frameIndex]->g_visualizeFeedback = m_args.m_visualizeMinMip;
+    DirectX::XMStoreFloat4(&m_pFrameConstantData[m_swapChainIndex]->g_eyePos, m_viewMatrixInverse.r[3]);
+    m_pFrameConstantData[m_swapChainIndex]->g_visualizeFeedback = m_args.m_visualizeMinMip;
 
     if (m_args.m_lightFromView)
     {
         constexpr float r = -XM_PIDIV4 * .5f;
         const DirectX::XMMATRIX rotate = XMMatrixRotationRollPitchYaw(r, r, 0);
         XMVECTOR v = XMVector3TransformNormal(m_viewMatrixInverse.r[2], rotate);
-        XMStoreFloat4(&m_pFrameConstantData[m_frameIndex]->g_lightDir, v);
+        XMStoreFloat4(&m_pFrameConstantData[m_swapChainIndex]->g_lightDir, v);
     }
     else
     {
-        m_pFrameConstantData[m_frameIndex]->g_lightDir = XMFLOAT4(-0.538732767f, -0.787301660f, -0.299871892f, 0);
+        m_pFrameConstantData[m_swapChainIndex]->g_lightDir = XMFLOAT4(-0.538732767f, -0.787301660f, -0.299871892f, 0);
     }
 }
 
@@ -1954,8 +1954,8 @@ bool Scene::Draw()
     LoadSpheres();
 
     // prepare for new commands
-    m_commandAllocators[m_frameIndex]->Reset();
-    m_commandList->Reset(m_commandAllocators[m_frameIndex].Get(), nullptr);
+    m_commandAllocators[m_swapChainIndex]->Reset();
+    m_commandList->Reset(m_commandAllocators[m_swapChainIndex].Get(), nullptr);
 
     // check the non-streaming uploader to see if anything needs to be uploaded or any memory can be freed
     m_assetUploader.WaitForUploads(m_commandQueue.Get(), m_commandList.Get());
@@ -1966,7 +1966,7 @@ bool Scene::Draw()
     m_gpuProcessFeedbackTimeMs = m_pSFSManager->GetGpuTimeMs();
 
     // prepare to update Feedback & stream textures
-	UINT sharedMinMipMapOffset = m_frameIndex + (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP0;
+	UINT sharedMinMipMapOffset = m_swapChainIndex + (UINT)DescriptorHeapOffsets::SHARED_MIN_MIP_MAP0;
 
     D3D12_CPU_DESCRIPTOR_HANDLE sharedMinMipMapCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), sharedMinMipMapOffset, m_srvUavCbvDescriptorSize);
     m_pSFSManager->BeginFrame(sharedMinMipMapCpu);
@@ -2001,7 +2001,7 @@ bool Scene::Draw()
 
         DrawUI(sharedMinMipMapGpu);
 
-        D3D12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(),
+        D3D12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_swapChainIndex].Get(),
             D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
         m_commandList->ResourceBarrier(1, &barrier);
     }
