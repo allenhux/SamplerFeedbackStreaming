@@ -503,9 +503,6 @@ void LoadConfigFile(std::wstring& in_configFileName, CommandLineArgs& out_args)
             if (root.isMember("numObjects")) out_args.m_numObjects = root["numObjects"].asUInt();
             if (root.isMember("lightFromView")) out_args.m_lightFromView = root["lightFromView"].asBool();
 
-            if (root.isMember("sphereLong")) out_args.m_sphereLong = root["sphereLong"].asUInt();
-            if (root.isMember("sphereLat")) out_args.m_sphereLat = root["sphereLat"].asUInt();
-
             if (root.isMember("reservedMemoryGB")) out_args.m_reservedMemoryGB = root["reservedMemoryGB"].asUInt();
 
             if (root.isMember("heapSizeMB")) out_args.m_sfsHeapSizeMB = root["heapSizeMB"].asUInt();

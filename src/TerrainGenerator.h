@@ -12,14 +12,14 @@ public:
     struct Params
     {
         // terrain object parameters
-        UINT  m_terrainSideSize{ 256 };
+        UINT  m_terrainSideSize{ 128 };
         float m_heightScale{ 50 };
-        float m_noiseScale{ 25 };
+        float m_noiseScale{ 30 };
         UINT  m_numOctaves{ 8 };
         float m_mountainSize{ 4000 };
     };
 
-    TerrainGenerator(const Params& in_args);
+    TerrainGenerator(const Params& in_args = {});
 
     struct Vertex
     {

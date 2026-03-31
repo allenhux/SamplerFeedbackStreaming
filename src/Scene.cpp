@@ -1826,10 +1826,13 @@ void Scene::DrawUI(D3D12_GPU_DESCRIPTOR_HANDLE in_sharedMinMipMap)
 
 //-------------------------------------------------------------------------
 //-------------------------------------------------------------------------
-void Scene::HandleUiToggleFrustum()
+void Scene::ToggleFrustum()
 {
     static bool enableTileUpdates = m_args.m_enableTileUpdates;
     static float samplerLodBias = m_args.m_lodBias;
+
+    std::swap(enableTileUpdates, m_args.m_enableTileUpdates);
+    std::swap(samplerLodBias, m_args.m_lodBias);
 
     // stop updating while the frustum is shown
     if (m_args.m_visualizeFrustum)
@@ -1841,18 +1844,12 @@ void Scene::HandleUiToggleFrustum()
         XMVECTOR pos = m_viewMatrixInverse.r[3];
 
         // scale to something within universe scale
-        float scale = SharedConstants::SPHERE_RADIUS * 2.5;
+        float scale = SharedConstants::SPHERE_RADIUS * 100.f;
 
         m_pFrustumViewer->SetView(m_viewMatrixInverse, scale);
 
-        enableTileUpdates = m_args.m_enableTileUpdates;
         m_args.m_enableTileUpdates = false;
         m_args.m_lodBias = -5.0f;
-    }
-    else
-    {
-        m_args.m_enableTileUpdates = enableTileUpdates;
-        m_args.m_lodBias = samplerLodBias;
     }
 }
 
@@ -1885,7 +1882,7 @@ void Scene::HandleUIchanges()
         }
         if (m_uiButtonChanges.m_frustumToggle)
         {
-            HandleUiToggleFrustum();
+            ToggleFrustum();
         }
         if (m_uiButtonChanges.m_visualizationChange)
         {

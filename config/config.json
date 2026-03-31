@@ -76,10 +76,6 @@
   "timingFileFrames": "", // file name for per-frame statistics. no statistics unless set. ".csv" will be appended
   "exitImageFile": "", // if set, outputs final image on exit. extension (e.g. .png) will be appended
 
-  // sphere geometry (earth model only)
-  "sphereLong": 64, // # steps vertically. must be even
-  "sphereLat": 65, // # steps around. must be odd
-
   // terrain (heightmap) geometry
   "terrainParams": {
     "terrainSideSize": 128, // resolution of terrain vertex buffer, e.g. 256x256 grid

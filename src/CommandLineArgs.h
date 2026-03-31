@@ -92,8 +92,4 @@ struct CommandLineArgs
     bool m_showFeedbackViewer{ true }; // toggle just the raw feedback view in the feedback viewer
     UINT m_statisticsNumFrames{ 30 };
     bool m_cameraUpLock{ true };       // navigation locks "up" to be y=1
-
-    // planet parameters
-    UINT m_sphereLong{ 128 }; // # steps vertically. must be even
-    UINT m_sphereLat{ 111 };  // # steps around. must be odd
 };
