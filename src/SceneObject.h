@@ -231,8 +231,10 @@ namespace SceneObjects
     class Earth : public Sphere
     {
     public:
-        Earth(Scene* in_pScene);
+        Earth(Scene* in_pScene, UINT in_latitudeSteps = 65, UINT in_longitudeSteps = 64);
     private:
+        UINT m_sphereLong{ 128 }; // # steps vertically. must be even
+        UINT m_sphereLat{ 111 };  // # steps around. must be odd
         virtual const Geometry* GetGeometry() const override;
         static Geometry* m_pGeometry;
     };

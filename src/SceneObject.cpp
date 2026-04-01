@@ -524,7 +524,7 @@ void SceneObjects::BaseObject::SetCombinedMatrix(const DirectX::XMMATRIX& in_wor
 //=========================================================================
 SceneObjects::Geometry* SceneObjects::Earth::m_pGeometry{ nullptr };
 const SceneObjects::Geometry* SceneObjects::Earth::GetGeometry() const { return m_pGeometry; }
-SceneObjects::Earth::Earth(Scene* in_pScene)
+SceneObjects::Earth::Earth(Scene* in_pScene, UINT in_latitudeSteps, UINT in_longitudeSteps)
 {
     SetAxis(DirectX::XMVectorSet(0, 0, 1, 0));
 
@@ -536,8 +536,6 @@ SceneObjects::Earth::Earth(Scene* in_pScene)
     ID3D12Device* pDevice = in_pScene->GetDevice();
     auto& assetUploader = in_pScene->GetAssetUploader();
     UINT sampleCount = in_pScene->GetArgs().m_sampleCount;
-    UINT in_sphereLat = in_pScene->GetArgs().m_sphereLat;
-    UINT in_sphereLong = in_pScene->GetArgs().m_sphereLong;
 
     m_pGeometry = ConstructGeometry();
 
@@ -560,8 +558,8 @@ SceneObjects::Earth::Earth(Scene* in_pScene)
     m_pGeometry->m_lods.resize(numLevelsOfDetail);
     for (UINT i = 0; i < numLevelsOfDetail; i++)
     {
-        sphereProperties.m_numLat = UINT(in_sphereLat * lodScaleFactor);
-        sphereProperties.m_numLong = UINT(in_sphereLong * lodScaleFactor);
+        sphereProperties.m_numLat = UINT(in_latitudeSteps * lodScaleFactor);
+        sphereProperties.m_numLong = UINT(in_longitudeSteps * lodScaleFactor);
         lodScaleFactor -= lodStepFactor;
 
         ID3D12Resource* pVertexBuffer{ nullptr };

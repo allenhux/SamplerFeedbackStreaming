@@ -47,7 +47,7 @@ public:
     void ToggleRollerCoaster() { m_args.m_cameraRollerCoaster = !m_args.m_cameraRollerCoaster; }
     void SetVisualizationMode(CommandLineArgs::VisualizationMode in_mode) { m_args.m_dataVisualizationMode = in_mode; }
 
-    void ToggleFrustum() { m_args.m_visualizeFrustum = !m_args.m_visualizeFrustum; HandleUiToggleFrustum(); }
+    void ToggleFrustum();
 
     void ToggleAnimation()
     {
@@ -97,7 +97,7 @@ private:
 
     // limit the amount allocated to the number of bits for virtual memory minus a healthy amount extra
     UINT32 m_maxVirtualTiles{ 0 };
-    std::atomic<UINT> m_maxNumObjects{ 0 }; // set if load hit memory limit
+    std::atomic<UINT> m_maxNumObjects{ 0 }; // set when we hit the memory limit while loading
 
     static const UINT m_swapBufferCount{ SharedConstants::SWAP_CHAIN_BUFFER_COUNT };
     static const FLOAT m_clearColor[4];
@@ -256,6 +256,13 @@ private:
     using BarrierList = std::vector<D3D12_RESOURCE_BARRIER>;
     BarrierList m_aliasingBarriers; // optional barrier for performance analysis only
 
+    void HandleUIchanges();
+    bool AssetsLoaded(); // returns true if all resources are drawable. used to delay start of gathering statistics
+    void StartScene();
+    void DrawUI(D3D12_GPU_DESCRIPTOR_HANDLE in_sharedMinMipMap);
+
+    void SwapCameraForDemo(bool in_capture);
+
     //-----------------------------------
     // statistics gathering
     //-----------------------------------
@@ -279,12 +286,4 @@ private:
     CpuTimer m_cpuTimer;
     INT64 m_cpuTimerStart{ 0 };
     UINT m_numTilesVirtual{ 0 };
-
-    void HandleUIchanges();
-    bool AssetsLoaded(); // returns true if all resources are drawable. used to delay start of gathering statistics
-    void StartScene();
-    void DrawUI(D3D12_GPU_DESCRIPTOR_HANDLE in_sharedMinMipMap);
-    void HandleUiToggleFrustum();
-
-    void SwapCameraForDemo(bool in_capture);
 };
