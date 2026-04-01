@@ -29,8 +29,12 @@ SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_p
     , m_oldSharedResidencyMaps(in_desc.m_swapChainBufferCount + 1, nullptr)
     , m_oldSharedClearUavHeaps(in_desc.m_swapChainBufferCount + 1, nullptr)
     , m_processFeedbackThread((ManagerPFT*)this, m_dataUploader, (int)in_desc.m_threadPriority)
+    , m_allocateSharedFrequency(3 * in_desc.m_swapChainBufferCount)
 {
     ASSERT(D3D12_COMMAND_LIST_TYPE_DIRECT == m_directCommandQueue->GetDesc().Type);
+
+    // set to greater than frequency so the first attempt to allocate shared succeeds
+    m_fenceForlastAllocateShared = 2 * m_allocateSharedFrequency;
 
     ThrowIfFailed(in_pDevice->CreateFence(m_frameFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_frameFence)));
     m_frameFence->SetName(L"SFS::ManagerBase::m_frameFence");

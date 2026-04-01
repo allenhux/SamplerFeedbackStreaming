@@ -258,8 +258,10 @@ void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescripto
 
     // if new StreamingResources have been created, allocate shared resources and not-bound clear heap
     // do this before the applicaton issues any draw calls: we will be modifying the descriptor heap
-    if (m_newResources.Size())
+    if (m_newResources.Size() && (m_frameFenceValue - m_fenceForlastAllocateShared > m_allocateSharedFrequency))
     {
+		m_fenceForlastAllocateShared = m_frameFenceValue;
+
         // grab all the new streaming resources from locked container
         std::vector<ResourceBase*> newResources;
         m_newResources.Swap(newResources);

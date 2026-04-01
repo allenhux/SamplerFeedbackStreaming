@@ -99,6 +99,11 @@ namespace SFS
         // are we between BeginFrame and EndFrame? useful for debugging
         std::atomic<bool> m_withinFrame{ false };
 
+        // use to reduce frequency of allocating shared structures to a multiple of swapchain depth
+        // reduces potential render stalls and improves/smooths perforamnce when allocating many objects over time
+        UINT64 m_fenceForlastAllocateShared{ 0 };
+		const UINT m_allocateSharedFrequency{ 16 }; // in number of frames == delta in fence values
+
         void StartThreads();
 
         // direct queue is used to monitor progress of render frames so we know when feedback buffers are ready to be used
