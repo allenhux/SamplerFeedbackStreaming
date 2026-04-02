@@ -28,7 +28,6 @@ namespace SFS
     public:
         ~UploadBuffer() { if (m_resource.Get()) m_resource->Unmap(0, nullptr); }
         ID3D12Resource* GetResource() const { return m_resource.Get(); }
-        ID3D12Resource* Detach() { return m_resource.Detach(); } // release ComPtr reference
         void* GetData() const { return m_pData; }
 
         void Allocate(ID3D12Device* in_pDevice, UINT in_numBytes,

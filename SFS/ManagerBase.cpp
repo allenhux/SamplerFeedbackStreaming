@@ -27,7 +27,8 @@ SFS::ManagerBase::ManagerBase(const SFSManagerDesc& in_desc, ID3D12Device8* in_p
     , m_dataUploader((ManagerDU*)this, m_processFeedbackThread.GetFlushResources(), in_pDevice, in_desc.m_maxNumCopyBatches, in_desc.m_stagingBufferSizeMB, in_desc.m_maxTileMappingUpdatesPerApiCall, (int)in_desc.m_threadPriority)
     , m_traceCaptureMode{ in_desc.m_traceCaptureMode }
     , m_oldSharedResidencyMaps(in_desc.m_swapChainBufferCount + 1, nullptr)
-    , m_oldSharedClearUavHeaps(in_desc.m_swapChainBufferCount + 1, nullptr)
+    , m_oldSharedClearUavHeapsBound(in_desc.m_swapChainBufferCount + 1, nullptr)
+    , m_oldSharedClearUavHeapsNotBound(in_desc.m_swapChainBufferCount + 1, nullptr)
     , m_processFeedbackThread((ManagerPFT*)this, m_dataUploader, (int)in_desc.m_threadPriority)
     , m_allocateSharedFrequency(3 * in_desc.m_swapChainBufferCount)
 {
@@ -159,12 +160,19 @@ void SFS::ManagerBase::AllocateSharedResidencyMap()
     // rather than building a proper memory manager, just reset everything on any allocation
     UINT requiredSize = 0;
     UINT descriptorOffset = 0;
+
+    const D3D12_CPU_DESCRIPTOR_HANDLE boundStart = m_sharedClearUavHeapBound->GetCPUDescriptorHandleForHeapStart();
+    const D3D12_CPU_DESCRIPTOR_HANDLE notBoundStart = m_sharedClearUavHeapNotBound->GetCPUDescriptorHandleForHeapStart();
+
     const auto srvUavCbvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     for (auto p : m_streamingResources)
     {
         p->SetResidencyMapOffset(requiredSize);
         // align to cache line size
         requiredSize += (p->GetMinMipMapSize() + alignmentMask) & ~alignmentMask;
+
+        p->CreateFeedbackView({ descriptorOffset + boundStart.ptr });
+        p->CreateFeedbackView({ descriptorOffset + notBoundStart.ptr });
 
         // set clear uav descriptor heap offset
         // note these are views are invalid until set within NotifyPackedMips()
@@ -209,25 +217,23 @@ void SFS::ManagerBase::AllocateSharedResidencyMap()
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::AllocateSharedClearUavHeap(UINT in_numDescriptors)
 {
-    if ((nullptr == m_sharedClearUavHeapNotBound.Get()) || (m_sharedClearUavHeapNotBound->GetDesc().NumDescriptors < in_numDescriptors))
     {
-        {
-            auto i = m_frameFenceValue % m_oldSharedClearUavHeaps.size();
-            m_oldSharedClearUavHeaps[i] = m_sharedClearUavHeapBound.Get();
-        }
-
-        D3D12_DESCRIPTOR_HEAP_DESC desc = {};
-        desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        desc.NumDescriptors = in_numDescriptors;
-        desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-
-        ThrowIfFailed(m_device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_sharedClearUavHeapNotBound)));
-        m_sharedClearUavHeapNotBound->SetName(L"m_sharedClearUavHeapNotBound");
-
-        desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-        ThrowIfFailed(m_device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_sharedClearUavHeapBound)));
-        m_sharedClearUavHeapBound->SetName(L"m_sharedClearUavHeapBound");
+        auto i = m_frameFenceValue % m_oldSharedClearUavHeapsBound.size();
+        m_oldSharedClearUavHeapsBound[i] = m_sharedClearUavHeapBound.Get();
+        m_oldSharedClearUavHeapsNotBound[i] = m_sharedClearUavHeapNotBound.Get();
     }
+
+    D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+    desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    desc.NumDescriptors = in_numDescriptors;
+    desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
+    ThrowIfFailed(m_device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_sharedClearUavHeapNotBound)));
+    m_sharedClearUavHeapNotBound->SetName(L"m_sharedClearUavHeapNotBound");
+
+    desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    ThrowIfFailed(m_device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_sharedClearUavHeapBound)));
+    m_sharedClearUavHeapBound->SetName(L"m_sharedClearUavHeapBound");
 }
 
 //-----------------------------------------------------------------------------

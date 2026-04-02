@@ -253,7 +253,8 @@ void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescripto
     {
         auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
         m_oldSharedResidencyMaps[i] = nullptr;
-        m_oldSharedClearUavHeaps[i] = nullptr;
+        m_oldSharedClearUavHeapsBound[i] = nullptr;
+        m_oldSharedClearUavHeapsNotBound[i] = nullptr;
     }
 
     // if new StreamingResources have been created, allocate shared resources and not-bound clear heap
@@ -289,24 +290,15 @@ void SFS::Manager::ClearFeedback(ID3D12GraphicsCommandList* in_pCommandList, con
 {
     // note clear value is ignored when clearing feedback maps
     UINT clearValue[4]{};
-    const D3D12_CPU_DESCRIPTOR_HANDLE boundStart = m_sharedClearUavHeapBound->GetCPUDescriptorHandleForHeapStart();
-    const D3D12_CPU_DESCRIPTOR_HANDLE notBoundStart = m_sharedClearUavHeapNotBound->GetCPUDescriptorHandleForHeapStart();
-    const D3D12_GPU_DESCRIPTOR_HANDLE boundStartGpu = m_sharedClearUavHeapBound->GetGPUDescriptorHandleForHeapStart();
+    const D3D12_CPU_DESCRIPTOR_HANDLE notBound = m_sharedClearUavHeapNotBound->GetCPUDescriptorHandleForHeapStart();
+    const D3D12_GPU_DESCRIPTOR_HANDLE bound = m_sharedClearUavHeapBound->GetGPUDescriptorHandleForHeapStart();
     for (auto p : in_resources)
     {
-        D3D12_CPU_DESCRIPTOR_HANDLE bound = boundStart;
-        D3D12_GPU_DESCRIPTOR_HANDLE boundGpu = boundStartGpu;
-        D3D12_CPU_DESCRIPTOR_HANDLE notBound = notBoundStart;
-
         auto offset = p->GetClearUavDescriptorOffset();
-        bound.ptr += offset;
-        boundGpu.ptr += offset;
-        notBound.ptr += offset;
 
-        p->CreateFeedbackView(bound);
-        p->CreateFeedbackView(notBound);
-
-        in_pCommandList->ClearUnorderedAccessViewUint(boundGpu, notBound, p->GetOpaqueFeedback(), clearValue, 0, nullptr);
+        in_pCommandList->ClearUnorderedAccessViewUint(
+            {bound.ptr + offset}, {notBound.ptr + offset},
+            p->GetOpaqueFeedback(), clearValue, 0, nullptr);
     }
 }
 

@@ -385,7 +385,7 @@ void SFS::DataUploader::FenceMonitorThread()
                 (m_mappingFence->GetCompletedValue() >= updateList.m_mappingFenceValue))
             {
 #if 0
-                // NOTE: dead code. all eviction work is done before unmapping7
+                // NOTE: dead code. all eviction work is done before unmapping
 
                 // notify evictions
                 if (updateList.GetNumEvictions())
