@@ -23,9 +23,8 @@ SFS::Manager::Manager(const struct SFSManagerDesc& in_desc, ID3D12Device8* in_pD
     , m_gpuTimerResolve(in_pDevice, in_desc.m_swapChainBufferCount, D3D12GpuTimer::TimerType::Direct)
     , m_numTexels(m_feedbackTimingFrequency, 200)
     , m_gpuFeedbackTimes(m_feedbackTimingFrequency, 1.f)
+    , m_commandListEndFrame(in_pDevice, in_desc.m_swapChainBufferCount, L"SFS::ManagerBase::m_commandListEndFrame")
 {
-    m_commandListEndFrame.Allocate(m_device.Get(), m_numSwapBuffers, L"SFS::ManagerBase::m_commandListEndFrame");
-
 #if RESOLVE_TO_TEXTURE
     ASSERT(in_desc.m_resolveHeapSizeMB);
 
@@ -68,7 +67,7 @@ SFS::Manager::Manager(const struct SFSManagerDesc& in_desc, ID3D12Device8* in_pD
 //-----------------------------------------------------------------------------
 // create command list and allocators
 //-----------------------------------------------------------------------------
-void SFS::Manager::CommandList::Allocate(ID3D12Device* in_pDevice, UINT in_numAllocators, std::wstring in_name)
+SFS::Manager::CommandList::CommandList(ID3D12Device* in_pDevice, UINT in_numAllocators, std::wstring in_name)
 {
     m_allocators.resize(in_numAllocators);
     for (UINT i = 0; i < in_numAllocators; i++)

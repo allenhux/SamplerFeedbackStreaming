@@ -75,7 +75,7 @@ namespace SFS
 
         struct CommandList
         {
-            void Allocate(ID3D12Device* in_pDevice, UINT in_numAllocators, std::wstring in_name);
+            CommandList(ID3D12Device* in_pDevice, UINT in_numAllocators, std::wstring in_name);
             void Reset(UINT in_allocatorIndex);
             ComPtr<ID3D12GraphicsCommandList1> m_commandList;
             std::vector<ComPtr<ID3D12CommandAllocator>> m_allocators;

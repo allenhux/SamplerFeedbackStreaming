@@ -32,8 +32,6 @@ namespace SFS
     public:
         ID3D12Device8* GetDevice() const { return m_device.Get(); }
 
-        UINT GetNumSwapBuffers() const { return m_numSwapBuffers; }
-
         UINT GetEvictionDelay() const { return m_evictionDelay; }
 
         // stop tracking this SFSResource. Called by its destructor
