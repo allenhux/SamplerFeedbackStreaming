@@ -134,9 +134,13 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, const SFSReso
 #if RESOLVE_TO_TEXTURE
 void SFS::InternalResources::ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, ID3D12Resource* resolveDest)
 {
+    // for texture destination, decode format must be R8_UINT
+    static constexpr DXGI_FORMAT destResourceFormat = DXGI_FORMAT_R8_UINT;
 #else
 void SFS::InternalResources::ResolveFeedback(ID3D12GraphicsCommandList1 * out_pCmdList, UINT in_index)
 {
+    // for buffer destination, decode format must be UNKNOWN
+    static constexpr DXGI_FORMAT destResourceFormat = DXGI_FORMAT_UNKNOWN;
     auto resolveDest = m_readback[in_index].Get();
 #endif
 
@@ -149,7 +153,7 @@ void SFS::InternalResources::ResolveFeedback(ID3D12GraphicsCommandList1 * out_pC
         m_feedbackResource.Get(),
         UINT_MAX,            // decode SrcSubresource must be UINT_MAX
         nullptr,             // src rect is not supported for min mip maps
-        DXGI_FORMAT_R8_UINT, // decode format must be R8_UINT
+        destResourceFormat,
         D3D12_RESOLVE_MODE_DECODE_SAMPLER_FEEDBACK
     );
 
