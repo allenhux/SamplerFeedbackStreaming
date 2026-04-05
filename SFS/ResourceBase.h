@@ -67,6 +67,10 @@ namespace SFS
         // called when creating/changing FileStreamer
         void SetFileHandle(const class DataUploader* in_pDataUploader);
 
+        // return size of internal data structure containing min mip map, which may be padded
+        // used to initialize shared min mip map
+		UINT GetInternalMinMipMapSize() const { return (UINT)m_minMipMap.size(); }
+
         //-------------------------------------
         // begin called by SFSM::EndFrame()
         // note: that is, called once per frame
@@ -107,7 +111,9 @@ namespace SFS
         // do this fast!! inside lock
         inline void WriteMinMipMap(UINT8* out_pDest)
         {
-            memcpy(m_residencyMapOffsetBase + out_pDest, m_minMipMap.data(), m_minMipMap.size());
+            auto pDest = std::assume_aligned<RESIDENCY_MAP_ALIGNMENT>(m_residencyMapOffsetBase + out_pDest);
+            auto pSrc = std::assume_aligned<RESIDENCY_MAP_ALIGNMENT>(m_minMipMap.data());
+            std::memcpy(pDest, pSrc, m_minMipMap.size());
         }
 
         //-------------------------------------
@@ -136,7 +142,6 @@ namespace SFS
         // wants to load tiles this frame
         // only valid after QueuePendingTileEvictions, only used if ENABE_UNMAP != 0
         auto& GetPendingEvictions() { return m_pendingTileEvictions; }
-
 
         bool InitPackedMips();
 
@@ -291,7 +296,7 @@ namespace SFS
         // with a 16kx16k limit, DX will never see 255 mip levels. but, we want a byte so we can modify cache-coherently
         std::vector<UINT8> m_tileReferences;
 
-        static constexpr UINT RESIDENCY_MAP_ALIGNMENT = 64;
+        static constexpr UINT RESIDENCY_MAP_ALIGNMENT = std::hardware_destructive_interference_size;
         std::vector<BYTE, SFS::AlignedAllocator<BYTE, RESIDENCY_MAP_ALIGNMENT>> m_minMipMap; // local version of min mip map, rectified in UpdateMinMipMap()
 
         // drop pending loads that are no longer relevant

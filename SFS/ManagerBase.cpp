@@ -141,48 +141,52 @@ void SFS::ManagerBase::Finish()
 //-----------------------------------------------------------------------------
 void SFS::ManagerBase::AllocateSharedResidencyMap()
 {
-    static constexpr UINT alignmentMask = std::hardware_destructive_interference_size - 1; // cache line size
-
     // if new resources, will probably need to expand clear descriptor heap. just always re-allocate.
     AllocateSharedClearUavHeap((UINT)m_streamingResources.size());
 
-    // get the buffer size
-    UINT bufferSize = 0;
-    if (nullptr != m_residencyMap.GetResource())
+    std::vector<UINT> offsets;
+    offsets.reserve(m_streamingResources.size());
+    UINT requiredSize = 0;
+
+    // initialize clear descriptor heaps and determine required size
+    // record per-resource min mip map offsets for use below
     {
-        bufferSize = (UINT)m_residencyMap.GetResource()->GetDesc().Width;
+        const D3D12_CPU_DESCRIPTOR_HANDLE boundStart = m_sharedClearUavHeapBound->GetCPUDescriptorHandleForHeapStart();
+        const D3D12_CPU_DESCRIPTOR_HANDLE notBoundStart = m_sharedClearUavHeapNotBound->GetCPUDescriptorHandleForHeapStart();
+        const auto srvUavCbvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+        // create a shared min mip map buffer with current resources ordered consecutively
+        UINT descriptorOffset = 0;
+        for (auto p : m_streamingResources)
+        {
+            offsets.push_back(requiredSize);
+
+            // get size of internal structure, which may contain padding bytes
+            requiredSize += p->GetInternalMinMipMapSize();
+
+            p->CreateFeedbackView({ descriptorOffset + boundStart.ptr });
+            p->CreateFeedbackView({ descriptorOffset + notBoundStart.ptr });
+
+            // set clear uav descriptor heap offset
+            // note these are views are invalid until set within NotifyPackedMips()
+            p->SetClearUavDescriptorOffset(descriptorOffset);
+            descriptorOffset += srvUavCbvDescriptorSize;
+        }
     }
 
-    // need to lock out ResidencyThread
-    // because we are setting offsets and potentially creating a new resource
+    // the old buffer (with the old ordering) must be retained until in-flight command lists are completed
+    // becausee the constant buffers of previous draw commands reference prior buffers
+    {
+        auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
+        m_oldSharedResidencyMaps[i] = m_residencyMap.GetResource();
+    }
+
+    // lock out ResidencyThread as we switch to the new residency map
     m_residencyMapLock.Acquire();
 
-    const D3D12_CPU_DESCRIPTOR_HANDLE boundStart = m_sharedClearUavHeapBound->GetCPUDescriptorHandleForHeapStart();
-    const D3D12_CPU_DESCRIPTOR_HANDLE notBoundStart = m_sharedClearUavHeapNotBound->GetCPUDescriptorHandleForHeapStart();
-    const auto srvUavCbvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-    // create a shared min mip map buffer with current resources ordered consecutively
-    UINT requiredSize = 0;
-    UINT descriptorOffset = 0;
-    for (auto p : m_streamingResources)
-    {
-        p->SetResidencyMapOffset(requiredSize);
-
-        // align to cache line size
-        requiredSize += (p->GetMinMipMapSize() + alignmentMask) & ~alignmentMask;;
-
-        p->CreateFeedbackView({ descriptorOffset + boundStart.ptr });
-        p->CreateFeedbackView({ descriptorOffset + notBoundStart.ptr });
-
-        // set clear uav descriptor heap offset
-        // note these are views are invalid until set within NotifyPackedMips()
-        p->SetClearUavDescriptorOffset(descriptorOffset);
-        descriptorOffset += srvUavCbvDescriptorSize;
-    }
-
-    // always allocate a new residency map
-    // allocation potentially changes the order of the resources within the shared buffer
-	// the old buffer (with the old ordering) must be retained until in-flight command lists are completed
+    // allocate a new residency map to accomodate new resources
+    // note deleting resources potentically leaves gaps in the min mip map,
+    //    allocation may result in new offsets for older resources.
     {
         auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
         if (m_gpuUploadHeapSupported)
@@ -193,21 +197,23 @@ void SFS::ManagerBase::AllocateSharedResidencyMap()
             ASSERT(D3D12_MEMORY_POOL_UNKNOWN == uploadHeapProperties.MemoryPoolPreference);
         }
 
-        // defer deletion of current residency map
-        {
-            auto i = m_frameFenceValue % m_oldSharedResidencyMaps.size();
-            m_oldSharedResidencyMaps[i] = m_residencyMap.GetResource();
-        }
-
         m_residencyMap.Allocate(m_device.Get(), requiredSize, uploadHeapProperties);
     }
 
-    auto pDest = m_residencyMap.GetData();
-    for (auto p : m_streamingResources)
+    // write min mip map state into new shared buffer
     {
-        // copy current minmipmap state or initialize to default state
-        p->WriteMinMipMap((UINT8*)pDest);
+        auto pDest = m_residencyMap.GetData();
+        UINT i = 0;
+
+        for (auto p : m_streamingResources)
+        {
+            p->SetResidencyMapOffset(offsets[i]);
+            i++;
+            // copy current minmipmap state or initialize to default state
+            p->WriteMinMipMap((UINT8*)pDest);
+        }
     }
+
     m_residencyMapLock.Release();
 }
 
