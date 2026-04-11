@@ -101,6 +101,7 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, const SFSReso
         m_readback->Map(0, nullptr, (void**)&m_readbackCpuAddress);
 #else
         m_readback.resize(in_numQueuedFeedback);
+        m_readbackCpuAddress.resize(in_numQueuedFeedback);
 
         //-----------------------------------
         //
@@ -123,6 +124,7 @@ void SFS::InternalResources::Initialize(ID3D12Device8* in_pDevice, const SFSReso
                 nullptr,
                 IID_PPV_ARGS(&m_readback[i])));
             m_readback[i]->SetName(AutoString(L"ResolveDest_", i).str().c_str());
+            m_readback[i]->Map(0, nullptr, (void**)&m_readbackCpuAddress[i]);
         }
 #endif
     }

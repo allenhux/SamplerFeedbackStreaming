@@ -33,13 +33,8 @@ namespace SFS
 #else
         // resolve directly to a cpu destination
         void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, UINT in_index);
-        void* MapResolvedReadback(UINT in_index) const
-        {
-            void* pCpuAddress{ nullptr };
-            m_readback[in_index]->Map(0, nullptr, &pCpuAddress);
-            return pCpuAddress;
-        }
-        void UnmapResolvedReadback(UINT in_index) const { m_readback[in_index]->Unmap(0, nullptr); }
+        void* MapResolvedReadback(UINT in_index) const { return m_readbackCpuAddress[in_index]; }
+        void UnmapResolvedReadback(UINT) const {}
 #endif
         UINT GetNumTilesForPackedMips() const { return m_numTilesForPackedMips; }
     private:
@@ -52,6 +47,7 @@ namespace SFS
         UINT8* m_readbackCpuAddress{ nullptr };
 #else
         std::vector<ComPtr<ID3D12Resource>> m_readback;
+        std::vector<UINT8*> m_readbackCpuAddress;
 #endif
 
         UINT m_numTilesForPackedMips{ 0 };

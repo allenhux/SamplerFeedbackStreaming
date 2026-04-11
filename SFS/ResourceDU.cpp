@@ -26,6 +26,27 @@ void SFS::ResourceDU::LoadPackedMipInfo(UpdateList& out_updateList)
 //-----------------------------------------------------------------------------
 void SFS::ResourceDU::MapPackedMips(ID3D12CommandQueue* in_pCommandQueue)
 {
+#if 0
+    // for debugging: maybe useful to map tiles
+    // it is NOT necessary to map all the tiles of a tiled resource
+    // WILL impact framerate if done frequently - it's on the render queue!
+    {
+        D3D12_TILE_RANGE_FLAGS rangeFlags = D3D12_TILE_RANGE_FLAG_REUSE_SINGLE_TILE;
+        in_pCommandQueue->UpdateTileMappings(
+            GetTiledResource(),
+            1,
+            nullptr,
+            nullptr,
+            m_pHeap->GetHeap(),
+            1, // MSDN: If NumRanges is 1, pRangeTileCounts can be NULL and defaults to the total number of tiles specified by all the tile regions.
+            &rangeFlags,
+            m_packedMipHeapIndices.data(),
+            nullptr, // pRangeTileCounts is NULL == whole resource if numranges == 1
+            D3D12_TILE_MAPPING_FLAG_NONE
+        );
+    }
+#endif
+
     UINT firstSubresource = m_resourceDesc.m_mipInfo.m_numStandardMips;
 
     // mapping packed mips is different from regular tiles: must be mapped before we can use copytextureregion() instead of copytiles()
