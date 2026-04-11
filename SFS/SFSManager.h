@@ -56,7 +56,6 @@ namespace SFS
         virtual ~Manager() {}
     private:
         D3D12GpuTimer m_gpuTimerResolve; // time for feedback resolve
-        BarrierList m_packedMipTransitionBarriers; // transition packed-mips from common (copy dest)
 
         float m_cpuProcessFeedbackFrameTimeMs{ 0 }; // cpu time spent processing feedback (averaged over m_feedbackTimingFrequency)
         float m_gpuProcessFeedbackFrameTimeMs{ 0 };  // gpu render queue time (averaged over m_feedbackTimingFrequency)

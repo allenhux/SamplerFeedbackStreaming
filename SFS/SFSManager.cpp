@@ -225,6 +225,9 @@ void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescripto
     ASSERT(!GetWithinFrame());
     m_withinFrame = true;
 
+	ASSERT(0 == m_firstTimeClears.size());
+	ASSERT(0 == m_feedbackReadbacks.size());
+
     // the frame fence is used to determine when to read feedback:
     // read back the feedback after the frame that writes to it has completed
     // note the signal is for the previous frame
@@ -255,6 +258,10 @@ void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescripto
         m_oldSharedClearUavHeapsBound[i] = nullptr;
         m_oldSharedClearUavHeapsNotBound[i] = nullptr;
     }
+
+    // stop tracking resources that have been Destroy()ed
+    // must remove resources before calling AllocateSharedResidencyMap()
+    RemoveResources();
 
     // if new StreamingResources have been created, allocate shared resources and not-bound clear heap
     // do this before the applicaton issues any draw calls: we will be modifying the descriptor heap
@@ -316,17 +323,22 @@ ID3D12CommandList* SFS::Manager::EndFrame()
     // NOTE: we are "within frame" until the end of EndFrame()
     ASSERT(GetWithinFrame());
 
-    // stop tracking resources that have been Destroy()ed
-    // must remove resources before calling AllocateSharedResidencyMap()
-    // FIXME? move to BeginFrame()?
-    RemoveResources();
-
     // handle FlushResources(). note occurs after PFT::ShareNewResources
     FlushResourcesInternal();
 
+    // start command list for this frame
+    m_commandListEndFrame.Reset(m_renderFrameIndex);
+    auto pCommandList = m_commandListEndFrame.m_commandList.Get();
+
+    // clear UAV heap must be bound to command list
+    ID3D12DescriptorHeap* ppHeaps[] = { m_sharedClearUavHeapBound.Get() };
+    pCommandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+
     // transition those new resources that are ready to be drawn (after packed mips have arrived)
+    // NOTE: the array may still contain resources that haven't been transitioned yet
     if (m_packedMipTransitionResources.size())
     {
+        BarrierList packedMipTransitionBarriers; // transition packed-mips from common (copy dest)
         for (UINT i = 0; i < m_packedMipTransitionResources.size();)
         {
             auto p = m_packedMipTransitionResources[i];
@@ -336,7 +348,7 @@ ID3D12CommandList* SFS::Manager::EndFrame()
                 D3D12_RESOURCE_BARRIER b = CD3DX12_RESOURCE_BARRIER::Transition(
                     p->GetTiledResource(),
                     D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-                m_packedMipTransitionBarriers.push_back(b);
+                packedMipTransitionBarriers.push_back(b);
                 m_packedMipTransitionResources[i] = m_packedMipTransitionResources.back();
                 m_packedMipTransitionResources.pop_back();
             }
@@ -345,41 +357,27 @@ ID3D12CommandList* SFS::Manager::EndFrame()
                 i++;
             }
         }
+
+        // transition packed mips if necessary
+        if (packedMipTransitionBarriers.size())
+        {
+            // note: could merge this with m_barrierUavToResolveSrc if there is feedback to resolve,
+            //       but really not an interesting optimization
+            pCommandList->ResourceBarrier((UINT)packedMipTransitionBarriers.size(), packedMipTransitionBarriers.data());
+            packedMipTransitionBarriers.clear();
+        }
     }
 
-    // start command list for this frame
-    m_commandListEndFrame.Reset(m_renderFrameIndex);
-
-    auto pCommandList = m_commandListEndFrame.m_commandList.Get();
-
-    // clear UAV heap must be bound to command list
-    ID3D12DescriptorHeap* ppHeaps[] = { m_sharedClearUavHeapBound.Get() };
-    pCommandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
-
-    // transition packed mips if necessary
-    if (m_packedMipTransitionBarriers.size())
+    // pre-clear feedback buffers on first use to work around non-clear initial state on some hardware
+    if (m_firstTimeClears.size())
     {
-        if (m_feedbackReadbacks.size())
-        {
-            m_barrierUavToResolveSrc.insert(m_barrierUavToResolveSrc.end(), m_packedMipTransitionBarriers.begin(), m_packedMipTransitionBarriers.end());
-        }
-        else
-        {
-            pCommandList->ResourceBarrier((UINT)m_packedMipTransitionBarriers.size(), m_packedMipTransitionBarriers.data());
-        }
-        m_packedMipTransitionBarriers.clear();
+        ClearFeedback(pCommandList, m_firstTimeClears);
+        m_firstTimeClears.clear();
     }
 
     if (m_feedbackReadbacks.size())
     {
         m_gpuTimerResolve.BeginTimer(pCommandList, m_renderFrameIndex);
-
-        // pre-clear feedback buffers on first use to work around non-clear initial state on some hardware
-        if (m_firstTimeClears.size())
-        {
-            ClearFeedback(pCommandList, m_firstTimeClears);
-            m_firstTimeClears.clear();
-        }
 
         // transition all feedback resources UAV->RESOLVE_SOURCE
         // also transition the (non-opaque) resolved resources COPY_SOURCE->RESOLVE_DEST
