@@ -1390,7 +1390,7 @@ void Scene::DrawObjects(D3D12_GPU_DESCRIPTOR_HANDLE in_sharedMinMipMap)
             }
         }
     }
-
+    OutputDebugString(AutoString(m_numFeedbackObjects, "\n").str().c_str());
     // set common draw state
     SceneObjects::DrawParams drawParams;
     drawParams.m_view = m_viewMatrix;
@@ -1547,6 +1547,28 @@ void Scene::GatherStatistics()
 }
 
 //-------------------------------------------------------------------------
+// frustum clip planes based on Gribb/Hartman 2001
+// https://www8.cs.umu.se/kurser/5DV051/HT12/lab/plane_extraction.pdf
+//-------------------------------------------------------------------------
+void Scene::ExtractFrustumPlanes(const DirectX::XMMATRIX& in_viewProj)
+{
+	auto viewProj = XMMatrixTranspose(in_viewProj);
+
+    XMVECTOR r0 = viewProj.r[0];
+    XMVECTOR r1 = viewProj.r[1];
+    XMVECTOR r2 = viewProj.r[2];
+    XMVECTOR r3 = viewProj.r[3];
+
+    // Extract planes
+    m_frustumPlanes[0] = XMPlaneNormalize(r3 + r0); // Left
+    m_frustumPlanes[1] = XMPlaneNormalize(r3 - r0); // Right
+    m_frustumPlanes[2] = XMPlaneNormalize(r3 + r1); // Bottom
+    m_frustumPlanes[3] = XMPlaneNormalize(r3 - r1); // Top
+    m_frustumPlanes[4] = XMPlaneNormalize(r3 + r2); // Near
+    m_frustumPlanes[5] = XMPlaneNormalize(r3 - r2); // Far
+}
+
+//-------------------------------------------------------------------------
 // typically animation rates would be a function of frame time
 // however, we wanted reproduceable frames for timing purposes
 //-------------------------------------------------------------------------
@@ -1612,24 +1634,28 @@ void Scene::Animate()
     float rotation = m_args.m_animationRate * 0.0015f * deltaTime;
 
     // per-frame per-object compute visibility, lod, etc.
-    const XMMATRIX worldProj = m_viewMatrix * m_projection;
+    const XMMATRIX viewProj = m_viewMatrix * m_projection;
+
+	ExtractFrustumPlanes(viewProj);
+
     const float cotWdiv2 = XMVectorGetX(m_projection.r[0]);
-    const float cotHdiv2 = XMVectorGetY(m_projection.r[1]);
+    //const float cotHdiv2 = XMVectorGetY(m_projection.r[1]);
     concurrency::parallel_for_each(m_objects.begin(), m_objects.end(), [&](auto o)
         {
             if (nullptr != o)
             {
                 o->Spin(rotation);
-                o->SetCombinedMatrix(worldProj, m_windowHeight, cotWdiv2, cotHdiv2, m_zFar);
+                o->SetCombinedMatrix(viewProj, m_windowHeight, cotWdiv2);
+				o->ComputeVisible(m_frustumPlanes);
             }
         });
     // sky doesn't move
     if (m_pSky)
     {
         // remove translation from worldproj
-        auto tmp = worldProj;
+        auto tmp = viewProj;
         tmp.r[3] = m_projection.r[3];
-        m_pSky->SetCombinedMatrix(tmp, m_windowHeight, cotWdiv2, cotHdiv2, m_zFar);
+        m_pSky->SetCombinedMatrix(tmp, m_windowHeight, cotWdiv2);
     }
 }
 

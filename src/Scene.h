@@ -130,6 +130,10 @@ private:
     DirectX::XMMATRIX m_viewMatrixInverse;
     void SetViewMatrix(const DirectX::XMMATRIX& m) { m_viewMatrix = m; m_viewMatrixInverse = XMMatrixInverse(nullptr, m_viewMatrix); }
 
+    // for frustum culling
+    DirectX::XMVECTOR m_frustumPlanes[6];
+    void ExtractFrustumPlanes(const DirectX::XMMATRIX& in_viewProj);
+
     float m_aspectRatio{ 0 };
     const float m_fieldOfView{ DirectX::XM_PI / 2.0f }; // 90 degrees
     const float m_zNear{ 1.f };

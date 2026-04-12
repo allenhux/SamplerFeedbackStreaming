@@ -108,7 +108,7 @@ namespace SceneObjects
 
         // also compute visibility, screen area, and LoD
         void SetCombinedMatrix(const DirectX::XMMATRIX& in_worldProjection,
-            UINT in_windowHeight, float in_cotWdiv2, float in_cotHdiv2, float in_zFar);
+            UINT in_windowHeight, float in_cotWdiv2);
 
         virtual void Spin(float in_radians); // spin this object around its desired axis
 
@@ -120,6 +120,8 @@ namespace SceneObjects
         void SetAxis(DirectX::XMVECTOR in_vector) { m_axis.v = in_vector; }
 
         virtual float GetBoundingSphereRadius() { return m_radius; }
+
+		virtual void ComputeVisible([[maybe_unused]] const DirectX::XMVECTOR(&in_frustumPlanes)[6]) { m_visible = true; }
 
         float GetScreenAreaPixels() const { return m_screenAreaPixels; }
 
@@ -166,10 +168,7 @@ namespace SceneObjects
         // based on dimensions of the highest-resolution packed mip
         // if the screen area is less than this, then the object won't need streamed textures
         UINT m_screenAreaThreshold{ 100 };
-
-        virtual bool ComputeVisible(
-            [[maybe_unused]] float in_cotWdiv2, [[maybe_unused]] float in_cotHdiv2,
-            [[maybe_unused]] const float in_zFar) { return true; }
+        bool m_visible{ true };
 
     private:
         // container for per-class object resources
@@ -181,7 +180,6 @@ namespace SceneObjects
         bool m_createResourceViews{ true };
         void CreateResourceViews(D3D12_CPU_DESCRIPTOR_HANDLE in_baseDescriptorHandle, UINT in_srvUavCbvDescriptorSize);
 
-        bool m_visible{ true };
         float m_screenAreaPixels{ 0 }; // only updated if visible
         UINT m_lod{ 0 }; // only updated if visible
         float ComputeScreenAreaPixels(UINT in_windowHeight, float in_fov);
@@ -215,7 +213,8 @@ namespace SceneObjects
     class Sphere : public BaseObject
     {
     public:
-        virtual bool ComputeVisible(float in_cotWdiv2, float in_cotHdiv2, const float in_zFar) override;
+        virtual void ComputeVisible(const DirectX::XMVECTOR(&in_frustumPlanes)[6]) override;
+
         float GetBoundingSphereRadius() override;
     };
 

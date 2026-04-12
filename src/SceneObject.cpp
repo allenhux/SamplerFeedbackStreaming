@@ -502,20 +502,11 @@ void SceneObjects::BaseObject::Spin(float in_radians)
 // then use it for screen area, lod, visibility
 //-------------------------------------------------------------------------
 void SceneObjects::BaseObject::SetCombinedMatrix(const DirectX::XMMATRIX& in_worldProjection,
-    UINT in_windowHeight, float in_cotWdiv2, float in_cotHdiv2, float in_zFar)
+    UINT in_windowHeight, float in_cotWdiv2)
 {
     m_combinedMatrix = m_matrix * in_worldProjection;
-    m_visible = ComputeVisible(in_cotWdiv2, in_cotHdiv2, in_zFar);
-    if (m_visible)
-    {
-        m_screenAreaPixels = ComputeScreenAreaPixels(in_windowHeight, in_cotWdiv2);
-        m_lod = ComputeLod();
-    }
-    else
-    {
-        m_screenAreaPixels = 0;
-        m_lod = 0;
-    }
+    m_screenAreaPixels = ComputeScreenAreaPixels(in_windowHeight, in_cotWdiv2);
+    m_lod = ComputeLod();
 }
 
 //=========================================================================
@@ -581,48 +572,27 @@ SceneObjects::Earth::Earth(Scene* in_pScene, UINT in_latitudeSteps, UINT in_long
 //-------------------------------------------------------------------------
 // visibility of sphere for frustum culling
 //-------------------------------------------------------------------------
-bool SceneObjects::Sphere::ComputeVisible(float in_cotWdiv2, float in_cotHdiv2, const float in_zFar)
+using namespace DirectX;
+void SceneObjects::Sphere::ComputeVisible(const DirectX::XMVECTOR(&in_frustumPlanes)[6])
 {
-    const DirectX::XMVECTOR pos = GetCombinedMatrix().r[3];
-    const float radius = GetBoundingSphereRadius();
+    auto worldCenter = m_matrix.r[3];
 
-    // z has visible range 0..zFar
-    // account for radius of sphere to handle edge case where center is behind camera
-    float z = DirectX::XMVectorGetZ(pos);
-    if ((z + radius < 0) || (z - radius > in_zFar))
+    // radius is baked into scale:
+	float radius = GetBoundingSphereRadius();
+
+    for (int i = 0; i < 6; i++)
     {
-        return false;
+        auto dist = XMVectorGetX(XMPlaneDotCoord(in_frustumPlanes[i], worldCenter));
+
+        // If distance < -radius ? sphere is completely outside
+        if (dist < -radius)
+        {
+            m_visible = false;
+            return;
+        }
     }
 
-    // FIXME? work around for objects going through w = 0
-    // edge case of objects centered behind view that are potentially visible
-    if (z < 0) { return true; }
-
-    // pull fov scales out of the projection matrix
-    // add in a margin, this is a rough estimate
-    // FIXME! breaks when rotating view and object approaches zNear
-    float rx = 1.25f * radius * in_cotWdiv2;
-    float ry = 1.25f * radius * in_cotHdiv2;
-
-    float x = DirectX::XMVectorGetX(pos);
-    float y = DirectX::XMVectorGetY(pos);
-
-    // if all the vertices are to one side of a frustum plane in homogeneous space, cull.
-    // e.g. the right side of the AABB is to the left of the frustum if (x + radius)/w < -1
-    // multiply through by w, and flip the comparisons so always doing greater than:
-    float w = DirectX::XMVectorGetW(pos);
-
-    ASSERT(w > 0);
-
-    // flip the comparison when w is negative
-    // if (w < 0) { w *= -1; }
-
-    DirectX::XMVECTOR wv = DirectX::XMVectorReplicate(w);
-    DirectX::XMVECTOR verts = DirectX::XMVectorSet(-(x + rx), x - rx, -(y + ry), y - ry);
-    uint32_t cv = DirectX::XMVector4GreaterR(verts, wv);
-    bool visible = DirectX::XMComparisonAllFalse(cv);
-
-    return visible;
+    m_visible = true; // visible or intersecting
 }
 
 //-------------------------------------------------------------------------
