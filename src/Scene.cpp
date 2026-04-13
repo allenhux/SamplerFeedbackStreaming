@@ -1332,11 +1332,11 @@ void Scene::DrawObjects(const XMMATRIX& in_viewProj,
         m_numTilesVirtual = 0;
 
         // loop over n objects starting with the range that we want to get sampler feedback from, then wrap around.
-        UINT numObjects = m_queueFeedbackIndex + (UINT)m_objects.size();
         m_numFeedbackObjects = 0;
-        for (UINT i = m_queueFeedbackIndex; i < numObjects; i++)
+        const UINT indexOffset = m_queueFeedbackIndex; // m_queueFeedbackIndex may change during this loop, so capture value from last frame
+		for (UINT i = 0; i < (UINT)m_objects.size(); i++)
         {
-            UINT objectIndex = i % (UINT)m_objects.size();
+            UINT objectIndex = (i + indexOffset) % (UINT)m_objects.size();
             auto o = m_objects[objectIndex];
             if ((nullptr == o) || (!o->Drawable())) { continue; }
             m_numObjectsLoaded++;
