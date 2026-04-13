@@ -205,7 +205,8 @@ private:
 
     struct SFSManager* m_pSFSManager{ nullptr };
 
-    void Animate(); // camera and objects
+	void UpdateView(float in_deltaTime);
+    void Animate(float in_deltaTime); // camera and objects
     void DrawObjects(D3D12_GPU_DESCRIPTOR_HANDLE sharedMinMipMap);   // draw all the objects
 
     void CreateTerrainViewers();

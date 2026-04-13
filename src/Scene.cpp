@@ -1568,22 +1568,8 @@ void Scene::ExtractFrustumPlanes(const DirectX::XMMATRIX& in_viewProj)
     m_frustumPlanes[5] = XMPlaneNormalize(r3 - r2); // Far
 }
 
-//-------------------------------------------------------------------------
-// typically animation rates would be a function of frame time
-// however, we wanted reproduceable frames for timing purposes
-//-------------------------------------------------------------------------
-void Scene::Animate()
+void Scene::UpdateView(float in_deltaTime)
 {
-    // time since last frame
-    float deltaTime = 18;
-    if (m_args.m_timingFrameFileName.empty())
-    {
-        static auto t0 = m_cpuTimer.GetTicks();
-        auto t1 = m_cpuTimer.GetTicks();
-        deltaTime = m_cpuTimer.GetMsFromDelta(t1 - t0);
-        t0 = t1;
-    }
-
     // animate camera
     if (m_args.m_cameraAnimationRate)
     {
@@ -1595,7 +1581,7 @@ void Scene::Animate()
         }
 
         static float theta = -XM_PIDIV2;
-        float delta = 0.001f * m_args.m_cameraAnimationRate * deltaTime;
+        float delta = 0.001f * m_args.m_cameraAnimationRate * in_deltaTime;
         float radius = m_universeSize * .8f;
 
         if (m_args.m_cameraRollerCoaster)
@@ -1629,9 +1615,15 @@ void Scene::Animate()
             SetViewMatrix(XMMatrixLookAtLH(pos, XMVectorSet(0, 0, 0, 0), XMVectorSet(0.0f, 1.0f, 0.0f, 1.0f)));
         }
     }
+}
 
+//-------------------------------------------------------------------------
+// object animation
+//-------------------------------------------------------------------------
+void Scene::Animate(float in_deltaTime)
+{
     // spin objects
-    float rotation = m_args.m_animationRate * 0.0015f * deltaTime;
+    float rotation = m_args.m_animationRate * 0.0015f * in_deltaTime;
 
     // per-frame per-object compute visibility, lod, etc.
     const XMMATRIX viewProj = m_viewMatrix * m_projection;
@@ -1993,7 +1985,19 @@ bool Scene::Draw()
     D3D12_CPU_DESCRIPTOR_HANDLE sharedMinMipMapCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), sharedMinMipMapOffset, m_srvUavCbvDescriptorSize);
     m_pSFSManager->BeginFrame(sharedMinMipMapCpu);
 
-    Animate();
+    // time since last frame
+    // unless doing timing where we use constant delta
+    float deltaTime = 18;
+    if (m_args.m_timingFrameFileName.empty())
+    {
+        static auto t0 = m_cpuTimer.GetTicks();
+        auto t1 = m_cpuTimer.GetTicks();
+        deltaTime = m_cpuTimer.GetMsFromDelta(t1 - t0);
+        t0 = t1;
+    }
+
+	UpdateView(deltaTime);
+    Animate(deltaTime);
 
     //-------------------------------------------
     // draw everything
