@@ -22,6 +22,8 @@
 #include "TerrainGenerator.h"
 #include "AssetUploader.h"
 
+using namespace DirectX;
+
 SceneObjects::BaseObject::Geometries SceneObjects::BaseObject::m_geometries;
 
 //-------------------------------------------------------------------------
@@ -572,14 +574,14 @@ SceneObjects::Earth::Earth(Scene* in_pScene, UINT in_latitudeSteps, UINT in_long
 //-------------------------------------------------------------------------
 // visibility of sphere for frustum culling
 //-------------------------------------------------------------------------
-using namespace DirectX;
-void SceneObjects::Sphere::ComputeVisible(const DirectX::XMVECTOR(&in_frustumPlanes)[6])
+bool SceneObjects::Sphere::ComputeVisible(const DirectX::XMVECTOR(&in_frustumPlanes)[6])
 {
     auto worldCenter = m_matrix.r[3];
 
     // radius is baked into scale:
 	float radius = GetBoundingSphereRadius();
 
+    m_visible = true; // visible or intersecting
     for (int i = 0; i < 6; i++)
     {
         auto dist = XMVectorGetX(XMPlaneDotCoord(in_frustumPlanes[i], worldCenter));
@@ -588,11 +590,11 @@ void SceneObjects::Sphere::ComputeVisible(const DirectX::XMVECTOR(&in_frustumPla
         if (dist < -radius)
         {
             m_visible = false;
-            return;
+            break;
         }
     }
 
-    m_visible = true; // visible or intersecting
+	return m_visible;
 }
 
 //-------------------------------------------------------------------------

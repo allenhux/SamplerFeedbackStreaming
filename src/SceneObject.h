@@ -121,7 +121,7 @@ namespace SceneObjects
 
         virtual float GetBoundingSphereRadius() { return m_radius; }
 
-		virtual void ComputeVisible([[maybe_unused]] const DirectX::XMVECTOR(&in_frustumPlanes)[6]) { m_visible = true; }
+        virtual bool ComputeVisible([[maybe_unused]] const DirectX::XMVECTOR(&in_frustumPlanes)[6]) { m_visible = true; return m_visible; }
 
         float GetScreenAreaPixels() const { return m_screenAreaPixels; }
 
@@ -213,7 +213,7 @@ namespace SceneObjects
     class Sphere : public BaseObject
     {
     public:
-        virtual void ComputeVisible(const DirectX::XMVECTOR(&in_frustumPlanes)[6]) override;
+        virtual bool ComputeVisible(const DirectX::XMVECTOR(&in_frustumPlanes)[6]) override;
 
         float GetBoundingSphereRadius() override;
     };

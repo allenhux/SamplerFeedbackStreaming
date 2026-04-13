@@ -1642,17 +1642,16 @@ void Scene::Animate()
     //const float cotHdiv2 = XMVectorGetY(m_projection.r[1]);
     concurrency::parallel_for_each(m_objects.begin(), m_objects.end(), [&](auto o)
         {
-            if (nullptr != o)
+            if ((nullptr != o) && (o->ComputeVisible(m_frustumPlanes)))
             {
-                o->Spin(rotation);
+                o->Spin(rotation); // will anyone notice that planets only spin if visible?
                 o->SetCombinedMatrix(viewProj, m_windowHeight, cotWdiv2);
-				o->ComputeVisible(m_frustumPlanes);
             }
         });
     // sky doesn't move
     if (m_pSky)
     {
-        // remove translation from worldproj
+        // remove translation from viewproj
         auto tmp = viewProj;
         tmp.r[3] = m_projection.r[3];
         m_pSky->SetCombinedMatrix(tmp, m_windowHeight, cotWdiv2);
