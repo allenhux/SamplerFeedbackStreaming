@@ -205,9 +205,11 @@ private:
 
     struct SFSManager* m_pSFSManager{ nullptr };
 
-	void UpdateView(float in_deltaTime);
-    void Animate(float in_deltaTime); // camera and objects
-    void DrawObjects(D3D12_GPU_DESCRIPTOR_HANDLE sharedMinMipMap);   // draw all the objects
+	void UpdateView(float in_deltaTime); // move camera, if enabled
+
+    // draw all the objects
+    void DrawObjects(const DirectX::XMMATRIX& in_viewProj,
+        D3D12_GPU_DESCRIPTOR_HANDLE sharedMinMipMap, float in_deltaTime);
 
     void CreateTerrainViewers();
     void DeleteTerrainViewers();

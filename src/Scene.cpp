@@ -1296,12 +1296,18 @@ void Scene::DrawObjectSet(ID3D12GraphicsCommandList1* out_pCommandList,
 // 
 // feedback may only written for a subset of resources depending on GPU feedback timeout
 //-----------------------------------------------------------------------------
-void Scene::DrawObjects(D3D12_GPU_DESCRIPTOR_HANDLE in_sharedMinMipMap)
+void Scene::DrawObjects(const XMMATRIX& in_viewProj,
+    D3D12_GPU_DESCRIPTOR_HANDLE in_sharedMinMipMap, float in_deltaTime)
 {
     if (0 == m_objects.size())
     {
         return;
     }
+
+    // planet rotation
+    float rotation = m_args.m_animationRate * 0.0015f * in_deltaTime;
+    const float cotWdiv2 = XMVectorGetX(m_projection.r[0]);
+    //const float cotHdiv2 = XMVectorGetY(m_projection.r[1]);
 
     std::unordered_map<ID3D12PipelineState*, ObjectSet> frameObjectSets;
     ObjectSet skyObjectSet;
@@ -1337,12 +1343,18 @@ void Scene::DrawObjects(D3D12_GPU_DESCRIPTOR_HANDLE in_sharedMinMipMap)
             // update # virtual tiles. redundant if not creating/deleting objects, but also cheap to do.
             m_numTilesVirtual += o->GetStreamingResource()->GetNumTilesVirtual();
 
+            bool isTiny = true;
+            o->ComputeVisible(m_frustumPlanes);
             bool isVisible = o->IsVisible();
-
-            // heuristic for when object screen area is so small as to not need streamed texture data
-            // NOTE: for non-square textures and non-squarish objects, might have to be smarter
-            // This provides a big fps boost. packed mips start at around 128x128, which is 16K screen pixels!
-            bool isTiny = o->GetScreenAreaPixels() < o->GetScreenAreaThreshold();
+            if (isVisible)
+            {
+				o->Spin(rotation);
+                o->SetCombinedMatrix(in_viewProj, m_windowHeight, cotWdiv2);
+                // heuristic for when object screen area is so small as to not need streamed texture data
+                // NOTE: for non-square textures and non-squarish objects, might have to be smarter
+                // This provides a big fps boost. packed mips start at around 128x128, which is 16K screen pixels!
+                isTiny = o->GetScreenAreaPixels() < o->GetScreenAreaThreshold();
+            }
 
             bool evict = !isVisible || isTiny;
 
@@ -1363,6 +1375,10 @@ void Scene::DrawObjects(D3D12_GPU_DESCRIPTOR_HANDLE in_sharedMinMipMap)
                 }
                 else
                 {
+                    // FIXME
+                    auto tmp = in_viewProj;
+                    tmp.r[3] = m_projection.r[3];
+                    m_pSky->SetCombinedMatrix(tmp, m_windowHeight, cotWdiv2);
                     skyObjectSet.push_back({ o, objectIndex });
                 }
             } // end if visible
@@ -1616,7 +1632,7 @@ void Scene::UpdateView(float in_deltaTime)
         }
     }
 }
-
+#if 0
 //-------------------------------------------------------------------------
 // object animation
 //-------------------------------------------------------------------------
@@ -1624,11 +1640,6 @@ void Scene::Animate(float in_deltaTime)
 {
     // spin objects
     float rotation = m_args.m_animationRate * 0.0015f * in_deltaTime;
-
-    // per-frame per-object compute visibility, lod, etc.
-    const XMMATRIX viewProj = m_viewMatrix * m_projection;
-
-	ExtractFrustumPlanes(viewProj);
 
     const float cotWdiv2 = XMVectorGetX(m_projection.r[0]);
     //const float cotHdiv2 = XMVectorGetY(m_projection.r[1]);
@@ -1649,7 +1660,7 @@ void Scene::Animate(float in_deltaTime)
         m_pSky->SetCombinedMatrix(tmp, m_windowHeight, cotWdiv2);
     }
 }
-
+#endif
 //-------------------------------------------------------------------------
 // create various windows to inspect terrain object resources
 //-------------------------------------------------------------------------
@@ -1997,7 +2008,10 @@ bool Scene::Draw()
     }
 
 	UpdateView(deltaTime);
-    Animate(deltaTime);
+
+    // per-frame per-object compute visibility, lod, etc.
+    const XMMATRIX viewProj = m_viewMatrix * m_projection;
+    ExtractFrustumPlanes(viewProj);
 
     //-------------------------------------------
     // draw everything
@@ -2011,7 +2025,7 @@ bool Scene::Draw()
         StartScene();
 
         // draw all geometry
-        DrawObjects(sharedMinMipMapGpu);
+        DrawObjects(viewProj, sharedMinMipMapGpu, deltaTime);
 
         if (m_args.m_visualizeFrustum)
         {
