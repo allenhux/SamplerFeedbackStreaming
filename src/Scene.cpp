@@ -1390,7 +1390,7 @@ void Scene::DrawObjects(D3D12_GPU_DESCRIPTOR_HANDLE in_sharedMinMipMap)
             }
         }
     }
-    OutputDebugString(AutoString(m_numFeedbackObjects, "\n").str().c_str());
+
     // set common draw state
     SceneObjects::DrawParams drawParams;
     drawParams.m_view = m_viewMatrix;
