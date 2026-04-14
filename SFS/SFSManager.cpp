@@ -263,6 +263,17 @@ void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescripto
     // must remove resources before calling AllocateSharedResidencyMap()
     RemoveResources();
 
+    // start command list for this frame
+    m_commandListEndFrame.Reset(m_renderFrameIndex);
+    auto pCommandList = m_commandListEndFrame.m_commandList.Get();
+
+    if (m_sharedClearUavHeapBound)
+    {
+        // clear UAV heap must be bound to command list
+        ID3D12DescriptorHeap* ppHeaps[] = { m_sharedClearUavHeapBound.Get() };
+        pCommandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+    }
+
     // if new StreamingResources have been created, allocate shared resources and not-bound clear heap
     // do this before the applicaton issues any draw calls: we will be modifying the descriptor heap
     if (m_newResources.Size() && (m_frameFenceValue - m_fenceForlastAllocateShared > m_allocateSharedFrequency))
@@ -278,6 +289,13 @@ void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescripto
 
         AllocateSharedResidencyMap();
 
+        // clear UAV heap must be bound to command list
+        ID3D12DescriptorHeap* ppHeaps[] = { m_sharedClearUavHeapBound.Get() };
+        pCommandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+
+        // pre-clear feedback buffers on first use to work around non-clear initial state on some hardware
+        ClearFeedback(pCommandList, newResources);
+
         // monitor new resources for when they need packed mip transition barriers
         m_packedMipTransitionResources.insert(m_packedMipTransitionResources.end(), newResources.begin(), newResources.end());
 
@@ -291,8 +309,10 @@ void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescripto
 //-----------------------------------------------------------------------------
 // create clear commands for each feedback buffer used this frame
 // also initializes the descriptors, which can change if the heaps are reallocated
+// T must be a contanier of ResourceBase*, e.g. std::vector<ResourceBase*> or std::set<ResourceBase*>
 //-----------------------------------------------------------------------------
-void SFS::Manager::ClearFeedback(ID3D12GraphicsCommandList* in_pCommandList, const std::set<ResourceBase*>& in_resources)
+template<typename T>
+void SFS::Manager::ClearFeedback(ID3D12GraphicsCommandList* in_pCommandList, const T& in_resources)
 {
     // note clear value is ignored when clearing feedback maps
     UINT clearValue[4]{};
@@ -326,13 +346,8 @@ ID3D12CommandList* SFS::Manager::EndFrame()
     // handle FlushResources(). note occurs after PFT::ShareNewResources
     FlushResourcesInternal();
 
-    // start command list for this frame
-    m_commandListEndFrame.Reset(m_renderFrameIndex);
+    // command list for this frame
     auto pCommandList = m_commandListEndFrame.m_commandList.Get();
-
-    // clear UAV heap must be bound to command list
-    ID3D12DescriptorHeap* ppHeaps[] = { m_sharedClearUavHeapBound.Get() };
-    pCommandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
     // transition those new resources that are ready to be drawn (after packed mips have arrived)
     // NOTE: the array may still contain resources that haven't been transitioned yet
@@ -366,13 +381,6 @@ ID3D12CommandList* SFS::Manager::EndFrame()
             pCommandList->ResourceBarrier((UINT)packedMipTransitionBarriers.size(), packedMipTransitionBarriers.data());
             packedMipTransitionBarriers.clear();
         }
-    }
-
-    // pre-clear feedback buffers on first use to work around non-clear initial state on some hardware
-    if (m_firstTimeClears.size())
-    {
-        ClearFeedback(pCommandList, m_firstTimeClears);
-        m_firstTimeClears.clear();
     }
 
     if (m_feedbackReadbacks.size())

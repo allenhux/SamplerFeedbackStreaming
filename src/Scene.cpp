@@ -1632,35 +1632,7 @@ void Scene::UpdateView(float in_deltaTime)
         }
     }
 }
-#if 0
-//-------------------------------------------------------------------------
-// object animation
-//-------------------------------------------------------------------------
-void Scene::Animate(float in_deltaTime)
-{
-    // spin objects
-    float rotation = m_args.m_animationRate * 0.0015f * in_deltaTime;
 
-    const float cotWdiv2 = XMVectorGetX(m_projection.r[0]);
-    //const float cotHdiv2 = XMVectorGetY(m_projection.r[1]);
-    concurrency::parallel_for_each(m_objects.begin(), m_objects.end(), [&](auto o)
-        {
-            if ((nullptr != o) && (o->ComputeVisible(m_frustumPlanes)))
-            {
-                o->Spin(rotation); // will anyone notice that planets only spin if visible?
-                o->SetCombinedMatrix(viewProj, m_windowHeight, cotWdiv2);
-            }
-        });
-    // sky doesn't move
-    if (m_pSky)
-    {
-        // remove translation from viewproj
-        auto tmp = viewProj;
-        tmp.r[3] = m_projection.r[3];
-        m_pSky->SetCombinedMatrix(tmp, m_windowHeight, cotWdiv2);
-    }
-}
-#endif
 //-------------------------------------------------------------------------
 // create various windows to inspect terrain object resources
 //-------------------------------------------------------------------------

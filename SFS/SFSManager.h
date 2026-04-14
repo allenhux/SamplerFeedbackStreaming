@@ -83,6 +83,8 @@ namespace SFS
         // clear & resolve feedback buffers, coalesces all barriers
         CommandList m_commandListEndFrame;
 
-        void ClearFeedback(ID3D12GraphicsCommandList* in_pCommandList, const std::set<ResourceBase*>& in_resources);
+        
+        template<typename T>
+        void ClearFeedback(ID3D12GraphicsCommandList* in_pCommandList, const T& in_resources);
     };
 }
