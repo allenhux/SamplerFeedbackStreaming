@@ -98,8 +98,6 @@ namespace SFS
         void ResolveFeedback(ID3D12GraphicsCommandList1* out_pCmdList, UINT64 in_frameFenceValue);
 #endif
 
-        bool& GetFirstUse() { return m_firstUse; }
-
         //-------------------------------------
         // end called by SFSM::EndFrame()
         //-------------------------------------
@@ -176,7 +174,6 @@ namespace SFS
         const UINT16 m_tileReferencesWidth{ 0 };  // function of resource tiling
         const UINT16 m_tileReferencesHeight{ 0 }; // function of resource tiling
         const UINT8 m_maxMip{ 0 }; // equals num standard mips, which is also the first packed mip
-        bool m_firstUse{ true }; // queried on first call to queue feedback
 
         // set by QueueEviction() - render thread
         // read by ProcessFeedback()

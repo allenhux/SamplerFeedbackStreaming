@@ -291,8 +291,10 @@ void SFS::Manager::BeginFrame(D3D12_CPU_DESCRIPTOR_HANDLE out_minmipmapDescripto
 //-----------------------------------------------------------------------------
 // create clear commands for each feedback buffer used this frame
 // also initializes the descriptors, which can change if the heaps are reallocated
+// T must be a contanier of ResourceBase*, e.g. std::vector<ResourceBase*> or std::set<ResourceBase*>
 //-----------------------------------------------------------------------------
-void SFS::Manager::ClearFeedback(ID3D12GraphicsCommandList* in_pCommandList, const std::set<ResourceBase*>& in_resources)
+template<typename T>
+void SFS::Manager::ClearFeedback(ID3D12GraphicsCommandList* in_pCommandList, const T& in_resources)
 {
     // note clear value is ignored when clearing feedback maps
     UINT clearValue[4]{};
@@ -338,6 +340,11 @@ ID3D12CommandList* SFS::Manager::EndFrame()
     // NOTE: the array may still contain resources that haven't been transitioned yet
     if (m_packedMipTransitionResources.size())
     {
+        // pre-clear feedback buffers on first use to work around non-clear initial state on some hardware
+        // note some resources may be cleared multiple times, until the packed mips actually arrive
+        // in practice, this array doesn't seem to get very large
+        ClearFeedback(pCommandList, m_packedMipTransitionResources);
+
         BarrierList packedMipTransitionBarriers; // transition packed-mips from common (copy dest)
         for (UINT i = 0; i < m_packedMipTransitionResources.size();)
         {
@@ -366,13 +373,6 @@ ID3D12CommandList* SFS::Manager::EndFrame()
             pCommandList->ResourceBarrier((UINT)packedMipTransitionBarriers.size(), packedMipTransitionBarriers.data());
             packedMipTransitionBarriers.clear();
         }
-    }
-
-    // pre-clear feedback buffers on first use to work around non-clear initial state on some hardware
-    if (m_firstTimeClears.size())
-    {
-        ClearFeedback(pCommandList, m_firstTimeClears);
-        m_firstTimeClears.clear();
     }
 
     if (m_feedbackReadbacks.size())

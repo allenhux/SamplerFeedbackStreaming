@@ -291,12 +291,6 @@ void SFS::ManagerBase::QueueFeedback(SFSResource* in_pResource)
 {
     auto pResource = (ResourceBase*)in_pResource;
 
-    if (pResource->GetFirstUse())
-    {
-        pResource->GetFirstUse() = false;
-        m_firstTimeClears.insert(pResource);
-    }
-
     if ((m_maxNumResolvesPerFrame > m_feedbackReadbacks.size()) && (!m_feedbackReadbacks.contains(pResource)))
     {
         m_feedbackReadbacks.insert(pResource);
