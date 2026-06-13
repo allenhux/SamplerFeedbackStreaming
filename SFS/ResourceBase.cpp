@@ -110,7 +110,7 @@ void SFS::ResourceBase::SetResidencyMapOffset(UINT in_residencyMapOffsetBase)
 // 0 0 0 0 |
 //-----------------------------------------------------------------------------
 void SFS::ResourceBase::SetMinMip(UINT in_x, UINT in_y, UINT s, UINT in_desired,
-    Coords& out_evictions, std::set<SFS::Coord>& out_loadEvictPending)
+    Coords& out_evictions, std::set<SFS::Coord>& out_rescueFromEviction)
 {
     // s is the mip level is currently referenced at this tile
 
@@ -119,7 +119,7 @@ void SFS::ResourceBase::SetMinMip(UINT in_x, UINT in_y, UINT s, UINT in_desired,
     while (s > in_desired)
     {
         s -= 1; // already have "this" tile. e.g. have s == 1, desired in_s == 0, start with 0.
-        AddTileRef(in_x >> s, in_y >> s, s, out_loadEvictPending);
+        AddTileRef(in_x >> s, in_y >> s, s, out_rescueFromEviction);
     }
 
     // decref mips we don't need
@@ -412,9 +412,8 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
     // track tiles that are scheduled for future eviction
     Coords evictions;
 
-    // track loads of tiles that have a pending evict
-    // these tiles have a valid heap index (and are resident) but have 0 ref count
-    std::set<SFS::Coord> loadEvictPending;
+    // if a tile is needed (refcount 0->1) but is resident, it must be "rescued" from future eviction
+    std::set<SFS::Coord> rescueFromEviction;
 
     UINT8* pDesired = feedback.data();
     UINT8* pCurrent = m_tileReferences.data();
@@ -427,7 +426,7 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
             if (*pDesired != *pCurrent)
             {
                 changed = true;
-                SetMinMip(x, y, *pCurrent, *pDesired, evictions, loadEvictPending);
+                SetMinMip(x, y, *pCurrent, *pDesired, evictions, rescueFromEviction);
             }
             pCurrent++;
             pDesired++;
@@ -452,7 +451,7 @@ bool SFS::ResourceBase::ProcessFeedback(UINT64 in_frameFenceCompletedValue, bool
         }
 
         // Rescue tiles that were scheduled to be evicted but are now needed
-		RescuePendingEvictions(loadEvictPending);
+		RescuePendingEvictions(rescueFromEviction);
 
         // abandon pending loads that are no longer relevant
         AbandonPendingLoads();

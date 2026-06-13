@@ -313,7 +313,7 @@ namespace SFS
 
         // update internal refcounts based on the incoming minimum mip
         void SetMinMip(UINT in_x, UINT in_y, UINT in_current, UINT in_desired,
-            Coords& out_evictions, std::set<SFS::Coord>& out_loadEvictPending);
+            Coords& out_evictions, std::set<SFS::Coord>& out_rescueFromEviction);
 
         // AddRef, which requires allocation, might fail
         void AddTileRef(UINT in_x, UINT in_y, UINT in_s, std::set<SFS::Coord>& out_loadEvictPending);

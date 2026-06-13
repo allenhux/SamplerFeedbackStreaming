@@ -260,7 +260,7 @@ void Gui::Draw(ID3D12GraphicsCommandList* in_pCommandList,
         DrawLineGraph(m_bandwidthHistory, m_bandwidthHistoryIndex, ImVec2(m_width, 50.0f));
         // GPU timers
         ImGui::Text("GPU ms: Feedback |   Draw");
-        ImGui::Text("         %6.2f | %6.2f",
+        ImGui::Text("         %7.2f | %6.2f",
             in_drawParams.m_gpuFeedbackTimeMs,
             in_drawParams.m_gpuDrawTime * 1000.f);
         // CPU timers
