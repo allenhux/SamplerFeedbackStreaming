@@ -35,9 +35,6 @@
     <ClInclude Include="MappingUpdater.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SamplerFeedbackStreaming.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="SimpleAllocator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -45,12 +42,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="SFSHeap.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ResourceBase.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ResourceDU.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ManagerBase.h">
@@ -75,6 +66,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="EvictionDelay.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SamplerFeedbackStreaming.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ResourceBase.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ResourceDU.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
