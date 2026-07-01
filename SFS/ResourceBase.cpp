@@ -473,6 +473,9 @@ void SFS::ResourceBase::RescuePendingEvictions(std::set<SFS::Coord>& in_rescueSe
 {
     if (!in_rescueSet.empty())
     {
+        // can early-out if all the coords in the rescue set have been found
+        UINT numRescues = (UINT)in_rescueSet.size();
+
         for (auto pEvictions = m_delayedEvictions.begin(); pEvictions != m_delayedEvictions.end();)
         {
             // empty container means bad logic somewhere else
@@ -485,6 +488,8 @@ void SFS::ResourceBase::RescuePendingEvictions(std::set<SFS::Coord>& in_rescueSe
                 auto& coord = (*pEvictions)[i];
                 if (in_rescueSet.contains(coord))
                 {
+                    numRescues--;
+
                     num--;
                     coord = (*pEvictions)[num];
                 }
@@ -504,6 +509,10 @@ void SFS::ResourceBase::RescuePendingEvictions(std::set<SFS::Coord>& in_rescueSe
             {
                 // if array *pEvictions is empty, remove it from the list (m_delayedEvictions)
                 pEvictions = m_delayedEvictions.erase(pEvictions);
+            }
+            if (0 == numRescues)
+            {
+                break;
             }
         } // end loop over delayed eviction list
 

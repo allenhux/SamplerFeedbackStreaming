@@ -153,6 +153,9 @@ void SFS::ProcessFeedbackThread::Start()
                             {
                                 m_evictions.insert(pResource);
                             }
+
+                            // NOTE: if the resource has feedback coming later, why bother acting on current feedback?
+                            // because if the resource is queued every frame, then we may never update the resource
                             if (hasFutureFeedback)
                             {
                                 i++; // check this resource again later
